@@ -13,6 +13,9 @@ func Nodes(r *gin.Engine) {
 		NodesGroup.DELETE("/delete", api.NodeDel)
 		NodesGroup.GET("/get", api.NodeGet)
 		NodesGroup.POST("/update", api.NodeUpdadte)
+		NodesGroup.GET("/map", api.NodeMap)
+		NodesGroup.GET("/ping", api.NodePing)
+		NodesGroup.POST("/unlock", api.NodeUnlock)
 
 	}
 	// 分组

@@ -29,6 +29,11 @@ func (n *Node) AfterSave(*gorm.DB) error {
 	return nil
 }
 
+// Find 根据 ID 查找节点
+func (n *Node) Find() error {
+	return DB.Where("id = ?", n.ID).First(n).Error
+}
+
 // 创建分组
 func (gn *GroupNode) Add() error {
 	// 检查分组是否已存在

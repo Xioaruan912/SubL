@@ -83,6 +83,17 @@ systemctl start sublink
 - **Surge**（`node/surge.go` `DecodeSurge`）：分组行内支持 `filter("正则")` 标记，只追加匹配节点，并自动移除标记。
 - 测试：`node/filter_test.go`、`node/filter_integration_test.go`。
 
+### C. 首页节点地图 + 节点延迟 + 解锁测试（二开第二批）
+- **世界地图**（`webs/src/views/dashboard/components/WorldMap.vue`）：
+  - 用 ECharts `effectScatter` 展示所有节点，`world.json` 本地打包（`webs/src/assets/world.json`，echarts4.9 标准世界地图，~1MB），零运行时外链。
+  - 后端 `GET /api/v1/nodes/map`（`api/map_ping.go`）返回节点国家+坐标。GeoIP 用内置 `node/data/GeoLite2-Country.mmdb`（`go:embed`，从 `github.com/P3TERX/GeoLite.mmdb/releases` 下载，CC BY-SA 4.0），`github.com/oschwald/geoip2-golang` 查询。
+  - **地图缩放 bug 修复**：必须用**单一 `geo` 组件**作为底图（`roam: true` + itemStyle），散点绑定 `coordinateSystem: "geo"`；**不能**同时用独立 `map` 系列（否则缩放时散点不跟随）。
+- **节点延迟**（`NodePing.vue`）：`GET /api/v1/nodes/ping`，返回 VPS→常见目标（github/google/cloudflare/bing/百度）+ 每个节点服务器 TCP 延迟，60s 缓存。TCP 延迟 <1ms 时记为 1ms。
+- **解锁测试**（`webs/src/views/subcription/unlock.vue` + 菜单「解锁测试」）：
+  - `POST /api/v1/nodes/unlock`（body: `id` 或 `link`），通过 **sing-box 真实走节点**访问 AI（OpenAI/Claude/Gemini）、影视（Netflix/YouTube/Disney+）、论坛（Google/GitHub/Telegram），60s 缓存 + 全局互斥（同时只测一个）。
+  - **必须用 `-tags "with_utls with_quic"` 编译**！否则 reality/hy2 报 `uTLS not included` / 无 QUIC 支持。这是最容易踩的坑。
+  - sing-box 版本用 `v1.11.12`（go 1.20 兼容）；`go mod tidy` 可能误升到 v1.13.x（需要 go1.24.7），用 `go mod tidy -compat=1.22` 锁定。
+
 ## 新踩坑
 
 ### 6. 前端构建命令坑（pnpm build 会失败）
@@ -94,3 +105,14 @@ systemctl start sublink
 - 现象：`yaml.Marshal` 把 emoji 节点名转义为 `"\U0001F1FA\U0001F1F8"` 形式，测试里用 `strings.Contains(输出, "🇺🇸 US-01")` 匹配失败。
 - 解决：测试断言按 ASCII 后缀（如 `US-01`）匹配，或解析出 group 的 proxies 段再断言。
 - 教训：写 YAML 相关断言时，不要直接匹配含 emoji 的原始字符串。
+
+### 8. 大二进制必须分片上传 + sing-box 体积
+- 现象：`go:embed` mmdb + sing-box 后二进制约 **48MB**，scp 单文件必超时。
+- 解决：`split -b 2m -d` 分片 → 逐片 scp → `cat` 合并 → `md5sum` 校验。
+- 教训：二进制超 30MB 一律分片。
+
+### 9. sing-box 集成要点
+- **build tags**：reality 需要 `with_utls`，hy2/tuic 需要 `with_quic`，缺一不可，否则启动报错。
+- **版本锁定**：`go mod tidy` 会把 sing-box 解析到 latest（v1.13.19 要 go1.24.7），必须 `go mod tidy -compat=1.22`。
+- **box 包位置**：v1.11.x 的 `box` 包在模块根目录（`box.go`），导入用 `github.com/sagernet/sing-box`（别名 `singbox`），不是 `.../box` 子目录。
+- **解锁测试耗时**：每个目标 5-8s，9 个目标串行约 90s；必须 60s 缓存，否则并发访问会打爆网络。部分节点 reality 握手会被本地网络干扰（`reality verification failed` / `EOF`），在 VPS 上正常。

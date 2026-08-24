@@ -6,6 +6,18 @@ export function getNodes(){
   });
 }
 
+// 节点解锁测试
+export function UnlockTest(data: any){
+  return request({
+    url: "/api/v1/nodes/unlock",
+    method: "post",
+    data,
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+}
+
 export function AddNodes(data: any){
   return request({
     url: "/api/v1/nodes/add",

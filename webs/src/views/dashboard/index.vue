@@ -1,8 +1,5 @@
 <template>
   <div class="dashboard-container">
-    <!-- github角标 -->
-    <github-corner class="github-corner" />
-
     <el-card shadow="never">
       <el-row justify="space-between">
         <el-col :span="18" :xs="24">
@@ -13,9 +10,6 @@
             />
             <div>
               <p>{{ greetings }}</p>
-              <p class="text-sm text-gray">
-                今日天气晴朗，气温在15℃至25℃之间，东南风。
-              </p>
             </div>
           </div>
         </el-col>
@@ -38,6 +32,15 @@
         </el-col>
       </el-row>
     </el-card>
+
+    <el-row :gutter="16" class="mt-4">
+      <el-col :span="16" :xs="24">
+        <world-map />
+      </el-col>
+      <el-col :span="8" :xs="24">
+        <node-ping />
+      </el-col>
+    </el-row>
   </div>
 </template>
 
@@ -49,6 +52,8 @@ defineOptions({
 
 import { useUserStore } from "@/store/modules/user";
 import { getSubTotal,getNodeTotal } from "@/api/total";
+import WorldMap from "./components/WorldMap.vue";
+import NodePing from "./components/NodePing.vue";
 const userStore = useUserStore();
 const date: Date = new Date();
 const subTotal = ref(0);
@@ -111,14 +116,6 @@ const greetings = computed(() => {
     width: 40px;
     height: 40px;
     border-radius: 50%;
-  }
-
-  .github-corner {
-    position: absolute;
-    top: 0;
-    right: 0;
-    z-index: 1;
-    border: 0;
   }
 
   .data-box {

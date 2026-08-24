@@ -119,6 +119,18 @@ func GetMenus(c *gin.Context) {
 						KeepAlive: true,
 					},
 				},
+				{
+					Path:      "unlock",
+					Component: "subcription/unlock",
+					Name:      "Unlock",
+					Meta: Meta{
+						Title:     "unlocktest",
+						Icon:      "security",
+						Hidden:    false,
+						Roles:     []string{"ADMIN"},
+						KeepAlive: true,
+					},
+				},
 			},
 		},
 	}
