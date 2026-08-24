@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -25,7 +24,7 @@ type UnlockService struct {
 	Key   string `json:"key"`
 	Name  string `json:"name"`
 	Group string `json:"group"` // ai / video / forum
-	URL   string `json:"url"`
+	Check func(c *http.Client) (bool, string)
 }
 
 // UnlockCheckResult 单个服务解锁结果
@@ -46,20 +45,20 @@ type UnlockResult struct {
 	Error    string               `json:"error,omitempty"`
 }
 
-// 常见解锁检测目标（走节点访问）
+// 常见解锁检测目标（走节点访问，每个服务定制判定逻辑）
 var unlockServices = []UnlockService{
 	// AI
-	{Key: "openai", Name: "OpenAI / ChatGPT", Group: "ai", URL: "https://api.openai.com/v1/models"},
-	{Key: "claude", Name: "Claude", Group: "ai", URL: "https://api.anthropic.com/v1/messages"},
-	{Key: "google-gemini", Name: "Google Gemini", Group: "ai", URL: "https://generativelanguage.googleapis.com/"},
+	{Key: "openai", Name: "OpenAI / ChatGPT", Group: "ai", Check: checkOpenAI},
+	{Key: "claude", Name: "Claude", Group: "ai", Check: checkClaude},
+	{Key: "google-gemini", Name: "Google Gemini", Group: "ai", Check: checkGemini},
 	// 影视
-	{Key: "netflix", Name: "Netflix", Group: "video", URL: "https://www.netflix.com/title/80018499"},
-	{Key: "youtube", Name: "YouTube", Group: "video", URL: "https://www.youtube.com/"},
-	{Key: "disney", Name: "Disney+", Group: "video", URL: "https://www.disneyplus.com/"},
+	{Key: "netflix", Name: "Netflix", Group: "video", Check: checkNetflix},
+	{Key: "youtube", Name: "YouTube", Group: "video", Check: checkYouTube},
+	{Key: "disney", Name: "Disney+", Group: "video", Check: checkDisney},
 	// 论坛 / 其它
-	{Key: "google", Name: "Google", Group: "forum", URL: "https://www.google.com/generate_204"},
-	{Key: "github", Name: "GitHub", Group: "forum", URL: "https://github.com/"},
-	{Key: "telegram", Name: "Telegram", Group: "forum", URL: "https://t.me/"},
+	{Key: "google", Name: "Google", Group: "forum", Check: checkGoogle},
+	{Key: "github", Name: "GitHub", Group: "forum", Check: checkGitHub},
+	{Key: "telegram", Name: "Telegram", Group: "forum", Check: checkTelegram},
 }
 
 // UnlockTestConfig 一次解锁测试的配置
@@ -150,20 +149,10 @@ func RunUnlockTest(cfg UnlockTestConfig) (*UnlockResult, error) {
 	result := &UnlockResult{NodeName: nodeName, Results: make([]UnlockCheckResult, 0, len(unlockServices))}
 	for _, svc := range unlockServices {
 		start := time.Now()
-		ok := false
-		note := ""
-		resp, err := client.Get(svc.URL)
+		ok, note := svc.Check(client)
 		rtt := int(time.Since(start).Milliseconds())
-		if err != nil {
-			note = err.Error()
-		} else {
-			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
-			if resp.StatusCode >= 200 && resp.StatusCode < 500 {
-				ok = true
-			} else {
-				note = fmt.Sprintf("HTTP %d", resp.StatusCode)
-			}
+		if rtt < 1 {
+			rtt = 1
 		}
 		result.Results = append(result.Results, UnlockCheckResult{
 			Key: svc.Key, Name: svc.Name, Group: svc.Group,

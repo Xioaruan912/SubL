@@ -124,3 +124,17 @@ systemctl start sublink
 - `build.sh` 三条命令都必须带 `with_utls with_quic` 标签，否则产物不支持 reality/hy2。
 - Docker 部分保留上游镜像 `jaaksi/sublinkx`（用户决定）；Dockerfile 的 `go build` 未带标签，容器内解锁测试不可用，README 已注明用源码编译方式。
 - README 中 Stargazers / ZMTO 感谢信已移除，改为二开功能清单 + 目录结构 + 构建说明。
+
+### 11. 解锁检测判定（关键修复：不能只看 HTTP 状态码）
+- **错误做法**：原来只要 `200 <= 状态码 < 500` 就判定"解锁"。但很多服务的检测 URL 本身就会返回非 5xx：
+  - `generativelanguage.googleapis.com/` 根路径恒 **404** → 任何节点都判 Gemini"解锁"（误判，HK 不支持的也显示解锁）
+  - `api.anthropic.com/v1/messages` 无 key 返回 **405** → 恒"解锁"
+- **正确做法**（参考 `lmc999/RegionRestrictionCheck`），每个服务定制 `Check func(c *http.Client)(bool,string)`（`node/unlock_checks.go`）：
+  - **OpenAI/ChatGPT**：请求 `api.openai.com/compliance/cookie_requirements` + `ios.chat.openai.com/`，响应体含 `unsupported_country` / `vpn` 则未解锁。
+  - **Claude**：访问 `claude.ai/`，若 `CheckRedirect` 捕获重定向到 `app-unavailable-in-region` 则未解锁。
+  - **Gemini**：访问 `gemini.google.com`，响应体含标记 `45631641,null,true` 则解锁（带地区码 `,2,1,200,"JPN"`）。
+  - **Netflix**：请求两个 title 页（81280792 / 70143836），均含 `Oh no!` = 仅原创可看；任一无则解锁。
+  - **Disney+**：POST `disney.api.edge.bamgrid.com/devices`，含 `forbidden-location`/`403 ERROR` 则未解锁，含 `assertion` 则解锁。
+  - **YouTube/Google/GitHub/Telegram**：基础可达性（200/204）。
+- 统一 UA 用浏览器 UA（部分服务如 claude.ai/gemini.google.com 对非浏览器 UA 会异常）。
+- 验证：HK 节点实测 OpenAI `区域不支持`❌、Claude `区域不支持`❌、Gemini ✅ —— 与真实情况一致。
