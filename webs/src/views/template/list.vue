@@ -1,6 +1,6 @@
 <script setup lang='ts'>
 import { ref,onMounted,nextTick  } from 'vue'
-import {getTemp,AddTemp,UpdateTemp,DelTemp} from "@/api/subcription/temp"
+import {getTemp,AddTemp,UpdateTemp,DelTemp} from "@/api/template/temp"
 interface Temp {
   file: string;
   text: string;

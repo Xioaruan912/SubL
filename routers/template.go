@@ -13,6 +13,7 @@ func Templates(r *gin.Engine) {
 		TempsGroup.POST("/delete", api.DelTemp)
 		TempsGroup.GET("/get", api.GetTempS)
 		TempsGroup.POST("/update", api.UpdateTemp)
+		TempsGroup.POST("/build", api.TemplateBuild)
 	}
 
 }

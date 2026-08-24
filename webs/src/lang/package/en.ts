@@ -9,6 +9,8 @@ export default {
     sublist:"Subscription List",
     subcription:"Subscription Management",
     templatelist:"Template List",
+    template:"Template",
+    templatebuilder:"Template Builder",
     unlocktest:"Unlock Test",
   },
   // 登录页面国际化

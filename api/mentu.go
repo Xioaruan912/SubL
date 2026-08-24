@@ -108,9 +108,36 @@ func GetMenus(c *gin.Context) {
 				// },
 				// //测试结束
 				{
-					Path:      "template",
-					Component: "subcription/template",
-					Name:      "Template",
+					Path:      "unlock",
+					Component: "subcription/unlock",
+					Name:      "Unlock",
+					Meta: Meta{
+						Title:     "unlocktest",
+						Icon:      "security",
+						Hidden:    false,
+						Roles:     []string{"ADMIN"},
+						KeepAlive: true,
+					},
+				},
+			},
+		},
+		// 模板管理
+		{
+			Path:      "/template",
+			Component: "Layout",
+			Redirect:  "/template/list",
+			Name:      "template",
+			Meta: Meta{
+				Title:  "template",
+				Icon:   "document",
+				Hidden: false,
+				Roles:  []string{"ADMIN"},
+			},
+			Children: []Child{
+				{
+					Path:      "list",
+					Component: "template/list",
+					Name:      "TemplateList",
 					Meta: Meta{
 						Title:     "templatelist",
 						Icon:      "document",
@@ -120,12 +147,12 @@ func GetMenus(c *gin.Context) {
 					},
 				},
 				{
-					Path:      "unlock",
-					Component: "subcription/unlock",
-					Name:      "Unlock",
+					Path:      "builder",
+					Component: "template/builder",
+					Name:      "TemplateBuilder",
 					Meta: Meta{
-						Title:     "unlocktest",
-						Icon:      "security",
+						Title:     "templatebuilder",
+						Icon:      "edit",
 						Hidden:    false,
 						Roles:     []string{"ADMIN"},
 						KeepAlive: true,

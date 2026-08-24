@@ -9,6 +9,8 @@ export default {
     sublist:"订阅列表",
     subcription:"订阅管理",
     templatelist:"模板列表",
+    template:"模板",
+    templatebuilder:"操作模板",
     unlocktest:"解锁测试",
   },
   // 登录页面国际化

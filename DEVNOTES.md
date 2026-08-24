@@ -138,3 +138,11 @@ systemctl start sublink
   - **YouTube/Google/GitHub/Telegram**：基础可达性（200/204）。
 - 统一 UA 用浏览器 UA（部分服务如 claude.ai/gemini.google.com 对非浏览器 UA 会异常）。
 - 验证：HK 节点实测 OpenAI `区域不支持`❌、Claude `区域不支持`❌、Gemini ✅ —— 与真实情况一致。
+
+### 12. 模板管理重构：独立「模板」大类 + 「操作模板」构建器
+- **菜单**：`api/mentu.go` 新增顶层 `/template`（模板）大类，下设 `list`（模板列表）+ `builder`（操作模板）；从「订阅管理」移除原 template 子项。
+- **文件迁移**：`webs/src/views/subcription/template.vue` → `webs/src/views/template/list.vue`（组件路径要对应 `Component: "template/list"`），原 `src/api/subcription/temp.ts` 复制为 `src/api/template/temp.ts`；`subs.vue` 仍引用 `@/api/subcription/temp`，保留原文件即可。
+- **操作模板**（`POST /api/v1/template/build`，`api/template_builder.go`）：表单构建 clash 配置 → 保存到 `template/` 目录。分组支持 `select`（手动选择）/`url-test`（自动测速）/`fallback`（故障转移）三种，`filter` 正则 + `include-all-providers` 复用 Xboard filter 逻辑。保存后自动出现在订阅的 Clash 模板下拉框。
+- **关键点**：构建器生成的模板 `proxies: ~` 占位（与现有 `template/clash.yaml` 一致），订阅时 `DecodeClash` 会填充节点并按 filter 分组。`yaml.Marshal` 会把 emoji 转义为 `\Uxxxx`，clash 可正常解析（等价）。
+- 默认规则 `defaultClashRules`（直连内网 + GEOIP CN + MATCH）在 `api/template_builder.go`。
+- **验证**：build API 生成含 filter 的模板 → `DecodeClash` 实测 AI 组只填充 US 节点、无 filter 组填充全部 —— 端到端正确。
