@@ -1,0 +1,67 @@
+#!/bin/bash
+set -e
+
+# 仓库信息（二开仓库）
+REPO="Xioaruan912/SubL"
+REPO_URL="https://github.com/${REPO}.git"
+REPO_RAW="https://raw.githubusercontent.com/${REPO}/main"
+
+# 检查用户是否为root
+if [ "$(id -u)" != "0" ]; then
+    echo "该脚本必须以root身份运行。"
+    exit 1
+fi
+
+# 检查必要工具
+for cmd in git go curl; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        echo "缺少依赖: $cmd，请先安装 (Debian/Ubuntu: apt install -y git golang curl)"
+        exit 1
+    fi
+done
+
+# 创建一个程序目录
+INSTALL_DIR="/usr/local/bin/sublink"
+mkdir -p "$INSTALL_DIR"
+
+# 克隆源码（浅克隆）
+TMP_DIR=$(mktemp -d)
+echo "==> 克隆源码 ${REPO} ..."
+git clone --depth 1 "$REPO_URL" "$TMP_DIR/sublink"
+cd "$TMP_DIR/sublink"
+
+# 编译（带 with_utls with_quic 标签，支持 reality 与 hysteria2 解锁测试）
+echo "==> 编译二进制（with_utls with_quic）..."
+go build -tags "with_utls with_quic" -ldflags="-w -s" -o sublink main.go
+
+# 安装二进制
+chmod +x sublink
+mv sublink "$INSTALL_DIR/sublink"
+rm -rf "$TMP_DIR"
+
+# 创建systemctl服务
+cat > /etc/systemd/system/sublink.service <<EOF
+[Unit]
+Description=Sublink Service
+
+[Service]
+ExecStart=$INSTALL_DIR/sublink
+WorkingDirectory=$INSTALL_DIR
+Restart=always
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 重新加载systemd守护进程
+systemctl daemon-reload
+
+# 启动并启用服务
+systemctl start sublink
+systemctl enable sublink
+echo "服务已启动并已设置为开机启动"
+echo "默认账号admin 密码123456 默认端口8000（可在 /usr/local/bin/sublink/db/config.yaml 修改）"
+
+# 下载menu.sh并设置权限
+curl -o /usr/bin/sublink -H "Cache-Control: no-cache" -H "Pragma: no-cache" "$REPO_RAW/menu.sh"
+chmod 755 "/usr/bin/sublink"
+echo "安装完成，输入 sublink 呼出菜单"

@@ -1,46 +1,46 @@
 #!/bin/bash
-function Up {
-    # 获取最新的发行版标签
-    latest_release=$(curl --silent "https://api.github.com/repos/gooaclok819/sublinkX/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    echo "最新版本: $latest_release"
-    # 检测机器类型
-    machine_type=$(uname -m)
+# 二开仓库
+REPO="Xioaruan912/SubL"
+REPO_URL="https://github.com/${REPO}.git"
 
-    if [ "$machine_type" = "x86_64" ]; then
-        file_name="sublink_amd64"
-    elif [ "$machine_type" = "aarch64" ]; then
-        file_name="sublink_arm64"
-    else
-        echo "不支持的机器类型: $machine_type"
-        exit 1
-    fi
+INSTALL_DIR="/usr/local/bin/sublink"
 
-    # 下载文件
-    curl -LO "https://github.com/gooaclok819/sublinkX/releases/download/$latest_release/$file_name"
-
-    # 设置文件为可执行
-    chmod +x $file_name
-
-    # 移动文件到指定目录
-    mv $file_name "$INSTALL_DIR/sublink"
-    echo "更新完成"
-
+function check_tools {
+    for cmd in git go; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            echo "缺少依赖: $cmd，请先安装 (apt install -y git golang)"
+            return 1
+        fi
+    done
+    return 0
 }
-function Select {
-    # 获取最新的发行版标签
-    latest_release=$(curl --silent "https://api.github.com/repos/gooaclok819/sublinkX/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    # 获取服务状态
-    cd /usr/local/bin/sublink # 进入sublink目录
-    status=$(systemctl is-active sublink)
-    version=$(./sublink --version)
-    echo "最新版本:$latest_release"
-    echo "当前版本:$version"
-    # 判断服务状态并打印
-    if [ "$status" = "active" ]; then
-        echo "当前运行状态: 已运行"
-    else
-        echo "当前运行状态: 未运行"
+
+function Up {
+    check_tools || return 1
+    echo "==> 克隆源码 ${REPO} ..."
+    TMP_DIR=$(mktemp -d)
+    git clone --depth 1 "$REPO_URL" "$TMP_DIR/sublink" || { echo "克隆失败"; rm -rf "$TMP_DIR"; return 1; }
+    cd "$TMP_DIR/sublink"
+    echo "==> 编译二进制（with_utls with_quic）..."
+    go build -tags "with_utls with_quic" -ldflags="-w -s" -o sublink main.go || { echo "编译失败"; rm -rf "$TMP_DIR"; return 1; }
+    # 停止服务后替换
+    if systemctl is-active --quiet sublink; then
+        systemctl stop sublink
     fi
+    chmod +x sublink
+    mv sublink "$INSTALL_DIR/sublink"
+    rm -rf "$TMP_DIR"
+    systemctl start sublink
+    echo "更新完成"
+}
+
+function Select {
+    # 获取服务状态
+    cd "$INSTALL_DIR"
+    status=$(systemctl is-active sublink)
+    version=$(./sublink -version 2>/dev/null | head -1)
+    echo "当前版本:$version"
+    echo "当前运行状态: $status"
     echo "1. 启动服务"
     echo "2. 停止服务"
     echo "3. 卸载安装"
@@ -75,13 +75,13 @@ function Select {
                 sudo rm /etc/systemd/system/sublink.service
             fi
             # 删除相关文件和目录
-            sudo rm -r /usr/local/bin/sublink/sublink
-            sudo rm -r /usr/bin/sublink
+            sudo rm -f "$INSTALL_DIR/sublink"
+            sudo rm -f /usr/bin/sublink
             read -p "是否删除模板文件和数据库(y/n): " isDelete
             if [ "$isDelete" = "y" ]; then
-                sudo rm -r /usr/local/bin/sublink/db
-                sudo rm -r /usr/local/bin/sublink/template
-                sudo rm -r /usr/local/bin/sublink/logs
+                sudo rm -rf "$INSTALL_DIR/db"
+                sudo rm -rf "$INSTALL_DIR/template"
+                sudo rm -rf "$INSTALL_DIR/logs"
             fi
             echo "卸载完成"
             ;;
@@ -89,9 +89,9 @@ function Select {
             systemctl status sublink
             ;;
         5)
-            echo "运行目录: /usr/local/bin/sublink"
-            echo "需要备份的目录为db,template目录为模版文件可备份可不备份"
-            cd /usr/local/bin/sublink
+            echo "运行目录: $INSTALL_DIR"
+            echo "需要备份的目录为db, template目录为模版文件可备份可不备份"
+            cd "$INSTALL_DIR"
             ;;
         6)
             SERVICE_FILE="/etc/systemd/system/sublink.service"
@@ -111,7 +111,6 @@ function Select {
                 sudo sed -i "s/-port [0-9]\+/-port $Port/" "$SERVICE_FILE"
             else
                 # 如果没有 -port 参数，添加新参数
-                # 使用 sed 替换 ExecStart 行，添加启动参数
                 sudo sed -i "/^ExecStart=/ s|$| $PARAMETER|" "$SERVICE_FILE"
                 echo "参数已添加到 ExecStart 行: $PARAMETER"
             fi
@@ -122,31 +121,18 @@ function Select {
             sudo systemctl restart sublink
 
             echo "服务已重启。"
-
             ;;
         7)
-            # 停止服务之前检查服务是否存在
-            if systemctl is-active --quiet sublink; then
-                systemctl stop sublink
-            fi
-            # 检查是否为最新版本
-            if [[ $version = $latest_release ]]; then
-                echo "当前已经是最新版本"
-            else
-                Up
-            fi
+            Up
             ;;
         8)
             read -p "请输入新的账号: " User
             read -p "请输入新的密码: " Password
             # 运行二进制文件并传递启动参数，放在后台运行
-            cd /usr/local/bin/sublink
+            cd "$INSTALL_DIR"
             ./sublink setting --username "$User" --password "$Password" &
-            # 获取该程序的PID
             pid=$!
-            # 等待程序完成
             wait $pid
-            # 如果需要可以在此处进行清理
             systemctl restart sublink
             ;;
         0)

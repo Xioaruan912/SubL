@@ -3,78 +3,68 @@
 </div>
 
 <div align="center">
-    <img src="https://img.shields.io/badge/Vue-5.0.8-brightgreen.svg"/>
-    <img src="https://img.shields.io/badge/Go-1.22.0-green.svg"/>
+    <img src="https://img.shields.io/badge/Go-1.22-green.svg"/>
+    <img src="https://img.shields.io/badge/Vue-3.4-brightgreen.svg"/>
     <img src="https://img.shields.io/badge/Element Plus-2.6.1-blue.svg"/>
+    <img src="https://img.shields.io/badge/ECharts-5.5-purple.svg"/>
     <img src="https://img.shields.io/badge/license-MIT-green.svg"/>
-    <a href="https://t.me/+u6gLWF0yP5NiZWQ1" target="_blank">
-        <img src="https://img.shields.io/badge/TG-交流群-orange.svg"/>
-    </a>
-    <div align="center"> <a href="README.md">中文<a> | English</div>
+    <div align="center"> <a href="README.md">中文</a> | English</div>
 </div>
+
 ## [Project Information]
 
-Project based on sublink project secondary development: https://github.com/jaaksii/sublink
+**SubL** is a secondary development based on [gooaclok819/sublinkX](https://github.com/gooaclok819/sublinkX), with deep customization in UI, node management, and unlock detection.
 
-Front-end based on: https://github.com/youlaitech/vue3-element-admin
+Backend: **Go + Gin + GORM** · Frontend: **Vue3 + Element Plus + ECharts**.
 
-Backend using go+gin+gorm
+Default account `admin` password `123456` (please change it).
 
-Default account admin password 123456 self-modification
+## [New Features in This Fork]
 
-Because of the rewrite there are still a lot of layout structure and a little less functionality
+- 🌍 **Node World Map on Dashboard**: bundled GeoIP database (GeoLite2), auto-detect node country and plot on a zoomable world map.
+- 📡 **Node Latency Detection**: latency from VPS to common targets (GitHub/Google/Bing etc.) plus per-node TCP latency, shown on dashboard.
+- 🔓 **Unlock Test**: via **sing-box**, really route through the node to test AI (OpenAI/ChatGPT, Claude, Gemini), video (Netflix, YouTube, Disney+), forum (Google, GitHub, Telegram) services.
+- 🎯 **Xboard-style filter regex grouping**: Clash templates support `filter: "(?i)US|USA|..."` to auto-match nodes by name.
+- 🎨 **OpenList-style UI**: Ant Design blue primary color, light sidebar, rounded cards.
 
 ## [Project Features]
 
-High degree of freedom and security, the ability to record access to the subscription, easy configuration
-
-Binary compilation without Docker container.
-
-Currently only supports the client: v2ray clash surge
-
-v2ray is a base64 universal format
-
-clash supported protocols: ss ssr trojan vmess vless hy hy2 tuic
-
-surge support protocol:ss trojan vmess hy2 tuic
+- High degree of freedom and security, records subscription access, easy configuration
+- Binary compilation, no Docker container required
+- Supported clients: v2ray clash surge
+- v2ray is a base64 universal format
+- clash supported protocols: ss ssr trojan vmess vless hy hy2 tuic
+- surge supported protocols: ss trojan vmess hy2 tuic
 
 ## [Project Preview]
 
 ![1712594176714](webs/src/assets/1.png)
 ![1712594176714](webs/src/assets/2.png)
 
-## [Updated Description]
+## [Installation]
 
-####Backend Update
+### Linux one-click install (source build)
 
-1. Fix and refactor a large number of Node templates and the underlying code for new groupings
+> This fork requires `with_utls` (reality) and `with_quic` (hy2/tuic) build tags, so we install via source compilation (no release binaries needed).
 
-2. Add grouping functionality to nodes
-
-3. Fix bug that subscription resolution is empty or etc
-
-####Front-end update
-
-1. Refactor front-end node page to add grouping function (temporarily only some simple functions)
-
-## [Installation instructions]
-### linux method:
-```
-curl -s -H “Cache-Control: no-cache” -H “Pragma: no-cache” https://raw.githubusercontent.com/gooaclok819/sublinkX/main/install.sh | sudo bash
+```bash
+curl -s -H "Cache-Control: no-cache" -H "Pragma: no-cache" https://raw.githubusercontent.com/Xioaruan912/SubL/main/install.sh | sudo bash
 ```
 
-```sublink``` Calls out the menu.
+Requires `git`, `go` (≥1.22), `curl`. The script will:
 
-Then just type in the install script
+1. Clone source → `go build -tags "with_utls with_quic"`
+2. Install binary to `/usr/local/bin/sublink`
+3. Register systemd service and enable on boot
+4. Install the `sublink` menu command
 
-### docker method:
+Run `sublink` to open the management menu after install.
 
-Create a directory where you want it to be located, such as mkdir sublinkx.
+### Docker method
 
-Then cd into the directory and enter the following command to mount the data.
+Create a directory where you want it (e.g. `mkdir sublinkx`), then `cd` into it. Data is mounted automatically:
 
-All you need to back up is the db and templates.
-```
+```bash
 docker run --name sublinkx -p 8000:8000 \
 -v $PWD/db:/app/db \
 -v $PWD/template:/app/template \
@@ -82,14 +72,34 @@ docker run --name sublinkx -p 8000:8000 \
 -d jaaksi/sublinkx
 ```
 
-To support the development of my project, I plan to apply for a free VPS offered by ZMTO. My project currently involves Docker image support for multiple My project currently involves Docker image support for multiple architectures (arm64 and amd64), as well as automation for building and pushing. Therefore, I am requesting a 4-core, 8GB RAM Ubuntu VPS with root access.
+All you need to back up is `db` and `template`.
 
-Thank you to the ZTMO team for your support. I look forward to leveraging this VPS to optimize my project's performance and development efficiency. have any questions or suggestions regarding my project, feel free to open an issue, and I will do my best to improve and optimize it.
+> Note: the Docker image is the upstream build (`jaaksi/sublinkx`). For fork features like unlock test, use the Linux source-build method.
 
-Thank you for your attention and support!
+## [Directory Structure]
 
-Feel free to adjust any details as needed!
+```
+api/          Backend APIs
+models/       Data models (SQLite)
+node/         Subscription generation & node parsing (clash/surge/vless etc.) + geo/latency/unlock test
+routers/      Route registration
+template/     clash/surge subscription templates
+webs/         Vue3 frontend
+```
 
-## Stargazers over time
-[![Stargazers over time](https://starchart.cc/gooaclok819/sublinkX.svg?variant=adaptive)](https://starchart.cc/gooaclok819/sublinkX)
+## [Development & Build]
 
+```bash
+# Backend (with unlock-test required tags)
+go build -tags "with_utls with_quic" -ldflags="-w -s" -o sublink_amd64 main.go
+
+# Frontend
+cd webs
+npx vite build --mode production
+# Sync build output to static/ (used by go:embed)
+cp -r webs/dist/* ../static/
+```
+
+## License
+
+[MIT](LICENSE)

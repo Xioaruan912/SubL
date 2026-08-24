@@ -1,3 +1,13 @@
+# SubL 二开发布记录
+## 2.1-subL (2026/08/24)
+### ✨ feat
+- 首页新增节点世界地图（内置 GeoIP，自动识别国家）
+- 首页新增节点延迟检测（常见目标 + 每节点 TCP 延迟）
+- 新增「解锁测试」页面（sing-box 真实走节点检测 AI/影视/论坛）
+- 模板支持 Xboard 风格 filter 正则分组
+- 前端整体改为 OpenList 风格（Ant Design 蓝、浅色侧边栏、大圆角）
+- 安装脚本改为源码编译（with_utls/with_quic）
+
 # 2.9.2 (2024/03/05)
 ### ✨ feat
 - vscode开发扩展推荐 （author by [cshaptx4869](https://github.com/cshaptx4869)）

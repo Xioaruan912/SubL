@@ -116,3 +116,11 @@ systemctl start sublink
 - **版本锁定**：`go mod tidy` 会把 sing-box 解析到 latest（v1.13.19 要 go1.24.7），必须 `go mod tidy -compat=1.22`。
 - **box 包位置**：v1.11.x 的 `box` 包在模块根目录（`box.go`），导入用 `github.com/sagernet/sing-box`（别名 `singbox`），不是 `.../box` 子目录。
 - **解锁测试耗时**：每个目标 5-8s，9 个目标串行约 90s；必须 60s 缓存，否则并发访问会打爆网络。部分节点 reality 握手会被本地网络干扰（`reality verification failed` / `EOF`），在 VPS 上正常。
+
+### 10. README / 安装脚本个性化
+- `.gitignore` 原本忽略 `install.sh`！不删掉它，`curl .../SubL/main/install.sh` 会 404。二开仓库必须从 `.gitignore` 移除 `install.sh`。
+- 安装方式改为**源码编译**（方案A）：clone → `go build -tags "with_utls with_quic"` → systemd。无需管理 release 二进制。
+- `menu.sh` 的更新逻辑同样改为 clone+编译；`./sublink --version` 应为 `-version`（main.go 是 `-version`），且 `-version` 需要 `./db` 目录存在（服务启动后自动创建）。
+- `build.sh` 三条命令都必须带 `with_utls with_quic` 标签，否则产物不支持 reality/hy2。
+- Docker 部分保留上游镜像 `jaaksi/sublinkx`（用户决定）；Dockerfile 的 `go build` 未带标签，容器内解锁测试不可用，README 已注明用源码编译方式。
+- README 中 Stargazers / ZMTO 感谢信已移除，改为二开功能清单 + 目录结构 + 构建说明。
