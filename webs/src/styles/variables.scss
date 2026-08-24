@@ -1,20 +1,21 @@
 /** 全局SCSS变量 */
 
 :root {
-  --menu-background: #304156;
-  --menu-text: #bfcbd9;
+  --menu-background: #ffffff;
+  --menu-text: #4e5969;
   --menu-active-text: var(--el-menu-active-color);
-  --menu-hover: #263445;
-  --sidebar-logo-background: #2d3748;
+  --menu-hover: rgba(132, 133, 141, 0.18);
+  --sidebar-logo-background: #ffffff;
+  --el-menu-active-color: #1890ff;
 }
 
 /** 暗黑主题 */
 html.dark {
-  --menu-background: var(--el-bg-color-overlay);
-  --menu-text: #fff;
-  --menu-active-text: var(--el-menu-active-color);
-  --menu-hover: rgb(0 0 0 / 20%);
-  --sidebar-logo-background: rgb(0 0 0 / 20%);
+  --menu-background: #202425;
+  --menu-text: #bfcbd9;
+  --menu-active-text: #1890ff;
+  --menu-hover: rgba(255, 255, 255, 0.12);
+  --sidebar-logo-background: #202425;
 }
 
 $menu-background: var(--menu-background); // 菜单背景色

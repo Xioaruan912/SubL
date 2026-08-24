@@ -172,12 +172,68 @@ func DecodeSurge(proxys, groups []string, file string) (string, error) {
 		for i, line := range lines {
 
 			if strings.Contains(line, "=") {
-				lines[i] = strings.TrimSpace(line) + ", " + grouplist
-				// lines[i] = line + "," + grouplist
+				// 支持 Xboard/subconverter 风格 filter(正则) 过滤节点
+				// 例如: 💬 OpenAi = select,🚀 节点选择,filter("(?i)openai|chatgpt")
+				filterRe, hasFilter := parseSurgeFilter(line)
+				if hasFilter {
+					var matched []string
+					for _, g := range groups {
+						if filterRe.MatchString(g) {
+							matched = append(matched, g)
+						}
+					}
+					// 追加匹配到的节点，避免重复
+					for _, m := range matched {
+						if !strings.Contains(line+","+grouplist, m) {
+							lines[i] = strings.TrimSpace(line) + ", " + m
+							line = lines[i]
+							grouplist = strings.Join(groups, ",")
+						}
+					}
+					// 移除行内的 filter(...) 标记，避免 Surge 无法解析
+					lines[i] = removeSurgeFilter(lines[i])
+				} else {
+					lines[i] = strings.TrimSpace(line) + ", " + grouplist
+				}
 			}
 		}
 		return strings.Join(lines, "\n") + s[len("[Proxy Group]"):]
 	})
 
 	return groupPart, nil
+}
+
+// parseSurgeFilter 从 surge 分组行中提取 filter(正则) 标记
+// 返回编译后的正则与是否命中标记。支持写法：
+//   - filter("(?i)US|USA")
+//   - filter((?i)US|USA)
+var surgeFilterMark = regexp.MustCompile(`filter\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*))\s*\)`)
+
+func parseSurgeFilter(line string) (*regexp.Regexp, bool) {
+	m := surgeFilterMark.FindStringSubmatch(line)
+	if m == nil {
+		return nil, false
+	}
+	pat := m[1]
+	if pat == "" {
+		pat = m[2]
+	}
+	if pat == "" {
+		pat = m[3]
+	}
+	pat = strings.TrimSpace(pat)
+	if pat == "" {
+		return nil, false
+	}
+	re, err := regexp.Compile(pat)
+	if err != nil {
+		log.Printf("surge filter 正则编译失败 %q: %v", pat, err)
+		return nil, false
+	}
+	return re, true
+}
+
+// removeSurgeFilter 移除行内的 filter(...) 标记
+func removeSurgeFilter(line string) string {
+	return strings.TrimSpace(surgeFilterMark.ReplaceAllString(line, ""))
 }

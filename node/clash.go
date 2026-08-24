@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -420,9 +421,29 @@ func DecodeClash(proxys []Proxy, yamlfile string) ([]byte, error) {
 				validProxies = append(validProxies, p)
 			}
 		}
-		// 添加新代理
-		for _, newProxy := range ProxiesNameList {
-			validProxies = append(validProxies, newProxy)
+		// Xboard 风格 filter 正则匹配：从 filter 字段读取正则，
+		// 只把节点名匹配到的节点填入该 group。
+		// 示例：filter: "(?i)US|USA|United States|美国"
+		// include-all-providers: true 表示对整个订阅全部节点进行匹配过滤
+		var filterRegex *regexp.Regexp
+		if filterStr, ok := proxyGroup["filter"].(string); ok && filterStr != "" {
+			if re, rerr := regexp.Compile(filterStr); rerr == nil {
+				filterRegex = re
+			} else {
+				log.Printf("filter 正则编译失败 %q: %v", filterStr, rerr)
+			}
+		}
+		if filterRegex != nil {
+			for _, newProxy := range ProxiesNameList {
+				if filterRegex.MatchString(newProxy) {
+					validProxies = append(validProxies, newProxy)
+				}
+			}
+		} else {
+			// 无 filter 时保持原有全量填充行为
+			for _, newProxy := range ProxiesNameList {
+				validProxies = append(validProxies, newProxy)
+			}
 		}
 		proxyGroup["proxies"] = validProxies
 		proxyGroups[i] = proxyGroup

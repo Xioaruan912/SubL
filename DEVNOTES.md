@@ -59,3 +59,38 @@ systemctl stop sublink
 cp /root/backup/sublink_<ts>/sublink.old.bin /usr/local/bin/sublink/sublink
 systemctl start sublink
 ```
+
+## 二开功能（v2.1 + 二开）
+
+### A. 前端风格 → OpenList manage 风格
+- 参考 `/root/openlist-frontend/src/pages/manage/`（SolidJS+Hope UI）与 `src/app/theme.ts`。
+- sublinkX 是 **Vue3 + Element Plus**，不重写框架，改走**全局主题变量**复刻观感：
+  - `src/styles/index.scss`：主色 `#1890ff`（Ant Design 蓝）、背景 `#f7f8fa`、卡片/按钮/输入框/弹窗大圆角、表格 hover 高亮、filled 输入框。
+  - `src/settings.ts`：`themeColor: "#1890ff"`。
+  - `src/styles/variables.scss`：侧边栏改为浅色 `#ffffff` + 主色激活项（原深色 `#304156`）。
+- 前端构建产物要同步到 Go 的 `static/` 目录（`go:embed` 用），改完 `vite build` 后 `cp -r webs/dist/* static/`，再重新 `go build`。
+
+### B. 模板 filter 正则匹配节点（Xboard 风格）
+- **Clash**（`node/clash.go` `DecodeClash`）：proxy-group 里若有 `filter: "(?i)US|USA|..."`，只把**节点名匹配正则**的节点填入该组；无 filter 保持全量填充（兼容旧行为）。支持 `include-all-providers: true` 字段（示意忽略）。
+  ```yaml
+  - name: AI
+    type: select
+    include-all-providers: true
+    filter: "(?i)US|USA|United States|美国"
+    proxies:
+      - DIRECT
+  ```
+- **Surge**（`node/surge.go` `DecodeSurge`）：分组行内支持 `filter("正则")` 标记，只追加匹配节点，并自动移除标记。
+- 测试：`node/filter_test.go`、`node/filter_integration_test.go`。
+
+## 新踩坑
+
+### 6. 前端构建命令坑（pnpm build 会失败）
+- 现象：`pnpm build` 报错（husky prepare + preinstall 触发 pnpm install 死循环，且克隆目录无 `.git`）。
+- 解决：直接 `npx vite build --mode production` 绕过 preinstall/prepare 脚本。
+- 教训：克隆/二开仓库改前端时，用 `npx vite build` 而非 `pnpm build`。
+
+### 7. yaml 输出会把非 ASCII 节点名转义成 \U...
+- 现象：`yaml.Marshal` 把 emoji 节点名转义为 `"\U0001F1FA\U0001F1F8"` 形式，测试里用 `strings.Contains(输出, "🇺🇸 US-01")` 匹配失败。
+- 解决：测试断言按 ASCII 后缀（如 `US-01`）匹配，或解析出 group 的 proxies 段再断言。
+- 教训：写 YAML 相关断言时，不要直接匹配含 emoji 的原始字符串。

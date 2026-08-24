@@ -1,7 +1,112 @@
 @use "./reset";
 
-.app-container {
-  padding: 10px;
+/* ===== OpenList manage 风格主题 =====
+ * 参考 /root/openlist-frontend/src/app/theme.ts 与 store/settings.ts
+ * 主色: Ant Design 蓝 #1890ff
+ * 背景: #f7f8fa  卡片: #ffffff / #f8f9fa
+ * 圆角: 大圆角(lg≈12px)  输入框: filled 风格
+ */
+:root {
+  --el-color-primary: #1890ff;
+  --el-color-primary-light-3: #4aa6ff;
+  --el-color-primary-light-5: #7fbfff;
+  --el-color-primary-light-7: #b3d9ff;
+  --el-color-primary-light-8: #cce6ff;
+  --el-color-primary-light-9: #e6f3ff;
+  --el-color-primary-dark-2: #0f6fd1;
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-border-radius-round: 20px;
+  --el-border-radius-circle: 100%;
+}
+
+html {
+  background-color: #f7f8fa;
+}
+
+html.dark {
+  background-color: #151718;
+}
+
+body {
+  background-color: #f7f8fa;
+}
+
+html.dark body {
+  background-color: #151718;
+}
+
+/* 卡片：大圆角 + 细边框 + 柔和阴影（openlist 卡片风格） */
+.app-container .el-card,
+.el-card {
+  border-radius: 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  --el-card-padding: 20px;
+}
+
+/* 按钮：大圆角（openlist 默认 lg 圆角） */
+.el-button {
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+/* 输入框 / 选择器 / 文本域：filled 风格 + 大圆角 */
+.el-input__wrapper,
+.el-textarea__inner {
+  border-radius: 10px;
+}
+
+/* 搜索区卡片化（openlist 卡片观感） */
+.search-container {
+  border-radius: 12px;
+  background-color: #ffffff;
+}
+
+html.dark .search-container {
+  background-color: var(--el-bg-color-overlay);
+}
+
+/* 表格：圆角容器 + hover 高亮 */
+.el-table {
+  border-radius: 12px;
+  --el-table-border-color: var(--el-border-color-lighter);
+}
+
+.el-table th.el-table__cell {
+  background-color: #fafbfc !important;
+  font-weight: 600;
+  color: #1f2329;
+}
+
+html.dark .el-table th.el-table__cell {
+  background-color: var(--el-fill-color-light) !important;
+}
+
+/* 标签 / 徽章：柔和圆角 */
+.el-tag {
+  border-radius: 6px;
+}
+
+/* 弹窗 / 抽屉：大圆角 */
+.el-dialog,
+.el-drawer,
+.el-message-box {
+  border-radius: 12px;
+}
+
+/* 分页 */
+.el-pagination.is-background .el-pager li {
+  border-radius: 8px;
+}
+
+/* 链接颜色（openlist 主色） */
+.link-type,
+.link-type:focus {
+  color: #1890ff;
+
+  &:hover {
+    color: #0f6fd1;
+  }
 }
 
 .search-container {
