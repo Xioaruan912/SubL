@@ -131,7 +131,6 @@ func RunUnlockTest(cfg UnlockTestConfig) (*UnlockResult, error) {
 		return nil, fmt.Errorf("启动 sing-box 失败: %v", err)
 	}
 	defer instance.Close()
-
 	// 通过 socks 代理发起请求
 	proxyURL, _ := url.Parse("socks5://127.0.0.1:" + strconv.Itoa(socksPort))
 	transport := &http.Transport{

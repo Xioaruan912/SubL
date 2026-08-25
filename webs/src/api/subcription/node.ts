@@ -18,6 +18,18 @@ export function UnlockTest(data: any){
   });
 }
 
+// 中国各地延迟测试
+export function ChinaPingTest(data: any){
+  return request({
+    url: "/api/v1/nodes/chinaping",
+    method: "post",
+    data,
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+}
+
 export function AddNodes(data: any){
   return request({
     url: "/api/v1/nodes/add",

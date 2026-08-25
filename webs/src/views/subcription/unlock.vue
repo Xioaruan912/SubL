@@ -3,7 +3,7 @@
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span>解锁测试</span>
+          <span>解锁测试 / 中国延迟</span>
         </div>
       </template>
 
@@ -22,26 +22,25 @@
           />
         </el-select>
         <el-button type="primary" :loading="loading" @click="startTest">
-          开始测试
+          解锁测试
+        </el-button>
+        <el-button type="success" :loading="chinaLoading" @click="startChinaPing">
+          中国延迟
         </el-button>
       </div>
 
-      <!-- 测试结果 -->
+      <!-- 解锁测试结果 -->
       <template v-if="result">
+        <el-divider content-position="left">解锁测试结果</el-divider>
         <div class="result-summary">
           <el-tag :type="result.ok ? 'success' : 'danger'" effect="dark" size="large">
             {{ result.ok ? "有可解锁服务" : "无可解锁服务" }}
           </el-tag>
         </div>
-
         <div v-for="group in groups" :key="group.key" class="group-section">
           <div class="group-title">{{ group.label }}</div>
           <div class="group-grid">
-            <div
-              v-for="r in resultByGroup(group.key)"
-              :key="r.key"
-              class="unlock-item"
-            >
+            <div v-for="r in resultByGroup(group.key)" :key="r.key" class="unlock-item">
               <div class="unlock-item-top">
                 <span class="status-dot" :class="r.ok ? 'ok' : 'fail'" />
                 <span class="item-name">{{ r.name }}</span>
@@ -58,14 +57,61 @@
         </div>
       </template>
 
-      <el-empty v-else-if="!loading" description="选择节点后点击「开始测试」" />
+      <!-- 中国延迟筛选 + 结果 -->
+      <template v-if="chinaResult">
+        <el-divider content-position="left">中国各地延迟</el-divider>
+        <div class="filter-bar">
+          <el-select v-model="filterProvinces" multiple collapse-tags placeholder="省份（默认全部）" class="filter-provinces">
+            <el-option v-for="p in provinceList" :key="p" :label="p" :value="p" />
+          </el-select>
+          <el-select v-model="filterIsps" multiple collapse-tags placeholder="运营商（默认全部）" class="filter-isps">
+            <el-option v-for="i in ispList" :key="i" :label="i" :value="i" />
+          </el-select>
+          <el-select v-model="zstaticPort" class="filter-zstatic">
+            <el-option label="zstaticcdn 443" value="443" />
+            <el-option label="zstaticcdn 80" value="80" />
+          </el-select>
+          <el-button size="small" @click="reChinaPing">重新测试</el-button>
+        </div>
+
+        <!-- zstaticcdn 延迟 -->
+        <div class="zstatic-bar">
+          <span class="zstatic-label">字节跳动测速源 (lf3-ips.zstaticcdn.com)</span>
+          <el-tag
+            v-for="z in chinaResult.zstatic"
+            :key="z.port"
+            :type="rttType(z.rtt)"
+            size="small"
+            effect="light"
+          >
+            :{{ z.port }} → {{ z.rtt < 0 ? "不可达" : z.rtt + " ms" }}
+          </el-tag>
+        </div>
+
+        <!-- 按省折叠分组 -->
+        <el-collapse class="province-collapse">
+          <el-collapse-item v-for="g in provinceGroups" :key="g.province" :title="groupTitle(g)">
+            <div class="province-grid">
+              <div v-for="t in g.items" :key="t.ip + t.port" class="china-item">
+                <span class="china-city">{{ t.city }}</span>
+                <el-tag :type="rttType(t.rtt)" size="small" effect="light">
+                  {{ t.rtt < 0 ? "不可达" : t.rtt + " ms" }}
+                </el-tag>
+                <span class="china-ip">{{ t.ip }}:{{ t.port }}</span>
+              </div>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
+      </template>
+
+      <el-empty v-else-if="!loading && !chinaLoading" description="选择节点后点击「解锁测试」或「中国延迟」" />
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { getNodes, UnlockTest } from "@/api/subcription/node";
+import { getNodes, UnlockTest, ChinaPingTest } from "@/api/subcription/node";
 
 defineOptions({
   name: "Unlock",
@@ -90,11 +136,33 @@ interface UnlockResult {
   results: UnlockCheckResult[];
   error?: string;
 }
+interface ChinaTarget {
+  province: string;
+  city: string;
+  isp: string;
+  ip: string;
+  port: number;
+  rtt: number;
+}
+interface ChinaResult {
+  nodeName: string;
+  targets: ChinaTarget[];
+  zstatic: { port: number; rtt: number }[];
+}
 
 const nodes = ref<NodeItem[]>([]);
 const selectedNodeId = ref<number | undefined>();
 const loading = ref(false);
 const result = ref<UnlockResult | null>(null);
+const chinaLoading = ref(false);
+const chinaResult = ref<ChinaResult | null>(null);
+
+const filterProvinces = ref<string[]>([]);
+const filterIsps = ref<string[]>([]);
+const zstaticPort = ref("443");
+
+const provinceList = ["北京","天津","上海","重庆","河北","山西","辽宁","吉林","黑龙江","江苏","浙江","安徽","福建","江西","山东","河南","湖北","湖南","广东","海南","四川","贵州","云南","陕西","甘肃","青海","内蒙古","广西","西藏","宁夏","新疆"];
+const ispList = ["电信", "联通", "移动"];
 
 const groups = [
   { key: "ai", label: "AI 服务" },
@@ -109,6 +177,33 @@ const shortNote = (note: string) => {
   if (!note) return "";
   if (note.includes("socks connect")) return "连接失败/超时";
   return note.length > 40 ? note.slice(0, 40) + "..." : note;
+};
+
+const rttType = (rtt: number) => {
+  if (rtt < 0) return "danger";
+  if (rtt < 100) return "success";
+  if (rtt < 300) return "warning";
+  return "danger";
+};
+
+// 按省折叠分组（本地再过滤前端筛选）
+const provinceGroups = computed(() => {
+  const byProv: Record<string, ChinaTarget[]> = {};
+  for (const t of chinaResult.value?.targets || []) {
+    if (filterProvinces.value.length && !filterProvinces.value.includes(t.province)) continue;
+    if (filterIsps.value.length && !filterIsps.value.includes(t.isp)) continue;
+    if (!byProv[t.province]) byProv[t.province] = [];
+    byProv[t.province].push(t);
+  }
+  return Object.keys(byProv)
+    .sort()
+    .map((province) => ({ province, items: byProv[province] }));
+});
+
+const groupTitle = (g: any) => {
+  const total = g.items.length;
+  const ok = g.items.filter((i: ChinaTarget) => i.rtt >= 0).length;
+  return `${g.province}（${ok}/${total} 可达）`;
 };
 
 const startTest = async () => {
@@ -127,6 +222,28 @@ const startTest = async () => {
     loading.value = false;
   }
 };
+
+const doChinaPing = async () => {
+  if (!selectedNodeId.value) {
+    ElMessage.warning("请先选择节点");
+    return;
+  }
+  chinaLoading.value = true;
+  try {
+    const payload: any = { id: selectedNodeId.value, zstatic_port: zstaticPort.value };
+    if (filterProvinces.value.length) payload.provinces = filterProvinces.value.join(",");
+    if (filterIsps.value.length) payload.isps = filterIsps.value.join(",");
+    const { data } = await ChinaPingTest(payload);
+    chinaResult.value = data;
+  } catch (e: any) {
+    ElMessage.error(e?.message || "中国延迟测试失败");
+  } finally {
+    chinaLoading.value = false;
+  }
+};
+
+const startChinaPing = doChinaPing;
+const reChinaPing = doChinaPing;
 
 onMounted(async () => {
   try {
@@ -151,6 +268,32 @@ onMounted(async () => {
 
   .node-select {
     width: 320px;
+  }
+}
+
+.filter-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+
+  .filter-provinces { width: 200px; }
+  .filter-isps { width: 140px; }
+  .filter-zstatic { width: 160px; }
+}
+
+.zstatic-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+
+  .zstatic-label {
+    font-size: 13px;
+    font-weight: 500;
   }
 }
 
@@ -193,13 +336,8 @@ onMounted(async () => {
     border-radius: 50%;
     flex-shrink: 0;
 
-    &.ok {
-      background: #30a46c;
-    }
-
-    &.fail {
-      background: #e5484d;
-    }
+    &.ok { background: #30a46c; }
+    &.fail { background: #e5484d; }
   }
 
   .item-name {
@@ -223,7 +361,40 @@ onMounted(async () => {
   }
 }
 
-html.dark .unlock-item {
+.province-collapse {
+  .province-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+    padding: 4px 0;
+
+    .china-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: #f8f9fa;
+      border: 1px solid var(--el-border-color-lighter);
+      border-radius: 8px;
+
+      .china-city {
+        font-size: 13px;
+        font-weight: 500;
+        flex-shrink: 0;
+      }
+
+      .china-ip {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--el-text-color-placeholder);
+      }
+    }
+  }
+}
+
+html.dark .unlock-item,
+html.dark .china-item,
+html.dark .zstatic-bar {
   background: #202425;
 }
 </style>

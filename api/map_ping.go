@@ -2,6 +2,7 @@ package api
 
 import (
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"sublink/models"
@@ -234,4 +235,99 @@ func NodeUnlock(c *gin.Context) {
 	uCache.mu.Unlock()
 
 	c.JSON(200, gin.H{"code": "00000", "data": result, "msg": "解锁测试完成"})
+}
+
+// chinaCache 中国延迟缓存
+type chinaCache struct {
+	mu      sync.Mutex
+	entries map[string]*chinaCacheEntry
+}
+
+type chinaCacheEntry struct {
+	result  *node.ChinaPingResult
+	expires time.Time
+}
+
+var cCache = &chinaCache{entries: make(map[string]*chinaCacheEntry)}
+
+// NodeChinaPing 对指定节点做中国各地 TCP 延迟测试。
+// POST /api/v1/nodes/chinaping body: id/link + 可选 provinces,isps,zstatic_port
+func NodeChinaPing(c *gin.Context) {
+	idStr := c.PostForm("id")
+	link := c.PostForm("link")
+	if idStr == "" && link == "" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "需要提供节点 id 或 link"})
+		return
+	}
+	if idStr != "" {
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			c.JSON(400, gin.H{"code": "40000", "msg": "节点 id 格式错误"})
+			return
+		}
+		var n models.Node
+		n.ID = id
+		if err := n.Find(); err != nil {
+			c.JSON(404, gin.H{"code": "40400", "msg": "节点不存在"})
+			return
+		}
+		link = n.Link
+	}
+	if link == "" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "节点链接为空"})
+		return
+	}
+
+	// 筛选参数
+	var provinces, isps []string
+	if v := c.PostForm("provinces"); v != "" {
+		for _, s := range strings.Split(v, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				provinces = append(provinces, s)
+			}
+		}
+	}
+	if v := c.PostForm("isps"); v != "" {
+		for _, s := range strings.Split(v, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				isps = append(isps, s)
+			}
+		}
+	}
+	var zstaticPorts []int
+	if v := c.PostForm("zstatic_port"); v != "" {
+		for _, s := range strings.Split(v, ",") {
+			if p, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
+				zstaticPorts = append(zstaticPorts, p)
+			}
+		}
+	}
+
+	// 缓存 key（含筛选条件）
+	cacheKey := link + "|" + strings.Join(provinces, ",") + "|" + strings.Join(isps, ",") + "|" + strings.Join(strings.Split(c.PostForm("zstatic_port"), ","), ",")
+	cCache.mu.Lock()
+	if e, ok := cCache.entries[cacheKey]; ok && time.Now().Before(e.expires) {
+		cCache.mu.Unlock()
+		c.JSON(200, gin.H{"code": "00000", "data": e.result, "msg": "中国延迟（缓存）"})
+		return
+	}
+	cCache.mu.Unlock()
+
+	if node.UnlockTestBusy() {
+		c.JSON(429, gin.H{"code": "42900", "msg": "已有测试进行中，请稍候"})
+		return
+	}
+	defer node.UnlockTestRelease()
+
+	result, err := node.RunChinaPing(node.UnlockTestConfig{Link: link, Timeout: 5 * time.Second}, provinces, isps, zstaticPorts)
+	if err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "中国延迟测试失败: " + err.Error()})
+		return
+	}
+
+	cCache.mu.Lock()
+	cCache.entries[cacheKey] = &chinaCacheEntry{result: result, expires: time.Now().Add(60 * time.Second)}
+	cCache.mu.Unlock()
+
+	c.JSON(200, gin.H{"code": "00000", "data": result, "msg": "中国延迟测试完成"})
 }

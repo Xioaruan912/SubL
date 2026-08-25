@@ -165,3 +165,12 @@ systemctl start sublink
 - 分片上传易因单个分片损坏/漏传导致 md5 不匹配（踩过 part_06 不完整）。
 - **方案**：VPS `apt install rsync` + 本地 `rsync -avz --partial --append-verify -e "sshpass ..."` 上传，中断后再跑一次从断点继续，md5 校验。
 - 本地是容器内网 IP，VPS 无法直连本地 HTTP，故用 rsync over ssh（VPS 需装 rsync）。
+
+### 15. 中国各地延迟测试（解锁测试页新增）
+- **需求**：在解锁测试页选择节点后，走节点测到**中国各省市运营商**（电信/联通/移动）的 TCP 延迟 + 字节跳动测速源 `lf3-ips.zstaticcdn.com` 延迟。
+- **数据**：用户提供全量清单（`/mnt/c/Users/win/Desktop/新建 文本文档.txt`，WSL 桌面文件），约 2428 条 `省 市 运营商 纬度 经度 IP 端口`。用 Python 脚本解析生成 `node/china_data.go` 的 `chinaTargets` 全量切片。
+- **筛选**：`FilterChinaTargets(provinces, isps)` 支持按省/运营商过滤；为空时默认**每省每运营商取 1 条**（`defaultChinaTargets`，去重）。
+- **核心**：`node/china_ping.go` `RunChinaPing` 复用 sing-box socks 代理（`buildOutboundConfig` + `singbox.New` + socks 入站），用 `golang.org/x/net/proxy.SOCKS5` dialer 对每个目标 TCP connect 计时；**并发限 12**，`tcpPingVia` 带超时（goroutine + select），不可达/超时返回 -1。
+- **API**：`POST /api/v1/nodes/chinaping`（body: id/link + 可选 provinces/isps/zstatic_port），60s 缓存 + 复用 `UnlockTestBusy` 互斥。
+- **前端** `unlock.vue`：新增「中国延迟」按钮 + 省份/运营商筛选 + zstatic 端口选择，结果**按省折叠**（el-collapse）展示，延迟着色。
+- **数据可用性坑**：中国运营商 IP:端口**并非全部可达**（如 `101.71.101.121:80`、`211.92.8.8:22` 不可达——端口关闭/被拦）。代码必须处理不可达（返回 -1），前端展示"不可达"。测试结果会有相当比例失败属正常。

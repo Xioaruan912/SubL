@@ -16,6 +16,7 @@ func Nodes(r *gin.Engine) {
 		NodesGroup.GET("/map", api.NodeMap)
 		NodesGroup.GET("/ping", api.NodePing)
 		NodesGroup.POST("/unlock", api.NodeUnlock)
+		NodesGroup.POST("/chinaping", api.NodeChinaPing)
 
 	}
 	// 分组
