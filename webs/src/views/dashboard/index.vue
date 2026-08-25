@@ -52,8 +52,8 @@ defineOptions({
 
 import { useUserStore } from "@/store/modules/user";
 import { getSubTotal,getNodeTotal } from "@/api/total";
-import WorldMap from "./components/WorldMap.vue";
-import NodePing from "./components/NodePing.vue";
+const WorldMap = defineAsyncComponent(() => import("./components/WorldMap.vue"));
+const NodePing = defineAsyncComponent(() => import("./components/NodePing.vue"));
 const userStore = useUserStore();
 const date: Date = new Date();
 const subTotal = ref(0);

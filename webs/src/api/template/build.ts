@@ -11,3 +11,11 @@ export function BuildClashTemplate(data: any){
     },
   });
 }
+
+// 获取默认 mihomo 配置（用于预填表单）
+export function GetDefaultTemplate(){
+  return request({
+    url: "/api/v1/template/default",
+    method: "get",
+  });
+}

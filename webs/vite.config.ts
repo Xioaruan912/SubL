@@ -139,8 +139,6 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
         "sortablejs",
         "path-to-regexp",
         "echarts",
-        "@wangeditor/editor",
-        "@wangeditor/editor-for-vue",
         "vue-i18n",
         "path-browserify",
         "element-plus/es/components/form/style/css",
@@ -213,9 +211,7 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
       },
       rollupOptions: {
         output: {
-          // manualChunks: {
-          //   "vue-i18n": ["vue-i18n"],
-          // },
+          manualChunks: {},
           // 用于从入口点创建的块的打包输出格式[name]表示文件名,[hash]表示该文件内容hash值
           entryFileNames: "js/[name].[hash].js",
           // 用于命名代码拆分时创建的共享块的输出命名

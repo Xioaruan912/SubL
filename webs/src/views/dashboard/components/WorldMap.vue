@@ -21,13 +21,17 @@
 </template>
 
 <script setup lang="ts">
-import * as echarts from "echarts";
-import worldJson from "@/assets/world.json";
+import * as echarts from "echarts/core";
+import { TooltipComponent, GeoComponent } from "echarts/components";
+import { EffectScatterChart } from "echarts/charts";
+import { CanvasRenderer } from "echarts/renderers";
 import { getNodeMap } from "@/api/total";
 
 defineOptions({
   name: "WorldMap",
 });
+
+echarts.use([TooltipComponent, GeoComponent, EffectScatterChart, CanvasRenderer]);
 
 interface MapPoint {
   name: string;
@@ -41,11 +45,27 @@ interface MapPoint {
 const loading = ref(false);
 const points = ref<MapPoint[]>([]);
 const chart = ref<any>(null);
+const worldJson = ref<any>(null);
 
-const initChart = () => {
-  echarts.registerMap("world", worldJson as any);
+// 动态加载世界地图数据（避免打进首屏 bundle）
+const loadWorldJson = async () => {
+  if (worldJson.value) return worldJson.value;
+  try {
+    const res = await fetch("/static/world.json");
+    worldJson.value = await res.json();
+  } catch {
+    worldJson.value = null;
+  }
+  return worldJson.value;
+};
+
+const initChart = async () => {
+  const geoJson = await loadWorldJson();
   const el = document.getElementById("nodeWorldMap") as HTMLDivElement;
   if (!el) return;
+  if (geoJson) {
+    echarts.registerMap("world", geoJson);
+  }
   chart.value = markRaw(echarts.init(el));
   window.addEventListener("resize", () => chart.value?.resize());
 };
@@ -122,8 +142,8 @@ const load = async () => {
   }
 };
 
-onMounted(() => {
-  initChart();
+onMounted(async () => {
+  await initChart();
   load();
 });
 

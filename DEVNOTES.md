@@ -146,3 +146,22 @@ systemctl start sublink
 - **关键点**：构建器生成的模板 `proxies: ~` 占位（与现有 `template/clash.yaml` 一致），订阅时 `DecodeClash` 会填充节点并按 filter 分组。`yaml.Marshal` 会把 emoji 转义为 `\Uxxxx`，clash 可正常解析（等价）。
 - 默认规则 `defaultClashRules`（直连内网 + GEOIP CN + MATCH）在 `api/template_builder.go`。
 - **验证**：build API 生成含 filter 的模板 → `DecodeClash` 实测 AI 组只填充 US 节点、无 filter 组填充全部 —— 端到端正确。
+
+### 13. 操作模板扩展（完整 mihomo 配置 + 规则集 + 端口联动）
+- **需求**：`/template/builder` 支持完整 mihomo 配置（端口/geodata/tun/sniffer/dns/listeners）、规则集(rule-providers)、规则(rules)自定义，并能编辑现有模板。
+- **后端** `api/template_builder.go` 重构：
+  - `BuilderRequest` 扩展：完整端口（port/socks/mixed/redir/tproxy/dns_listen）、高级配置（unified-delay/geodata/tun/sniffer/dns）、`RuleProvider` 规则集、`Rules` 规则、`EditOldname`（编辑改名）、`Source`（default/custom）。
+  - `GET /api/v1/template/default`：返回默认 mihomo 配置（默认分组 日常使用+AI filter、默认规则集 LAN/Direct/Proxy/AI/ESET_China、默认规则 RULE-SET 引用）。
+  - **端口偏移联动** `applyPortOffsets`：`port_offset=true` 时，主端口改动 → mixed/redir/tproxy/socks 端口基于基准 7890 偏移同步；dns listen/external-controller 是独立端口不联动。
+  - **关键点**：`applyBuilderDefaults` 的 default 分支**不能无条件覆盖用户显式传入的端口**，只填充默认分组/规则集/规则（否则用户改 port 会被重置为 7890）。
+  - `DecodeClash` 只处理 proxies/proxy-groups，但 rule-providers/rules 因整体 map 解析会原样保留 → 订阅时 RULE-SET 引用正常。
+- **前端** `builder.vue` 重构：模板来源下拉（内置默认 mihomo/新建空白/编辑已有文件）、分区块折叠面板（端口/基础/高级）、规则集动态行、rules 文本框。
+- **gzip 优化（前端性能）**：
+  - WorldMap 改用 `echarts/core` tree-shaken（从 1MB→437KB），world.json 移到 `public/` 运行时 fetch（不进 bundle）。
+  - 删除未用代码：`src/views/demo/`、dashboard 的 BarChart/PieChart/RadarChart/FunnelChart、`src/components/WangEditor`（含 @wangeditor 依赖）。
+  - **后端 gzip**：`middlewares/static.go` 自定义 StaticFS（`gin-contrib/gzip` 对 `r.StaticFS` 无效！），拦截静态文本响应 gzip + 正确 Content-Encoding，删除 Content-Length 用 chunked。图片排除。
+
+### 14. 部署断点续传（rsync）
+- 分片上传易因单个分片损坏/漏传导致 md5 不匹配（踩过 part_06 不完整）。
+- **方案**：VPS `apt install rsync` + 本地 `rsync -avz --partial --append-verify -e "sshpass ..."` 上传，中断后再跑一次从断点继续，md5 校验。
+- 本地是容器内网 IP，VPS 无法直连本地 HTTP，故用 rsync over ssh（VPS 需装 rsync）。

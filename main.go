@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
-	"net/http"
 	"os"
 	"sublink/middlewares"
 	"sublink/models"
@@ -126,12 +125,12 @@ func Run(port int) {
 	Templateinit()
 	// 安装中间件
 	r.Use(middlewares.AuthorToken) // jwt验证token
-	// 设置静态资源路径
+	// 设置静态资源路径（自定义 handler，支持 gzip + 正确 Content-Length）
 	staticFiles, err := fs.Sub(embeddedFiles, "static")
 	if err != nil {
 		log.Println(err)
 	}
-	r.StaticFS("/static", http.FS(staticFiles))
+	r.Any("/static/*filepath", middlewares.StaticFS(staticFiles))
 	// 设置模板路径
 	r.GET("/", func(c *gin.Context) {
 		data, err := fs.ReadFile(staticFiles, "index.html")
