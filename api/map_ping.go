@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"sync"
@@ -64,6 +65,21 @@ var countryNames = map[string]string{
 	"CO": "哥伦比亚", "CL": "智利", "PE": "秘鲁", "RO": "罗马尼亚",
 	"HU": "匈牙利", "LT": "立陶宛", "EE": "爱沙尼亚", "LV": "拉脱维亚",
 	"IS": "冰岛", "LU": "卢森堡", "CY": "塞浦路斯", "MT": "马耳他",
+	// 补全（与 geo.go 坐标表对齐）
+	"AF": "阿富汗", "AM": "亚美尼亚", "AZ": "阿塞拜疆", "BD": "孟加拉",
+	"BH": "巴林", "BO": "玻利维亚", "BY": "白俄罗斯", "CI": "科特迪瓦",
+	"CR": "哥斯达黎加", "CU": "古巴", "DO": "多米尼加", "DZ": "阿尔及利亚",
+	"EC": "厄瓜多尔", "ET": "埃塞俄比亚", "GE": "格鲁吉亚", "GH": "加纳",
+	"GT": "危地马拉", "HR": "克罗地亚", "IQ": "伊拉克", "IR": "伊朗",
+	"JM": "牙买加", "JO": "约旦", "KE": "肯尼亚", "KH": "柬埔寨",
+	"KW": "科威特", "LA": "老挝", "LB": "黎巴嫩", "LI": "列支敦士登",
+	"LK": "斯里兰卡", "LY": "利比亚", "MA": "摩洛哥", "MD": "摩尔多瓦",
+	"MM": "缅甸", "MO": "澳门", "NG": "尼日利亚", "NP": "尼泊尔",
+	"OM": "阿曼", "PA": "巴拿马", "PK": "巴基斯坦", "PR": "波多黎各",
+	"PY": "巴拉圭", "QA": "卡塔尔", "RS": "塞尔维亚", "SC": "塞舌尔",
+	"SD": "苏丹", "SI": "斯洛文尼亚", "SK": "斯洛伐克", "SN": "塞内加尔",
+	"TN": "突尼斯", "TZ": "坦桑尼亚", "UG": "乌干达", "UY": "乌拉圭",
+	"VE": "委内瑞拉", "YE": "也门",
 }
 
 func countryName(code string) string {
@@ -188,6 +204,9 @@ func NodeUnlock(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "需要提供节点 id 或 link"})
 		return
 	}
+	// 节点名（用于状态显示）
+	nodeName := link
+	var nodeID int
 	// 通过 id 查找节点
 	if idStr != "" {
 		id, err := strconv.Atoi(idStr)
@@ -201,6 +220,8 @@ func NodeUnlock(c *gin.Context) {
 			c.JSON(404, gin.H{"code": "40400", "msg": "节点不存在"})
 			return
 		}
+		nodeName = n.Name
+		nodeID = n.ID
 		link = n.Link
 	}
 	if link == "" {
@@ -217,14 +238,21 @@ func NodeUnlock(c *gin.Context) {
 	}
 	uCache.mu.Unlock()
 
-	// 全局互斥：同时只跑一个解锁测试，避免大量 sing-box 实例
-	if node.UnlockTestBusy() {
-		c.JSON(429, gin.H{"code": "42900", "msg": "已有解锁测试进行中，请稍候"})
+	// 开始测试会话（可取消 ctx + 记录节点状态）
+	ctx, cancel, ok := node.BeginTest(nodeName, nodeID, "unlock", context.Background())
+	if !ok {
+		cur := node.GetTestStatus()
+		if cur != nil {
+			c.JSON(429, gin.H{"code": "42900", "msg": "已有测试进行中：" + cur.Type + " · " + cur.NodeName})
+		} else {
+			c.JSON(429, gin.H{"code": "42900", "msg": "已有测试进行中，请稍候"})
+		}
 		return
 	}
-	defer node.UnlockTestRelease()
+	defer node.EndTest()
+	_ = cancel
 
-	result, err := node.RunUnlockTest(node.UnlockTestConfig{Link: link, Timeout: 8 * time.Second})
+	result, err := node.RunUnlockTest(ctx, node.UnlockTestConfig{Link: link, Timeout: 8 * time.Second})
 	if err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "解锁测试失败: " + err.Error()})
 		return
@@ -259,6 +287,8 @@ func NodeChinaPing(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "需要提供节点 id 或 link"})
 		return
 	}
+	nodeName := link
+	var nodeID int
 	if idStr != "" {
 		id, err := strconv.Atoi(idStr)
 		if err != nil {
@@ -271,6 +301,8 @@ func NodeChinaPing(c *gin.Context) {
 			c.JSON(404, gin.H{"code": "40400", "msg": "节点不存在"})
 			return
 		}
+		nodeName = n.Name
+		nodeID = n.ID
 		link = n.Link
 	}
 	if link == "" {
@@ -313,13 +345,21 @@ func NodeChinaPing(c *gin.Context) {
 	}
 	cCache.mu.Unlock()
 
-	if node.UnlockTestBusy() {
-		c.JSON(429, gin.H{"code": "42900", "msg": "已有测试进行中，请稍候"})
+	ctx, cancel, ok := node.BeginTest(nodeName, nodeID, "tcp", context.Background())
+	if !ok {
+		cur := node.GetTestStatus()
+		if cur != nil {
+			c.JSON(429, gin.H{"code": "42900", "msg": "已有测试进行中：" + cur.Type + " · " + cur.NodeName})
+		} else {
+			c.JSON(429, gin.H{"code": "42900", "msg": "已有测试进行中，请稍候"})
+		}
 		return
 	}
-	defer node.UnlockTestRelease()
+	defer node.EndTest()
+	_ = cancel
+	_ = ctx
 
-	result, err := node.RunChinaPing(node.UnlockTestConfig{Link: link, Timeout: 5 * time.Second}, provinces, isps, zstaticPorts)
+	result, err := node.RunChinaPing(ctx, node.UnlockTestConfig{Link: link, Timeout: 5 * time.Second}, provinces, isps, zstaticPorts)
 	if err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "中国延迟测试失败: " + err.Error()})
 		return
@@ -330,4 +370,118 @@ func NodeChinaPing(c *gin.Context) {
 	cCache.mu.Unlock()
 
 	c.JSON(200, gin.H{"code": "00000", "data": result, "msg": "中国延迟测试完成"})
+}
+
+// NodeChinaPingStream 中国各地 TCP 延迟测试（SSE 流式，每省完成实时推送）。
+// POST /api/v1/nodes/chinaping/stream
+func NodeChinaPingStream(c *gin.Context) {
+	idStr := c.PostForm("id")
+	link := c.PostForm("link")
+	if idStr == "" && link == "" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "需要提供节点 id 或 link"})
+		return
+	}
+	nodeName := link
+	var nodeID int
+	if idStr != "" {
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			c.JSON(400, gin.H{"code": "40000", "msg": "节点 id 格式错误"})
+			return
+		}
+		var n models.Node
+		n.ID = id
+		if err := n.Find(); err != nil {
+			c.JSON(404, gin.H{"code": "40400", "msg": "节点不存在"})
+			return
+		}
+		nodeName = n.Name
+		nodeID = n.ID
+		link = n.Link
+	}
+	if link == "" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "节点链接为空"})
+		return
+	}
+
+	var provinces, isps []string
+	if v := c.PostForm("provinces"); v != "" {
+		for _, s := range strings.Split(v, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				provinces = append(provinces, s)
+			}
+		}
+	}
+	if v := c.PostForm("isps"); v != "" {
+		for _, s := range strings.Split(v, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				isps = append(isps, s)
+			}
+		}
+	}
+	var zstaticPorts []int
+	if v := c.PostForm("zstatic_port"); v != "" {
+		for _, s := range strings.Split(v, ",") {
+			if p, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
+				zstaticPorts = append(zstaticPorts, p)
+			}
+		}
+	}
+
+	ctx, cancel, ok := node.BeginTest(nodeName, nodeID, "tcp", context.Background())
+	if !ok {
+		cur := node.GetTestStatus()
+		if cur != nil {
+			c.JSON(429, gin.H{"code": "42900", "msg": "已有测试进行中：" + cur.Type + " · " + cur.NodeName})
+		} else {
+			c.JSON(429, gin.H{"code": "42900", "msg": "已有测试进行中，请稍候"})
+		}
+		return
+	}
+	defer node.EndTest()
+	_ = cancel
+
+	// 设置 SSE 响应头
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+
+	// 逐省推送
+	onProvince := func(province string, targets []node.ChinaPingTarget) {
+		c.SSEvent("province", gin.H{"province": province, "targets": targets})
+		c.Writer.Flush()
+	}
+
+	result, err := node.RunChinaPingStream(ctx, node.UnlockTestConfig{Link: link, Timeout: 5 * time.Second}, provinces, isps, zstaticPorts, onProvince)
+	if err != nil {
+		c.SSEvent("error", gin.H{"msg": err.Error()})
+		c.Writer.Flush()
+		return
+	}
+
+	c.SSEvent("zstatic", gin.H{"zstatic": result.ZStatic})
+	c.SSEvent("done", gin.H{"nodeName": result.NodeName, "msg": "完成"})
+	c.Writer.Flush()
+}
+
+// TestStatus 返回当前测试会话状态（哪个节点、类型、开始时间）。
+// GET /api/v1/nodes/test/status
+func TestStatus(c *gin.Context) {
+	cur := node.GetTestStatus()
+	if cur == nil {
+		c.JSON(200, gin.H{"code": "00000", "data": nil, "msg": "无测试进行中"})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": cur, "msg": "测试状态"})
+}
+
+// TestCancel 主动停止当前测试。
+// POST /api/v1/nodes/test/cancel
+func TestCancel(c *gin.Context) {
+	if node.CancelTest() {
+		c.JSON(200, gin.H{"code": "00000", "msg": "已停止测试"})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "msg": "当前无测试进行中"})
 }

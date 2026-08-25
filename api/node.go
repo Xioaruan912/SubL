@@ -180,6 +180,31 @@ func GroupNodeGet(c *gin.Context) {
 	})
 }
 
+// 删除分组（按 name 或 id）
+func GroupNodeDel(c *gin.Context) {
+	name := c.Query("name")
+	idStr := c.Query("id")
+	var gn models.GroupNode
+	if name != "" {
+		gn.Name = name
+	} else if idStr != "" {
+		x, err := strconv.Atoi(idStr)
+		if err != nil {
+			c.JSON(400, gin.H{"msg": "id 格式错误"})
+			return
+		}
+		gn.ID = x
+	} else {
+		c.JSON(400, gin.H{"msg": "需要提供分组 name 或 id"})
+		return
+	}
+	if err := gn.Del(); err != nil {
+		c.JSON(400, gin.H{"msg": "删除分组失败: " + err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "msg": "删除分组成功"})
+}
+
 // 设置关联分组
 func GroupNodeSet(c *gin.Context) {
 	// var n models.Node

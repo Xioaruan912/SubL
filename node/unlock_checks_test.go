@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"net/http"
 	"testing"
 	"time"
@@ -8,9 +9,10 @@ import (
 
 func TestCheckFunctionsDirect(t *testing.T) {
 	c := &http.Client{Timeout: 15 * time.Second}
+	ctx := context.Background()
 	tests := []struct {
 		name string
-		chk  func(c *http.Client) (bool, string)
+		chk  func(ctx context.Context, c *http.Client) (bool, string)
 	}{
 		{"OpenAI", checkOpenAI},
 		{"Claude", checkClaude},
@@ -23,7 +25,7 @@ func TestCheckFunctionsDirect(t *testing.T) {
 		{"Telegram", checkTelegram},
 	}
 	for _, tt := range tests {
-		ok, note := tt.chk(c)
+		ok, note := tt.chk(ctx, c)
 		t.Logf("%-8s ok=%v note=%s", tt.name, ok, note)
 	}
 }

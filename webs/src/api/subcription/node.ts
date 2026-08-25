@@ -6,6 +6,14 @@ export function getNodes(){
   });
 }
 
+// 节点概览（含国家/延迟/分组）
+export function getNodeOverview(){
+  return request({
+    url: "/api/v1/nodes/overview",
+    method: "get",
+  });
+}
+
 // 节点解锁测试
 export function UnlockTest(data: any){
   return request({
@@ -27,6 +35,21 @@ export function ChinaPingTest(data: any){
     headers: {
       "Content-Type": "multipart/form-data",
     },
+  });
+}
+
+// 当前测试状态
+export function GetTestStatus(){
+  return request({
+    url: "/api/v1/nodes/test/status",
+    method: "get",
+  });
+}
+// 停止当前测试
+export function CancelTest(){
+  return request({
+    url: "/api/v1/nodes/test/cancel",
+    method: "post",
   });
 }
 

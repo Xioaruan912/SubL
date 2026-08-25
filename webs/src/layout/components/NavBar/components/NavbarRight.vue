@@ -1,6 +1,13 @@
 <template>
   <div class="flex">
     <template v-if="!isMobile">
+      <!--测试状态 -->
+      <div class="setting-item" @click="testDialogVisible = true">
+        <el-badge is-dot :hidden="!testRunning" class="test-badge">
+          <svg-icon icon-class="monitor" />
+        </el-badge>
+      </div>
+
       <!--全屏 -->
       <div class="setting-item" @click="toggle">
         <svg-icon
@@ -48,6 +55,9 @@
         <svg-icon icon-class="setting" />
       </div>
     </template>
+
+    <!-- 测试状态弹窗 -->
+    <TestStatusDialog v-model:visible="testDialogVisible" />
   </div>
 </template>
 <script setup lang="ts">
@@ -59,11 +69,16 @@ import {
 } from "@/store";
 import defaultSettings from "@/settings";
 import { DeviceEnum } from "@/enums/DeviceEnum";
+import { GetTestStatus } from "@/api/subcription/node";
+import TestStatusDialog from "@/components/TestStatusDialog.vue";
 
 const appStore = useAppStore();
 const tagsViewStore = useTagsViewStore();
 const userStore = useUserStore();
 const settingStore = useSettingsStore();
+
+const testDialogVisible = ref(false);
+const testRunning = ref(false);
 
 const route = useRoute();
 const router = useRouter();
@@ -71,6 +86,20 @@ const router = useRouter();
 const isMobile = computed(() => appStore.device === DeviceEnum.MOBILE);
 
 const { isFullscreen, toggle } = useFullscreen();
+
+// 轮询测试状态（是否有测试进行中，用于红点提示）
+let statusTimer: any = null;
+const pollTestStatus = async () => {
+  try {
+    const { data } = await GetTestStatus();
+    testRunning.value = !!data;
+  } catch { testRunning.value = false; }
+};
+onMounted(() => {
+  pollTestStatus();
+  statusTimer = setInterval(pollTestStatus, 5000);
+});
+onBeforeUnmount(() => { if (statusTimer) clearInterval(statusTimer); });
 
 /**
  * 注销

@@ -1,1 +1,0 @@
-import{bt as t}from"./index.DWpLgS1b.js";function e(e){const a=new FormData;return a.append("file",e),t({url:"/api/v1/files",method:"post",data:a,headers:{"Content-Type":"multipart/form-data"}})}function a(e){return t({url:"/api/v1/files",method:"delete",params:{filePath:e}})}export{a as d,e as u};

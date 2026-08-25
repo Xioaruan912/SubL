@@ -24,7 +24,7 @@ type UnlockService struct {
 	Key   string `json:"key"`
 	Name  string `json:"name"`
 	Group string `json:"group"` // ai / video / forum
-	Check func(c *http.Client) (bool, string)
+	Check func(ctx context.Context, c *http.Client) (bool, string)
 }
 
 // UnlockCheckResult 单个服务解锁结果
@@ -96,7 +96,8 @@ func getBoxContext() context.Context {
 }
 
 // RunUnlockTest 对节点链接做真实解锁检测（通过 sing-box 走该节点）。
-func RunUnlockTest(cfg UnlockTestConfig) (*UnlockResult, error) {
+// ctx 取消（客户端断开）时提前返回，及时释放锁。
+func RunUnlockTest(ctx context.Context, cfg UnlockTestConfig) (*UnlockResult, error) {
 	timeout := cfg.Timeout
 	if timeout <= 0 {
 		timeout = 8 * time.Second
@@ -147,8 +148,14 @@ func RunUnlockTest(cfg UnlockTestConfig) (*UnlockResult, error) {
 
 	result := &UnlockResult{NodeName: nodeName, Results: make([]UnlockCheckResult, 0, len(unlockServices))}
 	for _, svc := range unlockServices {
+		// 客户端断开则提前返回，释放锁
+		select {
+		case <-ctx.Done():
+			return result, nil
+		default:
+		}
 		start := time.Now()
-		ok, note := svc.Check(client)
+		ok, note := svc.Check(ctx, client)
 		rtt := int(time.Since(start).Milliseconds())
 		if rtt < 1 {
 			rtt = 1

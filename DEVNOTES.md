@@ -185,3 +185,21 @@ systemctl start sublink
   - 格子显示 `城市 运营商` + `延迟ms` + `IP:端口`；省卡片标题显示可达率 `(ok/total 可达)`。
 - **前端筛选**：省份多选 + 运营商多选 + zstatic 端口（443/80），前端过滤后端返回数据。
 - 后端 `RunChinaPing`/`NodeChinaPing` 无需改动，复用。
+
+### 17. 节点列表重构（卡片/列表双视图 + 聚合接口）
+- **需求**：重构节点列表为 v2rayN/Clash Verge 风格——左侧分组树、卡片/列表双视图、国家筛选、延迟/解锁徽章。
+- **后端**：新增 `GET /api/v1/nodes/overview`（`api/node_overview.go`），一次返回每节点 国家(GeoIP)+服务器TCP延迟+分组；60s 缓存。`groups` 必须用 `make([]string,0)` 保证数组（否则未分组节点返回 null）。
+- **前端** `nodes.vue` 重构：左侧分组树、搜索+国家筛选、卡片(按国家分组)/列表切换、国旗 emoji（`utils/flag.ts` 映射）、延迟彩色徽章、解锁分组徽章(AI/影视/论坛)。
+- **bug1**：`groups` 为 null 时 `n.groups.includes` 崩溃 → 卡片消失。前端用 `(n.groups||[])` 防御 + 后端保证数组。
+- **bug2**：列表操作列 `fixed="right"` 在分组列行高不一致时错位（无分组节点按钮跑到分组下方）。**移除 fixed**（方案A）解决。
+- **国家中文名**：`api/map_ping.go` `countryNames` 补全至 **114 个**（与 `geo.go` 坐标表对齐），避免 GeoIP 返回的国家码显示英文（如 SC 塞舌尔、MY 马来西亚）。
+
+### 18. 全局测试会话管理（右上角状态 + 停止 + 占用提示）
+- **需求**：解锁/TCP 测试共用全局互斥锁，占用时只报 429 不显示哪个节点，且无法主动停止。
+- **后端** `node/test_manager.go`（新）：全局单例，`BeginTest(name,id,type,baseCtx)` 返回可取消 ctx；占用时返回 `42900 已有测试进行中：<type> · <nodeName>`。`GetTestStatus`→`GET /api/v1/nodes/test/status` 返回 `{nodeName,nodeId,type,startedAt}`；`CancelTest`→`POST /api/v1/nodes/test/cancel` 主动停止。
+- **关键：测试不随请求断开取消**。`NodeUnlock`/`NodeChinaPing`/`NodeChinaPingStream` 的 `BeginTest` 传 `context.Background()`（而非 `c.Request.Context()`），客户端关闭弹窗/断开**测试继续跑完**，完成后自动释放锁（锁由 BeginTest 的 cancel 控制，停/cancel 仍有效）。
+- **`wg.Wait()` 感知 ctx**（`china_ping.go`）：`RunChinaPing`/`RunChinaPingStream` 的 `wg.Wait()` 改为 `select{waitCh/ctx.Done}`，右上角停止时**立即返回释放锁**（不卡 5s 等当前省份 ping 完）。非 stream 版 `RunChinaPing` 加 `ctx` 参数。
+- **前端交互（重要变更）**：打开弹窗**不自动测**，只读 localStorage 缓存（`NodeUnlockDialog`/`NodeTcpDialog` onOpen 只 `applyCached`）；「重新测速」按钮始终可见（操作栏），点击才测。**关闭弹窗不 abort**（onClosed 注释保留，测试继续），fetch/SSE 在组件卸载后仍执行完并 `saveUnlock/saveTcp` 写缓存，重开恢复结果。
+- **测前自动停旧测**：`stopOtherTestAndStart` 点击测速时先 `GetTestStatus`，若已有测试 `CancelTest` + 轮询等待锁释放（最多 3s）再 `startTest`。
+- **右上角状态卡片**：`NavbarRight.vue` 加测试状态图标（`el-badge` 红点提示有测试），点开 `TestStatusDialog.vue`（新）显示 节点/类型/已进行时长 + 停止按钮，3s 轮询。
+- **TestStatusDialog 结构坑**：`el-dialog` 的 `#footer` slot 必须直接是 dialog 子节点，放 `<template v-if>` 内会导致 vite build 报 compiler-core 错误。

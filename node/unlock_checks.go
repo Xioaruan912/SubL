@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -12,8 +13,8 @@ const unlockUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (
 // checkOpenAI 检测 OpenAI / ChatGPT 是否解锁。
 // 参考 RegionRestrictionCheck：请求 compliance/cookie_requirements 与 ios.chat.openai.com，
 // 若响应含 unsupported_country 或 VPN 字样则未解锁。
-func checkOpenAI(c *http.Client) (bool, string) {
-	req1, _ := http.NewRequest("GET", "https://api.openai.com/compliance/cookie_requirements", nil)
+func checkOpenAI(ctx context.Context, c *http.Client) (bool, string) {
+	req1, _ := http.NewRequestWithContext(ctx, "GET", "https://api.openai.com/compliance/cookie_requirements", nil)
 	req1.Header.Set("Authority", "api.openai.com")
 	req1.Header.Set("Accept", "*/*")
 	req1.Header.Set("Authorization", "Bearer null")
@@ -31,7 +32,7 @@ func checkOpenAI(c *http.Client) (bool, string) {
 		return false, "区域不支持"
 	}
 
-	req2, _ := http.NewRequest("GET", "https://ios.chat.openai.com/", nil)
+	req2, _ := http.NewRequestWithContext(ctx, "GET", "https://ios.chat.openai.com/", nil)
 	req2.Header.Set("Accept", "*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
 	req2.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	req2.Header.Set("User-Agent", unlockUA)
@@ -49,8 +50,8 @@ func checkOpenAI(c *http.Client) (bool, string) {
 
 // checkClaude 检测 Claude 是否解锁。
 // 参考 RegionRestrictionCheck：访问 claude.ai，若重定向到 app-unavailable-in-region 则未解锁。
-func checkClaude(c *http.Client) (bool, string) {
-	req, _ := http.NewRequest("GET", "https://claude.ai/", nil)
+func checkClaude(ctx context.Context, c *http.Client) (bool, string) {
+	req, _ := http.NewRequestWithContext(ctx, "GET", "https://claude.ai/", nil)
 	req.Header.Set("User-Agent", unlockUA)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	client := *c
@@ -76,8 +77,8 @@ func checkClaude(c *http.Client) (bool, string) {
 
 // checkGemini 检测 Google Gemini 是否解锁。
 // 参考 RegionRestrictionCheck：访问 gemini.google.com，若响应含标记 45631641,null,true 则解锁。
-func checkGemini(c *http.Client) (bool, string) {
-	req, _ := http.NewRequest("GET", "https://gemini.google.com", nil)
+func checkGemini(ctx context.Context, c *http.Client) (bool, string) {
+	req, _ := http.NewRequestWithContext(ctx, "GET", "https://gemini.google.com", nil)
 	req.Header.Set("User-Agent", unlockUA)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	resp, err := c.Do(req)
@@ -95,11 +96,11 @@ func checkGemini(c *http.Client) (bool, string) {
 // checkNetflix 检测 Netflix 是否解锁。
 // 参考 RegionRestrictionCheck：请求两个不同的 title 页，若均含 "Oh no!" 则仅原创可看，
 // 若任一正常返回则已解锁。这里简化为：返回 200 且不含 "Oh no!" 判定解锁。
-func checkNetflix(c *http.Client) (bool, string) {
+func checkNetflix(ctx context.Context, c *http.Client) (bool, string) {
 	titles := []string{"https://www.netflix.com/title/81280792", "https://www.netflix.com/title/70143836"}
 	blocked := 0
 	for _, u := range titles {
-		req, _ := http.NewRequest("GET", u, nil)
+		req, _ := http.NewRequestWithContext(ctx, "GET", u, nil)
 		req.Header.Set("User-Agent", unlockUA)
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 		resp, err := c.Do(req)
@@ -122,8 +123,8 @@ func checkNetflix(c *http.Client) (bool, string) {
 }
 
 // checkYouTube 检测 YouTube 是否可达（地区限制不影响基础访问）。
-func checkYouTube(c *http.Client) (bool, string) {
-	resp, err := c.Get("https://www.youtube.com/")
+func checkYouTube(ctx context.Context, c *http.Client) (bool, string) {
+	resp, err := getWithCtx(ctx, c, "https://www.youtube.com/")
 	if err != nil {
 		return false, "连接失败"
 	}
@@ -137,9 +138,9 @@ func checkYouTube(c *http.Client) (bool, string) {
 
 // checkDisney 检测 Disney+ 是否解锁。
 // 参考 RegionRestrictionCheck：请求 disney API 获取 assertion，含 403/forbidden-location 则未解锁。
-func checkDisney(c *http.Client) (bool, string) {
+func checkDisney(ctx context.Context, c *http.Client) (bool, string) {
 	body := `{"deviceFamily":"browser","applicationRuntime":"chrome","deviceProfile":"windows","attributes":{}}`
-	req, _ := http.NewRequest("POST", "https://disney.api.edge.bamgrid.com/devices", strings.NewReader(body))
+	req, _ := http.NewRequestWithContext(ctx, "POST", "https://disney.api.edge.bamgrid.com/devices", strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer ZGlzbmV5JmJyb3dzZXImMS4wLjA.Cu56AgSfBTDag5NiRA81oLHkDZfu5L3CKadnefEAY84")
 	req.Header.Set("Content-Type", "application/json; charset=UTF-8")
 	req.Header.Set("User-Agent", unlockUA)
@@ -160,8 +161,8 @@ func checkDisney(c *http.Client) (bool, string) {
 }
 
 // checkGoogle 检测 Google 是否可达（generate_204 返回 204）。
-func checkGoogle(c *http.Client) (bool, string) {
-	resp, err := c.Get("https://www.google.com/generate_204")
+func checkGoogle(ctx context.Context, c *http.Client) (bool, string) {
+	resp, err := getWithCtx(ctx, c, "https://www.google.com/generate_204")
 	if err != nil {
 		return false, "连接失败"
 	}
@@ -174,8 +175,8 @@ func checkGoogle(c *http.Client) (bool, string) {
 }
 
 // checkGitHub 检测 GitHub 是否可达。
-func checkGitHub(c *http.Client) (bool, string) {
-	resp, err := c.Get("https://github.com/")
+func checkGitHub(ctx context.Context, c *http.Client) (bool, string) {
+	resp, err := getWithCtx(ctx, c, "https://github.com/")
 	if err != nil {
 		return false, "连接失败"
 	}
@@ -188,8 +189,8 @@ func checkGitHub(c *http.Client) (bool, string) {
 }
 
 // checkTelegram 检测 Telegram 是否可达。
-func checkTelegram(c *http.Client) (bool, string) {
-	resp, err := c.Get("https://t.me/")
+func checkTelegram(ctx context.Context, c *http.Client) (bool, string) {
+	resp, err := getWithCtx(ctx, c, "https://t.me/")
 	if err != nil {
 		return false, "连接失败"
 	}
@@ -199,6 +200,16 @@ func checkTelegram(c *http.Client) (bool, string) {
 		return true, ""
 	}
 	return false, "HTTP " + itoa(resp.StatusCode)
+}
+
+
+// getWithCtx 带 context 的 GET 请求（ctx 取消时立即中断）
+func getWithCtx(ctx context.Context, c *http.Client, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return c.Do(req)
 }
 
 // itoa 简易整数转字符串
