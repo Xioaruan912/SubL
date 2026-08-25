@@ -174,3 +174,14 @@ systemctl start sublink
 - **API**：`POST /api/v1/nodes/chinaping`（body: id/link + 可选 provinces/isps/zstatic_port），60s 缓存 + 复用 `UnlockTestBusy` 互斥。
 - **前端** `unlock.vue`：新增「中国延迟」按钮 + 省份/运营商筛选 + zstatic 端口选择，结果**按省折叠**（el-collapse）展示，延迟着色。
 - **数据可用性坑**：中国运营商 IP:端口**并非全部可达**（如 `101.71.101.121:80`、`211.92.8.8:22` 不可达——端口关闭/被拦）。代码必须处理不可达（返回 -1），前端展示"不可达"。测试结果会有相当比例失败属正常。
+
+### 16. 独立「测试」大类 + TCP测试 itdog 式网格
+- **需求**：把中国延迟从解锁测试**独立**成「TCP测试」页面，展示改为 **itdog.cn/tcping 式彩色网格**（延迟→颜色）。
+- **菜单**：`api/mentu.go` 新建顶层 `/test`（测试）大类，下设 `unlock`（解锁测试）+ `tcp`（TCP测试）两个子菜单；「订阅管理」移除 unlock，只剩 sublist/nodelist。
+- **页面拆分**：`unlock.vue` 瘦身为纯解锁；新建 `webs/src/views/test/tcp.vue`（component 路径 `test/tcp`，对应 i18n `tcptest`）。
+- **itdog 式网格**：每省一个卡片，网格格子的**背景色按延迟区间**：
+  - `<50ms` 绿 `#2ecc71` / `50-100` 浅绿 `#a8e063` / `100-200` 黄 `#f1c40f` / `200-300` 橙 `#e67e22` / `>300` 红 `#e74c3c` / 超时 深灰 `#95a5a6`
+  - 文字颜色自适应（深底白字，浅底黑字）。
+  - 格子显示 `城市 运营商` + `延迟ms` + `IP:端口`；省卡片标题显示可达率 `(ok/total 可达)`。
+- **前端筛选**：省份多选 + 运营商多选 + zstatic 端口（443/80），前端过滤后端返回数据。
+- 后端 `RunChinaPing`/`NodeChinaPing` 无需改动，复用。

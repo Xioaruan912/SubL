@@ -12,6 +12,8 @@ export default {
     template:"模板",
     templatebuilder:"操作模板",
     unlocktest:"解锁测试",
+    test:"测试",
+    tcptest:"TCP测试",
   },
   // 登录页面国际化
   login: {

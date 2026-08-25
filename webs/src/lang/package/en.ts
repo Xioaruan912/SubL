@@ -12,6 +12,8 @@ export default {
     template:"Template",
     templatebuilder:"Template Builder",
     unlocktest:"Unlock Test",
+    test:"Test",
+    tcptest:"TCP Test",
   },
   // 登录页面国际化
   login: {

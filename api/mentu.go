@@ -93,20 +93,21 @@ func GetMenus(c *gin.Context) {
 						KeepAlive: true,
 					},
 				},
-				// //测试开始
-				// {
-				// 	Path:      "nodesdemo",
-				// 	Component: "subcription/nodesdemo",
-				// 	Name:      "Nodesdemo",
-				// 	Meta: Meta{
-				// 		Title:     "nodelist",
-				// 		Icon:      "publish",
-				// 		Hidden:    false,
-				// 		Roles:     []string{"ADMIN"},
-				// 		KeepAlive: true,
-				// 	},
-				// },
-				// //测试结束
+			},
+		},
+		// 测试
+		{
+			Path:      "/test",
+			Component: "Layout",
+			Redirect:  "/test/unlock",
+			Name:      "test",
+			Meta: Meta{
+				Title:  "test",
+				Icon:   "monitor",
+				Hidden: false,
+				Roles:  []string{"ADMIN"},
+			},
+			Children: []Child{
 				{
 					Path:      "unlock",
 					Component: "subcription/unlock",
@@ -114,6 +115,18 @@ func GetMenus(c *gin.Context) {
 					Meta: Meta{
 						Title:     "unlocktest",
 						Icon:      "security",
+						Hidden:    false,
+						Roles:     []string{"ADMIN"},
+						KeepAlive: true,
+					},
+				},
+				{
+					Path:      "tcp",
+					Component: "test/tcp",
+					Name:      "TcpTest",
+					Meta: Meta{
+						Title:     "tcptest",
+						Icon:      "link",
 						Hidden:    false,
 						Roles:     []string{"ADMIN"},
 						KeepAlive: true,
