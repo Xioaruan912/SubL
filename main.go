@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"ppeelink/client"
 	"ppeelink/middlewares"
 	"ppeelink/models"
 	"ppeelink/routers"
@@ -150,6 +151,10 @@ func Run(port int) {
 	routers.Total(r)
 	routers.Templates(r)
 	routers.Version(r, version)
+	routers.Downloads(r)
+	// 客户端下载目录 + 定时检查更新（启动即查 + 每 24h）
+	os.MkdirAll("downloads", 0o755)
+	client.Start()
 	// 启动服务
 	r.Run(fmt.Sprintf("0.0.0.0:%d", port))
 }

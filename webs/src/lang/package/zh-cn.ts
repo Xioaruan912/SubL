@@ -14,6 +14,7 @@ export default {
     unlocktest:"解锁测试",
     test:"测试",
     tcptest:"TCP测试",
+    clientdownload:"客户端下载",
   },
   // 登录页面国际化
   login: {
