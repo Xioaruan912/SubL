@@ -13,6 +13,10 @@ import (
 // EncodeLoon 将节点链接列表转为 Loon 配置文本（填充 [Proxy] 段）。
 // 策略组靠模板内的 [Remote Filter] NameRegex 自动筛选，不做组填充。
 func EncodeLoon(urls []string, sqlconfig SqlConfig) (string, error) {
+	// 未配置 Loon 模板时使用默认本地模板
+	if sqlconfig.Loon == "" {
+		sqlconfig.Loon = "./template/loon.conf"
+	}
 	var proxys []string
 	for _, link := range urls {
 		scheme := strings.Split(link, "://")[0]

@@ -122,42 +122,77 @@ func defaultRules() []string {
 	}
 }
 
-// TemplateBuild 通过表单输入生成 clash 配置并保存到模板目录。
+// TemplateBuild 通过表单输入生成 clash/loon 配置并保存到模板目录。
 // POST /api/v1/template/build
 func TemplateBuild(c *gin.Context) {
 	req := BuilderRequest{}
+	var lb LoonBuilder
+	target := "clash"
 	ct := c.GetHeader("Content-Type")
 	if strings.Contains(ct, "application/json") {
-		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(400, gin.H{"code": "40000", "msg": "请求体解析失败: " + err.Error()})
+		raw, err := c.GetRawData()
+		if err != nil {
+			c.JSON(400, gin.H{"code": "40000", "msg": "请求体读取失败"})
 			return
+		}
+		var probe struct {
+			Target string `json:"target"`
+		}
+		_ = json.Unmarshal(raw, &probe)
+		if probe.Target == "loon" {
+			target = "loon"
+			if err := json.Unmarshal(raw, &lb); err != nil {
+				c.JSON(400, gin.H{"code": "40000", "msg": "Loon 配置解析失败: " + err.Error()})
+				return
+			}
+		} else {
+			if err := json.Unmarshal(raw, &req); err != nil {
+				c.JSON(400, gin.H{"code": "40000", "msg": "请求体解析失败: " + err.Error()})
+				return
+			}
+			target = req.Target
 		}
 	} else {
 		bindFormBuilder(&req, c)
+		target = req.Target
+		if target == "loon" {
+			lb.Filename = c.PostForm("filename")
+			lb.EditOldname = c.PostForm("edit_oldname")
+			lb.RemoteRules = c.PostForm("remote_rules")
+			lb.Plugins = c.PostForm("plugins")
+			lb.Rules = c.PostForm("rules")
+			if s := c.PostForm("general"); s != "" {
+				_ = json.Unmarshal([]byte(s), &lb.General)
+			}
+			if s := c.PostForm("filters"); s != "" {
+				_ = json.Unmarshal([]byte(s), &lb.Filters)
+			}
+			if s := c.PostForm("groups"); s != "" {
+				_ = json.Unmarshal([]byte(s), &lb.Groups)
+			}
+		}
 	}
-
-	// 校验
-	if req.Filename == "" {
-		c.JSON(400, gin.H{"code": "40000", "msg": "文件名不能为空"})
-		return
-	}
-	// 目标类型默认 clash
-	if req.Target == "" {
-		req.Target = "clash"
+	if target == "" {
+		target = "clash"
 	}
 
 	var out string
-	if req.Target == "loon" {
-		// Loon 文本模板模式：直接保存粘贴的配置文本
-		if req.LoonText == "" {
-			c.JSON(400, gin.H{"code": "40000", "msg": "Loon 配置内容不能为空"})
+	if target == "loon" {
+		if lb.Filename == "" {
+			c.JSON(400, gin.H{"code": "40000", "msg": "文件名不能为空"})
 			return
 		}
-		if !strings.HasSuffix(req.Filename, ".conf") {
-			req.Filename += ".conf"
+		if !strings.HasSuffix(lb.Filename, ".conf") {
+			lb.Filename += ".conf"
 		}
-		out = req.LoonText
+		req.Filename = lb.Filename
+		req.EditOldname = lb.EditOldname
+		out = buildLoonConfig(&lb)
 	} else {
+		if req.Filename == "" {
+			c.JSON(400, gin.H{"code": "40000", "msg": "文件名不能为空"})
+			return
+		}
 		if !strings.HasSuffix(req.Filename, ".yaml") {
 			req.Filename += ".yaml"
 		}
