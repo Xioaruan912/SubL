@@ -11,6 +11,7 @@ import (
 type SqlConfig struct {
 	Clash string `json:"clash"`
 	Surge string `json:"surge"`
+	Loon  string `json:"loon"`
 	Udp   bool   `json:"udp"`
 	Cert  bool   `json:"cert"`
 }

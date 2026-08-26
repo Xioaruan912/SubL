@@ -14,11 +14,17 @@ interface PlatformItem {
   updatedAt: number;
 }
 interface ClientItem {
+  type: string;
   name: string;
   icon: string;
   owner: string;
   repo: string;
   platforms: PlatformItem[];
+  // App Store 外链
+  appStoreUrl?: string;
+  price?: string;
+  region?: string;
+  desc?: string;
 }
 
 const items = ref<ClientItem[]>([]);
@@ -108,7 +114,7 @@ const download = async (client: string, p: PlatformItem) => {
   }
 };
 
-const goRepo = (c: ClientItem) => window.open(`https://github.com/${c.owner}/${c.repo}`);
+const goRepo = (c: ClientItem) => window.open(c.type === "appstore" ? c.appStoreUrl : `https://github.com/${c.owner}/${c.repo}`);
 
 onMounted(() => {
   load();
@@ -137,11 +143,25 @@ onBeforeUnmount(() => clearTimeout(timer.value));
           <div class="card-head">
             <span class="client-icon">{{ c.icon }}</span>
             <span class="client-name">{{ c.name }}</span>
-            <el-button link type="primary" size="small" @click="goRepo(c)">GitHub</el-button>
+            <el-tag v-if="c.type === 'appstore'" type="danger" size="small" effect="dark">付费</el-tag>
+            <el-tag v-if="c.type === 'appstore'" type="info" size="small" effect="plain">{{ c.region }}</el-tag>
+            <el-button link type="primary" size="small" @click="goRepo(c)">
+              {{ c.type === 'appstore' ? 'App Store' : 'GitHub' }}
+            </el-button>
           </div>
         </template>
 
-        <div class="platform-list">
+        <!-- App Store 外链客户端 -->
+        <div v-if="c.type === 'appstore'" class="appstore-body">
+          <div class="appstore-desc">{{ c.desc }}</div>
+          <div class="appstore-price">{{ c.price }}</div>
+          <el-button type="primary" @click="goRepo(c)">
+            <svg-icon icon-class="download" /> 前往 App Store
+          </el-button>
+        </div>
+
+        <!-- GitHub 下载客户端 -->
+        <div v-else class="platform-list">
           <div v-for="p in c.platforms" :key="p.key" class="platform-row">
             <div class="platform-info">
               <span class="platform-label">{{ p.label }}</span>
@@ -193,4 +213,10 @@ onBeforeUnmount(() => clearTimeout(timer.value));
 .platform-size { font-size: 12px; color: var(--el-text-color-secondary); }
 .platform-action { display: flex; align-items: center; gap: 8px; }
 .platform-err { max-width: 140px; font-size: 12px; color: var(--el-color-danger); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.appstore-body {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 16px 0;
+}
+.appstore-desc { font-size: 13px; color: var(--el-text-color-regular); text-align: center; }
+.appstore-price { font-size: 28px; font-weight: 700; color: var(--el-color-primary); }
 </style>

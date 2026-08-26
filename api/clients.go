@@ -70,12 +70,15 @@ func GetClient(c *gin.Context) {
 		case "surge":
 			GetSurge(c)
 			return
+		case "loon":
+			GetLoon(c)
+			return
 		case "v2ray":
 			GetV2ray(c)
 			return
 		}
 		// 自动识别客户端
-		ClientList := []string{"clash", "surge"}
+		ClientList := []string{"clash", "surge", "loon"}
 		for k, v := range c.Request.Header {
 			if k == "User-Agent" {
 				for _, UserAgent := range v {
@@ -87,6 +90,9 @@ func GetClient(c *gin.Context) {
 								return
 							case "surge":
 								GetSurge(c)
+								return
+							case "loon":
+								GetLoon(c)
 								return
 							}
 						}
@@ -279,4 +285,59 @@ func GetSurge(c *gin.Context) {
 	// 否则就插入头部更新信息
 	interval := fmt.Sprintf("#!MANAGED-CONFIG %s interval=86400 strict=false", host+url)
 	c.Writer.WriteString(string(interval + "\n" + DecodeClash))
+}
+
+// GetLoon 输出 Loon 订阅（填充 [Proxy] 段，策略组靠 Remote Filter 筛选）
+func GetLoon(c *gin.Context) {
+	var sub models.Subcription
+	sub.Name = subName(c)
+	err := sub.Find()
+	if err != nil {
+		c.Writer.WriteString("找不到这个订阅:" + subName(c))
+		return
+	}
+
+	urls := []string{}
+	for _, v := range sub.Nodes {
+		switch {
+		// 如果包含多条节点
+		case strings.Contains(v.Link, ","):
+			links := strings.Split(v.Link, ",")
+			urls = append(urls, links...)
+			continue
+		// 如果是订阅转换
+		case strings.Contains(v.Link, "http://") || strings.Contains(v.Link, "https://"):
+			resp, err := http.Get(v.Link)
+			if err != nil {
+				log.Println(err)
+				return
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			nodes := node.Base64Decode(string(body))
+			links := strings.Split(nodes, "\n")
+			urls = append(urls, links...)
+		// 默认
+		default:
+			urls = append(urls, v.Link)
+		}
+	}
+
+	var configs node.SqlConfig
+	err = json.Unmarshal([]byte(sub.Config), &configs)
+	if err != nil {
+		c.Writer.WriteString("配置读取错误")
+		return
+	}
+	loonText, err := node.EncodeLoon(urls, configs)
+	if err != nil {
+		c.Writer.WriteString(err.Error())
+		return
+	}
+	c.Set("subname", subName(c))
+	filename := fmt.Sprintf("%s.conf", subName(c))
+	encodedFilename := url.QueryEscape(filename)
+	c.Writer.Header().Set("Content-Disposition", "inline; filename*=utf-8''"+encodedFilename)
+	c.Writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	c.Writer.WriteString(loonText)
 }

@@ -37,6 +37,8 @@ type BuilderRequest struct {
 	Filename  string `json:"filename"`
 	EditOldname string `json:"edit_oldname"` // 编辑现有模板时的旧文件名
 	Source    string `json:"source"`          // default / custom
+	Target    string `json:"target"`          // clash / loon
+	LoonText  string `json:"loon_text"`       // Loon 文本模板模式
 
 	// 基础端口（用户可改，其他端口基于主端口偏移联动）
 	Port          int  `json:"port"`
@@ -139,15 +141,34 @@ func TemplateBuild(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "文件名不能为空"})
 		return
 	}
-	if !strings.HasSuffix(req.Filename, ".yaml") {
-		req.Filename += ".yaml"
+	// 目标类型默认 clash
+	if req.Target == "" {
+		req.Target = "clash"
 	}
-	applyBuilderDefaults(&req)
 
-	yamlText, err := buildClashYAML(req)
-	if err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "生成配置失败: " + err.Error()})
-		return
+	var out string
+	if req.Target == "loon" {
+		// Loon 文本模板模式：直接保存粘贴的配置文本
+		if req.LoonText == "" {
+			c.JSON(400, gin.H{"code": "40000", "msg": "Loon 配置内容不能为空"})
+			return
+		}
+		if !strings.HasSuffix(req.Filename, ".conf") {
+			req.Filename += ".conf"
+		}
+		out = req.LoonText
+	} else {
+		if !strings.HasSuffix(req.Filename, ".yaml") {
+			req.Filename += ".yaml"
+		}
+		applyBuilderDefaults(&req)
+
+		yamlText, err := buildClashYAML(req)
+		if err != nil {
+			c.JSON(500, gin.H{"code": "50000", "msg": "生成配置失败: " + err.Error()})
+			return
+		}
+		out = yamlText
 	}
 
 	// 编辑现有模板时，先删除旧文件（改名）
@@ -162,7 +183,7 @@ func TemplateBuild(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "文件名非法: " + err.Error()})
 		return
 	}
-	if err := os.WriteFile(fullPath, []byte(yamlText), 0666); err != nil {
+	if err := os.WriteFile(fullPath, []byte(out), 0666); err != nil {
 		log.Println("写入模板失败:", err)
 		c.JSON(500, gin.H{"code": "50000", "msg": "保存模板失败"})
 		return
@@ -173,7 +194,7 @@ func TemplateBuild(c *gin.Context) {
 		"msg":  "模板已保存",
 		"data": gin.H{
 			"filename": req.Filename,
-			"yaml":     yamlText,
+			"yaml":     out,
 		},
 	})
 }
@@ -183,6 +204,8 @@ func bindFormBuilder(req *BuilderRequest, c *gin.Context) {
 	req.Filename = c.PostForm("filename")
 	req.EditOldname = c.PostForm("edit_oldname")
 	req.Source = c.PostForm("source")
+	req.Target = c.PostForm("target")
+	req.LoonText = c.PostForm("loon_text")
 	req.Port, _ = strconv.Atoi(c.PostForm("port"))
 	req.SocksPort, _ = strconv.Atoi(c.PostForm("socks_port"))
 	req.MixedPort, _ = strconv.Atoi(c.PostForm("mixed_port"))

@@ -20,7 +20,7 @@ interface Sub {
   SubLogs: SubLogs[]
 }
 interface Node { ID: number; Name: string; Link: string }
-interface Config { clash: string; surge: string; udp: boolean; cert: boolean }
+interface Config { clash: string; surge: string; loon: string; udp: boolean; cert: boolean }
 interface SubLogs { IP: string; Count: number; Addr: string; Date: string }
 interface Temp { file: string }
 interface OverviewItem {
@@ -32,8 +32,10 @@ const tableData = ref<Sub[]>([])
 const searchKey = ref('')
 const Clash = ref('')
 const Surge = ref('')
+const Loon = ref('')
 const clashMode = ref('1')
 const surgeMode = ref('1')
+const loonMode = ref('1')
 const SubTitle = ref('')
 const Subname = ref('')
 const oldSubname = ref('')
@@ -61,6 +63,7 @@ const clientOptions = [
   { label: 'V2Ray', value: 'v2ray' },
   { label: 'Clash', value: 'clash' },
   { label: 'Surge', value: 'surge' },
+  { label: 'Loon', value: 'loon' },
 ]
 
 const filteredSubs = computed(() => {
@@ -102,6 +105,7 @@ const addSubs = async () => {
   const config = JSON.stringify({
     "clash": Clash.value.trim(),
     "surge": Surge.value.trim(),
+    "loon": Loon.value.trim(),
     "udp": udpOn.value,
     "cert": certOn.value
   })
@@ -124,8 +128,10 @@ const handleAddSub = () => {
   certOn.value = false
   Clash.value = './template/clash.yaml'
   Surge.value = './template/surge.conf'
+  Loon.value = './template/loon.conf'
   clashMode.value = '1'
   surgeMode.value = '1'
+  loonMode.value = '1'
   value1.value = []
   dialogVisible.value = true
 }
@@ -133,9 +139,9 @@ const handleAddSub = () => {
 const parseConfig = (raw: string): Config => {
   try {
     const c = JSON.parse(raw || '{}')
-    return { clash: c.clash || '', surge: c.surge || '', udp: !!c.udp, cert: !!c.cert }
+    return { clash: c.clash || '', surge: c.surge || '', loon: c.loon || '', udp: !!c.udp, cert: !!c.cert }
   } catch {
-    return { clash: '', surge: '', udp: false, cert: false }
+    return { clash: '', surge: '', loon: '', udp: false, cert: false }
   }
 }
 
@@ -150,6 +156,7 @@ const handleEdit = (sub: Sub) => {
   Surge.value = config.surge
   clashMode.value = config.clash.startsWith('./template/') ? '1' : '2'
   surgeMode.value = config.surge.startsWith('./template/') ? '1' : '2'
+  loonMode.value = config.loon.startsWith('./template/') ? '1' : '2'
   value1.value = sub.Nodes.map(n => n.Name)
   dialogVisible.value = true
 }
@@ -335,7 +342,7 @@ const saveExpire = async () => {
         <!-- 分区二：模板与参数 -->
         <el-divider content-position="left">模板与参数</el-divider>
         <el-row :gutter="16">
-          <el-col :span="12">
+          <el-col :span="8">
             <el-form-item label="Clash 模板">
               <el-radio-group v-model="clashMode" class="src-tabs" size="small">
                 <el-radio-button value="1">本地</el-radio-button>
@@ -347,7 +354,7 @@ const saveExpire = async () => {
               <el-input v-else v-model="Clash" placeholder="粘贴远程模板链接 https://…" class="full" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :span="8">
             <el-form-item label="Surge 模板">
               <el-radio-group v-model="surgeMode" class="src-tabs" size="small">
                 <el-radio-button value="1">本地</el-radio-button>
@@ -357,6 +364,18 @@ const saveExpire = async () => {
                 <el-option v-for="t in templist" :key="t.file" :label="t.file" :value="'./template/' + t.file" />
               </el-select>
               <el-input v-else v-model="Surge" placeholder="粘贴远程模板链接 https://…" class="full" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="Loon 模板">
+              <el-radio-group v-model="loonMode" class="src-tabs" size="small">
+                <el-radio-button value="1">本地</el-radio-button>
+                <el-radio-button value="2">URL</el-radio-button>
+              </el-radio-group>
+              <el-select v-if="loonMode === '1'" v-model="Loon" placeholder="选择本地 loon 模板" class="full">
+                <el-option v-for="t in templist" :key="t.file" :label="t.file" :value="'./template/' + t.file" />
+              </el-select>
+              <el-input v-else v-model="Loon" placeholder="粘贴远程模板链接 https://…" class="full" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -428,6 +447,7 @@ const saveExpire = async () => {
         <div class="cfg-grid">
           <div class="cfg-item"><span class="cfg-label">Clash</span><span class="cfg-val">{{ parseConfig(drawerSub.Config).clash || '未配置' }}</span></div>
           <div class="cfg-item"><span class="cfg-label">Surge</span><span class="cfg-val">{{ parseConfig(drawerSub.Config).surge || '未配置' }}</span></div>
+          <div class="cfg-item"><span class="cfg-label">Loon</span><span class="cfg-val">{{ parseConfig(drawerSub.Config).loon || '未配置' }}</span></div>
           <div class="cfg-item"><span class="cfg-label">强制</span><span class="cfg-val">{{ parseConfig(drawerSub.Config).udp ? 'UDP ' : '' }}{{ parseConfig(drawerSub.Config).cert ? '跳过证书' : '' }}</span></div>
         </div>
 

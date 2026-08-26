@@ -24,17 +24,23 @@ type ClientPlatform struct {
 
 // ClientSource 客户端源定义
 type ClientSource struct {
+	Type      string // github / appstore
 	Name      string
 	Owner     string
 	Repo      string
 	Icon      string // emoji 图标
 	Platforms []ClientPlatform
+	// App Store 类型（不下载，外链跳转）
+	AppStoreURL string
+	Price       string
+	Region      string
+	Desc        string
 }
 
 // Sources 收录的客户端（可扩展）
 var Sources = []ClientSource{
 	{
-		Name: "clash-verge-rev", Owner: "clash-verge-rev", Repo: "clash-verge-rev", Icon: "🛡️",
+		Type: "github", Name: "clash-verge-rev", Owner: "clash-verge-rev", Repo: "clash-verge-rev", Icon: "🛡️",
 		Platforms: []ClientPlatform{
 			{Key: "win-x64", Label: "Windows x64", Match: "x64-setup.exe"},
 			{Key: "win-arm64", Label: "Windows arm64", Match: "arm64-setup.exe"},
@@ -43,7 +49,7 @@ var Sources = []ClientSource{
 		},
 	},
 	{
-		Name: "v2rayN", Owner: "2dust", Repo: "v2rayN", Icon: "🚀",
+		Type: "github", Name: "v2rayN", Owner: "2dust", Repo: "v2rayN", Icon: "🚀",
 		Platforms: []ClientPlatform{
 			{Key: "win-x64", Label: "Windows x64", Match: "windows-64.zip"},
 			{Key: "win-arm64", Label: "Windows arm64", Match: "windows-arm64.zip"},
@@ -52,13 +58,27 @@ var Sources = []ClientSource{
 		},
 	},
 	{
-		Name: "FlClash", Owner: "chen08209", Repo: "FlClash", Icon: "💥",
+		Type: "github", Name: "FlClash", Owner: "chen08209", Repo: "FlClash", Icon: "💥",
 		Platforms: []ClientPlatform{
 			{Key: "win-x64", Label: "Windows x64", Match: "windows-amd64-setup.exe"},
 			{Key: "win-arm64", Label: "Windows arm64", Match: "windows-arm64-setup.exe"},
 			{Key: "mac-x64", Label: "macOS Intel", Match: "macos-amd64.dmg"},
 			{Key: "mac-arm64", Label: "macOS Apple Silicon", Match: "macos-arm64.dmg"},
 		},
+	},
+	{
+		Type: "appstore", Name: "Loon", Icon: "🌊",
+		AppStoreURL: "https://apps.apple.com/us/app/loon/id1373567447",
+		Price:       "$7.99",
+		Region:      "美国区",
+		Desc:        "iOS 全功能代理客户端（付费，需美区 Apple ID）",
+	},
+	{
+		Type: "appstore", Name: "Shadowrocket（小火箭）", Icon: "🚀",
+		AppStoreURL: "https://apps.apple.com/us/app/shadowrocket/id932747118",
+		Price:       "$2.99",
+		Region:      "美国区",
+		Desc:        "iOS 经典代理客户端（付费，需美区 Apple ID）",
 	},
 }
 
@@ -225,6 +245,9 @@ func CheckAll() error {
 	defer func() { mu.Lock(); running = false; lastChecked = time.Now(); mu.Unlock() }()
 
 	for _, src := range Sources {
+		if src.Type == "appstore" {
+			continue // App Store 外链无需检查更新/下载
+		}
 		rel, err := fetchLatest(src)
 		if err != nil {
 			log.Printf("[client] %s 获取最新版本失败: %v", src.Name, err)
@@ -258,10 +281,19 @@ func StatusList() []map[string]any {
 	var items []map[string]any
 	for _, src := range Sources {
 		row := map[string]any{
-			"name": src.Name, "icon": src.Icon,
-			"owner": src.Owner, "repo": src.Repo,
-			"platforms": []map[string]any{},
+			"type": src.Type, "name": src.Name, "icon": src.Icon,
 		}
+		if src.Type == "appstore" {
+			row["appStoreUrl"] = src.AppStoreURL
+			row["price"] = src.Price
+			row["region"] = src.Region
+			row["desc"] = src.Desc
+			row["platforms"] = []map[string]any{}
+			items = append(items, row)
+			continue
+		}
+		row["owner"] = src.Owner
+		row["repo"] = src.Repo
 		plats := []map[string]any{}
 		for _, plat := range src.Platforms {
 			rec, _ := (&models.ClientVersion{}).ByClientPlatform(src.Name, plat.Key)

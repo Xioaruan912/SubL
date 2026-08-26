@@ -6,6 +6,15 @@
           <span>操作模板</span>
           <div class="header-actions">
             <el-select
+              v-model="target"
+              placeholder="目标类型"
+              class="source-select"
+              style="width: 130px"
+            >
+              <el-option label="Clash/Mihomo" value="clash" />
+              <el-option label="Loon" value="loon" />
+            </el-select>
+            <el-select
               v-model="templateSource"
               placeholder="选择模板来源"
               class="source-select"
@@ -27,6 +36,7 @@
         </div>
       </template>
 
+      <template v-if="target !== 'loon'">
       <el-row :gutter="16">
         <el-col :span="14" :xs="24">
           <el-form label-width="120px">
@@ -177,6 +187,46 @@
           </el-card>
         </el-col>
       </el-row>
+      </template>
+
+      <!-- Loon 文本模板模式 -->
+      <template v-else>
+        <el-row :gutter="16">
+          <el-col :span="14" :xs="24">
+            <el-form label-width="120px">
+              <el-form-item label="文件名" required>
+                <el-input v-model="form.filename" placeholder="例如 loon.conf" />
+              </el-form-item>
+              <el-form-item label="Loon 配置">
+                <el-input
+                  v-model="loonText"
+                  type="textarea"
+                  :rows="34"
+                  placeholder="粘贴 Loon 配置（含 [Proxy] 段，订阅时自动填充节点）"
+                />
+              </el-form-item>
+            </el-form>
+          </el-col>
+          <el-col :span="10" :xs="24">
+            <el-card shadow="never" class="preview-card">
+              <template #header>
+                <div class="preview-header">
+                  <span>配置预览</span>
+                  <el-button link type="primary" size="small" @click="copyYaml">复制</el-button>
+                </div>
+              </template>
+              <el-input
+                :model-value="loonText"
+                type="textarea"
+                :rows="40"
+                readonly
+                placeholder="Loon 配置预览"
+                class="yaml-preview"
+              />
+            </el-card>
+          </el-col>
+        </el-row>
+      </template>
     </el-card>
   </div>
 </template>
@@ -213,6 +263,8 @@ const savedFilename = ref("");
 const templateSource = ref("default");
 const templateFiles = ref<any[]>([]);
 const editingOldname = ref("");
+const target = ref("clash"); // clash / loon
+const loonText = ref("");
 
 const form = reactive({
   filename: "mihomo_default.yaml",
@@ -264,6 +316,7 @@ const loadDefault = async () => {
 const onSourceChange = async (val: string) => {
   editingOldname.value = "";
   if (val === "default") {
+    target.value = "clash";
     await loadDefault();
   } else if (val === "blank") {
     form.filename = "my_clash.yaml";
@@ -276,8 +329,15 @@ const onSourceChange = async (val: string) => {
     if (item) {
       editingOldname.value = fname;
       form.filename = fname;
-      // 简单解析：将模板文本填入规则区预览
-      rulesText.value = item.text || "";
+      // 判断是否为 Loon 配置（含 [Proxy]/[General] 段 或 .conf 后缀）
+      const isLoon = fname.endsWith(".conf") || /\[(General|Proxy|Remote Filter|Plugin)\]/.test(item.text || "");
+      if (isLoon) {
+        target.value = "loon";
+        loonText.value = item.text || "";
+      } else {
+        target.value = "clash";
+        rulesText.value = item.text || "";
+      }
     }
   }
 };
@@ -302,6 +362,8 @@ const build = async () => {
     const payload: any = {
       ...form,
       filename: form.filename.trim(),
+      target: target.value,
+      loon_text: target.value === "loon" ? loonText.value : "",
       rules: rulesText.value.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#")).map((l) => l.trim()),
     };
     if (templateSource.value === "default") payload.source = "default";
