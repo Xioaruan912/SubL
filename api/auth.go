@@ -2,9 +2,9 @@ package api
 
 import (
 	"log"
-	"sublink/middlewares"
-	"sublink/models"
-	"sublink/utils"
+	"ppeelink/middlewares"
+	"ppeelink/models"
+	"ppeelink/utils"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"

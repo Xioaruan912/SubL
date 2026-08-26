@@ -1,7 +1,7 @@
 version: '3.8'  # 使用 Docker Compose 文件的版本
 
 services:
-  sublink:
+  ppeelink:
     build:
       context: .  # 指定 Dockerfile 的上下文（当前目录）
       dockerfile: Dockerfile  # 指定 Dockerfile 的名称，如果是默认的 "Dockerfile"，可以省略此行

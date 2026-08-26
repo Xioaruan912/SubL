@@ -36,8 +36,9 @@ const logo = ref(new URL(`../../../../assets/logo.png`, import.meta.url).href);
   background-color: $sidebar-logo-background;
 
   .logo-image {
-    width: 20px;
-    height: 20px;
+    height: 32px;
+    width: auto;
+    max-width: 100px;
   }
 
   .logo-title {
@@ -45,7 +46,7 @@ const logo = ref(new URL(`../../../../assets/logo.png`, import.meta.url).href);
     margin-left: 10px;
     font-size: 14px;
     font-weight: bold;
-    color: white;
+    color: var(--menu-text);
   }
 }
 

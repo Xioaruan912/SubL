@@ -1,7 +1,7 @@
 // 节点测试结果 localStorage 持久化工具
 // 刷新页面 / 切换页面后，回到节点列表点开卡片仍可显示之前的测试结果
 
-const PREFIX = "sublink_node_test_";
+const PREFIX = "ppeelink_node_test_";
 const TTL = 60 * 60 * 1000; // 1 小时过期，避免无限累积
 
 interface StoredData<T> {

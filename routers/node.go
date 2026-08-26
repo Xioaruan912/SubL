@@ -1,7 +1,7 @@
 package routers
 
 import (
-	"sublink/api"
+	"ppeelink/api"
 
 	"github.com/gin-gonic/gin"
 )

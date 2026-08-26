@@ -3,7 +3,7 @@
 REPO="Xioaruan912/SubL"
 REPO_URL="https://github.com/${REPO}.git"
 
-INSTALL_DIR="/usr/local/bin/sublink"
+INSTALL_DIR="/usr/local/bin/ppeelink"
 
 function check_tools {
     for cmd in git go; do
@@ -19,26 +19,26 @@ function Up {
     check_tools || return 1
     echo "==> 克隆源码 ${REPO} ..."
     TMP_DIR=$(mktemp -d)
-    git clone --depth 1 "$REPO_URL" "$TMP_DIR/sublink" || { echo "克隆失败"; rm -rf "$TMP_DIR"; return 1; }
-    cd "$TMP_DIR/sublink"
+    git clone --depth 1 "$REPO_URL" "$TMP_DIR/ppeelink" || { echo "克隆失败"; rm -rf "$TMP_DIR"; return 1; }
+    cd "$TMP_DIR/ppeelink"
     echo "==> 编译二进制（with_utls with_quic）..."
-    go build -tags "with_utls with_quic" -ldflags="-w -s" -o sublink main.go || { echo "编译失败"; rm -rf "$TMP_DIR"; return 1; }
+    go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink main.go || { echo "编译失败"; rm -rf "$TMP_DIR"; return 1; }
     # 停止服务后替换
-    if systemctl is-active --quiet sublink; then
-        systemctl stop sublink
+    if systemctl is-active --quiet ppeelink; then
+        systemctl stop ppeelink
     fi
-    chmod +x sublink
-    mv sublink "$INSTALL_DIR/sublink"
+    chmod +x ppeelink
+    mv ppeelink "$INSTALL_DIR/ppeelink"
     rm -rf "$TMP_DIR"
-    systemctl start sublink
+    systemctl start ppeelink
     echo "更新完成"
 }
 
 function Select {
     # 获取服务状态
     cd "$INSTALL_DIR"
-    status=$(systemctl is-active sublink)
-    version=$(./sublink -version 2>/dev/null | head -1)
+    status=$(systemctl is-active ppeelink)
+    version=$(./ppeelink -version 2>/dev/null | head -1)
     echo "当前版本:$version"
     echo "当前运行状态: $status"
     echo "1. 启动服务"
@@ -55,28 +55,28 @@ function Select {
 
     case $option in
         1)
-            systemctl start sublink
+            systemctl start ppeelink
             systemctl daemon-reload
             ;;
         2)
-            systemctl stop sublink
+            systemctl stop ppeelink
             systemctl daemon-reload
             ;;
         3)
             # 停止服务之前检查服务是否存在
-            if systemctl is-active --quiet sublink; then
-                systemctl stop sublink
+            if systemctl is-active --quiet ppeelink; then
+                systemctl stop ppeelink
             fi
-            if systemctl is-enabled --quiet sublink; then
-                systemctl disable sublink
+            if systemctl is-enabled --quiet ppeelink; then
+                systemctl disable ppeelink
             fi
             # 删除服务文件
-            if [ -f /etc/systemd/system/sublink.service ]; then
-                sudo rm /etc/systemd/system/sublink.service
+            if [ -f /etc/systemd/system/ppeelink.service ]; then
+                sudo rm /etc/systemd/system/ppeelink.service
             fi
             # 删除相关文件和目录
-            sudo rm -f "$INSTALL_DIR/sublink"
-            sudo rm -f /usr/bin/sublink
+            sudo rm -f "$INSTALL_DIR/ppeelink"
+            sudo rm -f /usr/bin/ppeelink
             read -p "是否删除模板文件和数据库(y/n): " isDelete
             if [ "$isDelete" = "y" ]; then
                 sudo rm -rf "$INSTALL_DIR/db"
@@ -86,7 +86,7 @@ function Select {
             echo "卸载完成"
             ;;
         4)
-            systemctl status sublink
+            systemctl status ppeelink
             ;;
         5)
             echo "运行目录: $INSTALL_DIR"
@@ -94,7 +94,7 @@ function Select {
             cd "$INSTALL_DIR"
             ;;
         6)
-            SERVICE_FILE="/etc/systemd/system/sublink.service"
+            SERVICE_FILE="/etc/systemd/system/ppeelink.service"
             read -p "请输入新的端口号: " Port
             echo "新的端口号: $Port"
             PARAMETER="run --port $Port"
@@ -117,8 +117,8 @@ function Select {
 
             # 重新加载 systemd 守护进程
             sudo systemctl daemon-reload
-            # 重启 sublink 服务
-            sudo systemctl restart sublink
+            # 重启 ppeelink 服务
+            sudo systemctl restart ppeelink
 
             echo "服务已重启。"
             ;;
@@ -130,10 +130,10 @@ function Select {
             read -p "请输入新的密码: " Password
             # 运行二进制文件并传递启动参数，放在后台运行
             cd "$INSTALL_DIR"
-            ./sublink setting --username "$User" --password "$Password" &
+            ./ppeelink setting --username "$User" --password "$Password" &
             pid=$!
             wait $pid
-            systemctl restart sublink
+            systemctl restart ppeelink
             ;;
         0)
             exit 0

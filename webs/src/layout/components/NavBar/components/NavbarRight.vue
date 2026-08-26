@@ -28,13 +28,10 @@
       <lang-select class="setting-item" />
     </template>
 
-    <!-- 用户头像 -->
+    <!-- 用户 -->
     <el-dropdown class="setting-item" trigger="click">
       <div class="flex-center h100% p10px">
-        <img
-          :src="userStore.user.avatar + '?imageView2/1/w/80/h/80'"
-          class="rounded-full mr-10px w24px w24px"
-        />
+        <span class="user-badge">{{ (userStore.user.username || 'U').charAt(0).toUpperCase() }}</span>
         <span>{{ userStore.user.username }}</span>
       </div>
       <template #dropdown>
@@ -123,6 +120,20 @@ function logout() {
 }
 </script>
 <style lang="scss" scoped>
+.user-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--el-color-primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
 .setting-item {
   display: inline-block;
   min-width: 40px;

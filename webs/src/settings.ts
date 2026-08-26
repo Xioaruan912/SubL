@@ -6,7 +6,7 @@ import { LanguageEnum } from "./enums/LanguageEnum";
 const { pkg } = __APP_INFO__;
 
 const defaultSettings: AppSettings = {
-  title: pkg.name,
+  title: "PPEELink",
   version: pkg.version,
   showSettings: true,
   tagsView: true,
@@ -18,7 +18,7 @@ const defaultSettings: AppSettings = {
   language: LanguageEnum.ZH_CN,
   themeColor: "#1890ff",
   watermarkEnabled: false,
-  watermarkContent: pkg.name,
+  watermarkContent: "PPEELink",
 };
 
 export default defaultSettings;

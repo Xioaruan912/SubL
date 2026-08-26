@@ -1,4 +1,4 @@
-module sublink
+module ppeelink
 
 go 1.25.0
 

@@ -20,7 +20,7 @@ func InitSqlite() {
 		}
 	}
 	// 连接数据库
-	db, err := gorm.Open(sqlite.Open("./db/sublink.db"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open("./db/ppeelink.db"), &gorm.Config{})
 	if err != nil {
 		log.Println("连接数据库失败")
 	}

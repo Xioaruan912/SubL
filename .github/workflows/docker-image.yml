@@ -11,7 +11,7 @@ on:
       - main # 或者你的主分支名称
 
 env:
-  DOCKER_REPO: jaaksi/sublinkx
+  DOCKER_REPO: xioaruan912/ppeelink
 
 jobs:
   build_and_push:

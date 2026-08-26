@@ -7,11 +7,11 @@ import (
 	"io/fs"
 	"log"
 	"os"
-	"sublink/middlewares"
-	"sublink/models"
-	"sublink/routers"
-	"sublink/settings"
-	"sublink/utils"
+	"ppeelink/middlewares"
+	"ppeelink/models"
+	"ppeelink/routers"
+	"ppeelink/settings"
+	"ppeelink/utils"
 
 	"github.com/gin-gonic/gin"
 )

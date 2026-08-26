@@ -2,7 +2,7 @@ package api
 
 import (
 	"log"
-	"sublink/models"
+	"ppeelink/models"
 
 	"github.com/gin-gonic/gin"
 )
@@ -46,7 +46,7 @@ func UserMe(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"code": "00000",
 		"data": gin.H{
-			"avatar":   "static/avatar.gif",
+			"avatar":   "",
 			"nickname": user.Nickname,
 			"userId":   user.ID,
 			"username": user.Username,
@@ -81,7 +81,7 @@ func UserPages(c *gin.Context) {
 			ID:       users[i].ID,
 			Username: users[i].Username,
 			Nickname: users[i].Nickname,
-			Avatar:   "static/avatar.gif",
+			Avatar:   "",
 		})
 	}
 	c.JSON(200, gin.H{

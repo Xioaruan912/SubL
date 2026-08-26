@@ -13,7 +13,7 @@
 
 ## [项目简介]
 
-**SubL** 基于 [gooaclok819/sublinkX](https://github.com/gooaclok819/sublinkX) 二次开发，在前端 UI、节点管理、解锁检测等方面做了深度定制。
+**PPEELink** 基于 [gooaclok819/sublinkX](https://github.com/gooaclok819/sublinkX) 二次开发，在前端 UI、节点管理、解锁检测等方面做了深度定制。
 
 后端采用 **Go + Gin + GORM**，前端采用 **Vue3 + Element Plus + ECharts**。
 
@@ -54,18 +54,18 @@ curl -s -H "Cache-Control: no-cache" -H "Pragma: no-cache" https://raw.githubuse
 需要系统已安装 `git`、`go`（≥1.22）、`curl`。脚本会自动：
 
 1. 克隆源码 → `go build -tags "with_utls with_quic"`
-2. 安装二进制到 `/usr/local/bin/sublink`
+2. 安装二进制到 `/usr/local/bin/ppeelink`
 3. 注册 systemd 服务并开机自启
-4. 安装 `sublink` 菜单命令
+4. 安装 `ppeelink` 菜单命令
 
-安装后输入 `sublink` 呼出管理菜单。
+安装后输入 `ppeelink` 呼出管理菜单。
 
 ### Docker 方式
 
-在自己需要的位置创建一个目录，例如 `mkdir sublinkx`，然后 `cd` 进入该目录，数据会自动挂载：
+在自己需要的位置创建一个目录，例如 `mkdir ppeelink`，然后 `cd` 进入该目录，数据会自动挂载：
 
 ```bash
-docker run --name sublinkx -p 8000:8000 \
+docker run --name ppeelink -p 8000:8000 \
 -v $PWD/db:/app/db \
 -v $PWD/template:/app/template \
 -v $PWD/logs:/app/logs \
@@ -91,7 +91,7 @@ webs/         Vue3 前端
 
 ```bash
 # 后端（带解锁测试所需标签）
-go build -tags "with_utls with_quic" -ldflags="-w -s" -o sublink_amd64 main.go
+go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink_amd64 main.go
 
 # 前端
 cd webs

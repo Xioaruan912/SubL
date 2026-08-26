@@ -8,7 +8,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
-	"sublink/models" // 导入 models 包
+	"ppeelink/models" // 导入 models 包
 	"time"
 
 	"github.com/gin-gonic/gin"

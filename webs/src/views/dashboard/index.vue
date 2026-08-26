@@ -4,10 +4,7 @@
       <el-row justify="space-between">
         <el-col :span="18" :xs="24">
           <div class="flex h-full items-center">
-            <img
-              class="w-20 h-20 mr-5 rounded-full"
-              :src="userStore.user.avatar + '?imageView2/1/w/80/h/80'"
-            />
+            <span class="dashboard-badge">{{ (userStore.user.username || 'U').charAt(0).toUpperCase() }}</span>
             <div>
               <p>{{ greetings }}</p>
             </div>
@@ -108,6 +105,20 @@ const greetings = computed(() => {
 </script>
 
 <style lang="scss" scoped>
+.dashboard-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin-right: 20px;
+  border-radius: 50%;
+  background: var(--el-color-primary);
+  color: #fff;
+  font-size: 30px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
 .dashboard-container {
   position: relative;
   padding: 24px;

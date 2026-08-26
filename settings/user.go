@@ -2,7 +2,7 @@ package settings
 
 import (
 	"log"
-	"sublink/models"
+	"ppeelink/models"
 )
 
 // 重置默认用户

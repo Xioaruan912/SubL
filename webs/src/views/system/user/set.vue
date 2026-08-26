@@ -56,7 +56,7 @@ function resetPassword(row: { [key: string]: any }) {
       </el-col>
       <el-col :span="18" v-if="userinfo">
         <el-badge :value="userinfo.username" class="item">
-          <el-image :src="userinfo.avatar" />
+          <span class="set-avatar">{{ (userinfo.username || 'U').charAt(0).toUpperCase() }}</span>
   </el-badge>
         </el-col>
 
@@ -83,6 +83,18 @@ function resetPassword(row: { [key: string]: any }) {
 
 
 <style scoped>
+.set-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--el-color-primary);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 600;
+}
 .el-col {
   margin-bottom: 10px
 }

@@ -21,31 +21,31 @@ for cmd in git go curl; do
 done
 
 # 创建一个程序目录
-INSTALL_DIR="/usr/local/bin/sublink"
+INSTALL_DIR="/usr/local/bin/ppeelink"
 mkdir -p "$INSTALL_DIR"
 
 # 克隆源码（浅克隆）
 TMP_DIR=$(mktemp -d)
 echo "==> 克隆源码 ${REPO} ..."
-git clone --depth 1 "$REPO_URL" "$TMP_DIR/sublink"
-cd "$TMP_DIR/sublink"
+git clone --depth 1 "$REPO_URL" "$TMP_DIR/ppeelink"
+cd "$TMP_DIR/ppeelink"
 
 # 编译（带 with_utls with_quic 标签，支持 reality 与 hysteria2 解锁测试）
 echo "==> 编译二进制（with_utls with_quic）..."
-go build -tags "with_utls with_quic" -ldflags="-w -s" -o sublink main.go
+go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink main.go
 
 # 安装二进制
-chmod +x sublink
-mv sublink "$INSTALL_DIR/sublink"
+chmod +x ppeelink
+mv ppeelink "$INSTALL_DIR/ppeelink"
 rm -rf "$TMP_DIR"
 
 # 创建systemctl服务
-cat > /etc/systemd/system/sublink.service <<EOF
+cat > /etc/systemd/system/ppeelink.service <<EOF
 [Unit]
-Description=Sublink Service
+Description=PPEELink Service
 
 [Service]
-ExecStart=$INSTALL_DIR/sublink
+ExecStart=$INSTALL_DIR/ppeelink
 WorkingDirectory=$INSTALL_DIR
 Restart=always
 [Install]
@@ -56,12 +56,12 @@ EOF
 systemctl daemon-reload
 
 # 启动并启用服务
-systemctl start sublink
-systemctl enable sublink
+systemctl start ppeelink
+systemctl enable ppeelink
 echo "服务已启动并已设置为开机启动"
-echo "默认账号admin 密码123456 默认端口8000（可在 /usr/local/bin/sublink/db/config.yaml 修改）"
+echo "默认账号admin 密码123456 默认端口8000（可在 /usr/local/bin/ppeelink/db/config.yaml 修改）"
 
 # 下载menu.sh并设置权限
-curl -o /usr/bin/sublink -H "Cache-Control: no-cache" -H "Pragma: no-cache" "$REPO_RAW/menu.sh"
-chmod 755 "/usr/bin/sublink"
-echo "安装完成，输入 sublink 呼出菜单"
+curl -o /usr/bin/ppeelink -H "Cache-Control: no-cache" -H "Pragma: no-cache" "$REPO_RAW/menu.sh"
+chmod 755 "/usr/bin/ppeelink"
+echo "安装完成，输入 ppeelink 呼出菜单"

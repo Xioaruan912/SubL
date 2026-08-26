@@ -13,7 +13,7 @@
 
 ## [Project Information]
 
-**SubL** is a secondary development based on [gooaclok819/sublinkX](https://github.com/gooaclok819/sublinkX), with deep customization in UI, node management, and unlock detection.
+**PPEELink** is a secondary development based on [gooaclok819/sublinkX](https://github.com/gooaclok819/sublinkX), with deep customization in UI, node management, and unlock detection.
 
 Backend: **Go + Gin + GORM** · Frontend: **Vue3 + Element Plus + ECharts**.
 
@@ -54,18 +54,18 @@ curl -s -H "Cache-Control: no-cache" -H "Pragma: no-cache" https://raw.githubuse
 Requires `git`, `go` (≥1.22), `curl`. The script will:
 
 1. Clone source → `go build -tags "with_utls with_quic"`
-2. Install binary to `/usr/local/bin/sublink`
+2. Install binary to `/usr/local/bin/ppeelink`
 3. Register systemd service and enable on boot
-4. Install the `sublink` menu command
+4. Install the `ppeelink` menu command
 
-Run `sublink` to open the management menu after install.
+Run `ppeelink` to open the management menu after install.
 
 ### Docker method
 
-Create a directory where you want it (e.g. `mkdir sublinkx`), then `cd` into it. Data is mounted automatically:
+Create a directory where you want it (e.g. `mkdir ppeelink`), then `cd` into it. Data is mounted automatically:
 
 ```bash
-docker run --name sublinkx -p 8000:8000 \
+docker run --name ppeelink -p 8000:8000 \
 -v $PWD/db:/app/db \
 -v $PWD/template:/app/template \
 -v $PWD/logs:/app/logs \
@@ -91,7 +91,7 @@ webs/         Vue3 frontend
 
 ```bash
 # Backend (with unlock-test required tags)
-go build -tags "with_utls with_quic" -ldflags="-w -s" -o sublink_amd64 main.go
+go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink_amd64 main.go
 
 # Frontend
 cd webs
