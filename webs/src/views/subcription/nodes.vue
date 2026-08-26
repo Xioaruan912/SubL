@@ -364,49 +364,73 @@ onMounted(loadAll)
     </el-row>
 
     <!-- 添加/编辑节点弹窗 -->
-    <el-dialog v-model="Nodedialog" :title="NodeForm.Title" width="60%">
-      <el-input v-model="NodeForm.Link" placeholder="节点链接，支持多行（回车/逗号分隔）" type="textarea" :autosize="{ minRows: 2, maxRows: 8 }" style="margin-bottom:10px" />
-      <el-input v-model="NodeForm.Name" placeholder="节点名称（编辑时）" style="margin-bottom:10px" v-if="dialogMode === 'edit'" />
-      <el-radio v-model="RadioGroup" label="1" v-if="allGroupNames.length">选择已有分组</el-radio>
-      <el-radio v-model="RadioGroup" label="2">创建新分组</el-radio>
-      <div v-if="RadioGroup === '1' && allGroupNames.length">
-        <el-select v-model="SelectionNodeGroups" multiple placeholder="选择分组" style="width:100%;margin-top:10px">
-          <el-option v-for="g in allGroupNames" :key="g" :label="g" :value="g" />
-        </el-select>
-      </div>
-      <el-input v-else v-model="NodeGroupInput" placeholder="输入新分组名" style="margin-top:10px" />
+    <el-dialog v-model="Nodedialog" :title="NodeForm.Title" width="560px" align-center>
+      <el-form label-position="top" class="node-form">
+        <el-divider content-position="left">基本信息</el-divider>
+        <el-form-item label="节点链接">
+          <el-input v-model="NodeForm.Link" placeholder="节点链接，支持多行（回车/逗号分隔）" type="textarea" :autosize="{ minRows: 3, maxRows: 8 }" />
+        </el-form-item>
+        <el-form-item v-if="dialogMode === 'edit'" label="节点名称">
+          <el-input v-model="NodeForm.Name" placeholder="节点名称（编辑时）" />
+        </el-form-item>
+
+        <el-divider content-position="left">分组</el-divider>
+        <el-radio-group v-model="RadioGroup" size="small" class="group-tabs">
+          <el-radio-button v-if="allGroupNames.length" value="1">选择已有分组</el-radio-button>
+          <el-radio-button value="2">创建新分组</el-radio-button>
+        </el-radio-group>
+        <div v-if="RadioGroup === '1' && allGroupNames.length" class="group-field">
+          <el-select v-model="SelectionNodeGroups" multiple placeholder="选择分组" class="full">
+            <el-option v-for="g in allGroupNames" :key="g" :label="g" :value="g" />
+          </el-select>
+        </div>
+        <div v-else class="group-field">
+          <el-input v-model="NodeGroupInput" placeholder="输入新分组名" />
+        </div>
+      </el-form>
       <template #footer>
-        <el-button @click="Nodedialog = false">取消</el-button>
-        <el-button type="primary" @click="SubmitNodeForm">{{ dialogMode === 'add' ? '添加' : '更新' }}</el-button>
+        <el-button text @click="Nodedialog = false">取消</el-button>
+        <el-button type="primary" @click="SubmitNodeForm">{{ dialogMode === 'add' ? '添加节点' : '保存修改' }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 分组管理弹窗 -->
-    <el-dialog v-model="Groupdialog" title="分组管理" width="50%">
-      <el-divider content-position="left">绑定节点到分组</el-divider>
-      <el-select v-model="SelectionNode" filterable placeholder="选择节点" style="width:100%;margin-bottom:10px">
-        <el-option v-for="n in overviewList" :key="n.id" :label="n.name" :value="n.name" />
-      </el-select>
-      <el-radio v-model="RadioGroup" label="1" v-if="allGroupNames.length">选择已有分组</el-radio>
-      <el-radio v-model="RadioGroup" label="2">创建新分组</el-radio>
-      <el-select v-if="RadioGroup === '1' && allGroupNames.length" v-model="SelectionNodeGroups" multiple placeholder="选择分组" style="width:100%;margin-top:10px">
-        <el-option v-for="g in allGroupNames" :key="g" :label="g" :value="g" />
-      </el-select>
-      <el-input v-else v-model="NodeGroupInput" placeholder="输入新分组名" style="margin-top:10px" />
-      <div class="dialog-actions">
-        <el-button type="primary" @click="AddGroup">绑定</el-button>
-      </div>
+    <el-dialog v-model="Groupdialog" title="分组管理" width="560px" align-center>
+      <el-form label-position="top" class="node-form">
+        <el-divider content-position="left">绑定节点到分组</el-divider>
+        <el-form-item label="选择节点">
+          <el-select v-model="SelectionNode" filterable placeholder="搜索并选择节点…" class="full">
+            <el-option v-for="n in overviewList" :key="n.id" :label="n.name" :value="n.name" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="绑定到">
+          <el-radio-group v-model="RadioGroup" size="small" class="group-tabs">
+            <el-radio-button v-if="allGroupNames.length" value="1">已有分组</el-radio-button>
+            <el-radio-button value="2">新分组</el-radio-button>
+          </el-radio-group>
+          <div v-if="RadioGroup === '1' && allGroupNames.length" class="group-field">
+            <el-select v-model="SelectionNodeGroups" multiple placeholder="选择分组" class="full">
+              <el-option v-for="g in allGroupNames" :key="g" :label="g" :value="g" />
+            </el-select>
+          </div>
+          <div v-else class="group-field">
+            <el-input v-model="NodeGroupInput" placeholder="输入新分组名" />
+          </div>
+        </el-form-item>
+        <div class="group-actions">
+          <el-button type="primary" @click="AddGroup">绑定</el-button>
+        </div>
 
-      <el-divider content-position="left">删除分组</el-divider>
-      <div class="del-group-row">
-        <el-select v-model="delGroupName" placeholder="选择要删除的分组" style="flex:1">
-          <el-option v-for="g in allGroupNames" :key="g" :label="g" :value="g" />
-        </el-select>
-        <el-button type="danger" @click="delGroup(delGroupName)">删除分组</el-button>
-      </div>
-
+        <el-divider content-position="left">删除分组</el-divider>
+        <div class="del-group-row">
+          <el-select v-model="delGroupName" placeholder="选择要删除的分组" class="full">
+            <el-option v-for="g in allGroupNames" :key="g" :label="g" :value="g" />
+          </el-select>
+          <el-button type="danger" @click="delGroup(delGroupName)">删除分组</el-button>
+        </div>
+      </el-form>
       <template #footer>
-        <el-button @click="Groupdialog = false">关闭</el-button>
+        <el-button text @click="Groupdialog = false">关闭</el-button>
       </template>
     </el-dialog>
 
@@ -464,4 +488,11 @@ onMounted(loadAll)
 .list-actions { margin-top: 12px; display: flex; gap: 8px; }
 .dialog-actions { margin-top: 12px; }
 .del-group-row { display: flex; gap: 10px; align-items: center; }
+.node-form .el-divider { margin: 6px 0 16px; }
+.node-form .el-form-item { margin-bottom: 16px; }
+.group-tabs { display: block; margin-bottom: 10px; }
+.group-field { margin-bottom: 4px; }
+.full { width: 100%; }
+.group-actions { margin-top: 4px; }
+.del-group-row .el-select { flex: 1; }
 </style>

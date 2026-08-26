@@ -40,7 +40,8 @@ const oldSubname = ref('')
 const dialogVisible = ref(false)
 const NodesList = ref<Node[]>([])
 const value1 = ref<string[]>([])
-const checkList = ref<string[]>([])
+const udpOn = ref(false)
+const certOn = ref(false)
 const qrcode = ref('')
 const qrTitle = ref('')
 const qrDialog = ref(false)
@@ -101,8 +102,8 @@ const addSubs = async () => {
   const config = JSON.stringify({
     "clash": Clash.value.trim(),
     "surge": Surge.value.trim(),
-    "udp": checkList.value.includes('udp'),
-    "cert": checkList.value.includes('cert')
+    "udp": udpOn.value,
+    "cert": certOn.value
   })
   if (SubTitle.value === '添加订阅') {
     await AddSub({ config, name: Subname.value.trim(), nodes: value1.value.join(',') })
@@ -119,7 +120,8 @@ const handleAddSub = () => {
   SubTitle.value = '添加订阅'
   Subname.value = ''
   oldSubname.value = ''
-  checkList.value = []
+  udpOn.value = false
+  certOn.value = false
   Clash.value = './template/clash.yaml'
   Surge.value = './template/surge.conf'
   clashMode.value = '1'
@@ -142,15 +144,19 @@ const handleEdit = (sub: Sub) => {
   SubTitle.value = '编辑订阅'
   Subname.value = sub.Name
   oldSubname.value = sub.Name
-  checkList.value = []
-  if (config.udp) checkList.value.push('udp')
-  if (config.cert) checkList.value.push('cert')
+  udpOn.value = !!config.udp
+  certOn.value = !!config.cert
   Clash.value = config.clash
   Surge.value = config.surge
   clashMode.value = config.clash.startsWith('./template/') ? '1' : '2'
   surgeMode.value = config.surge.startsWith('./template/') ? '1' : '2'
   value1.value = sub.Nodes.map(n => n.Name)
   dialogVisible.value = true
+}
+
+// 移除已选节点
+const removeNode = (name: string) => {
+  value1.value = value1.value.filter(n => n !== name)
 }
 
 // ---- 删除 ----
@@ -318,55 +324,86 @@ const saveExpire = async () => {
     </el-dialog>
 
     <!-- 添加/编辑订阅弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="SubTitle" width="80%">
-      <el-input v-model="Subname" placeholder="请输入订阅名称" />
+    <el-dialog v-model="dialogVisible" :title="SubTitle" width="720px" align-center>
+      <el-form label-position="top" class="sub-form">
+        <!-- 分区一：基本信息 -->
+        <el-divider content-position="left">基本信息</el-divider>
+        <el-form-item label="订阅名称">
+          <el-input v-model="Subname" placeholder="如：自建节点 · 港美日" clearable />
+        </el-form-item>
 
-      <el-row :gutter="10" class="mt">
-        <el-col :span="12">
-          <div class="field-label">Clash 模板</div>
-          <el-radio-group v-model="clashMode" class="ml-4">
-            <el-radio value="1">本地</el-radio>
-            <el-radio value="2">url链接</el-radio>
-          </el-radio-group>
-          <el-select v-if="clashMode === '1'" v-model="Clash" placeholder="clash模板文件">
-            <el-option v-for="t in templist" :key="t.file" :label="t.file" :value="'./template/' + t.file" />
+        <!-- 分区二：模板与参数 -->
+        <el-divider content-position="left">模板与参数</el-divider>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="Clash 模板">
+              <el-radio-group v-model="clashMode" class="src-tabs" size="small">
+                <el-radio-button value="1">本地</el-radio-button>
+                <el-radio-button value="2">URL</el-radio-button>
+              </el-radio-group>
+              <el-select v-if="clashMode === '1'" v-model="Clash" placeholder="选择本地 clash 模板" class="full">
+                <el-option v-for="t in templist" :key="t.file" :label="t.file" :value="'./template/' + t.file" />
+              </el-select>
+              <el-input v-else v-model="Clash" placeholder="粘贴远程模板链接 https://…" class="full" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="Surge 模板">
+              <el-radio-group v-model="surgeMode" class="src-tabs" size="small">
+                <el-radio-button value="1">本地</el-radio-button>
+                <el-radio-button value="2">URL</el-radio-button>
+              </el-radio-group>
+              <el-select v-if="surgeMode === '1'" v-model="Surge" placeholder="选择本地 surge 模板" class="full">
+                <el-option v-for="t in templist" :key="t.file" :label="t.file" :value="'./template/' + t.file" />
+              </el-select>
+              <el-input v-else v-model="Surge" placeholder="粘贴远程模板链接 https://…" class="full" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <div class="switch-item">
+              <div class="switch-main">
+                <span class="switch-label">UDP</span>
+                <el-switch v-model="udpOn" />
+              </div>
+              <div class="switch-hint">提升 UDP 转发支持</div>
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <div class="switch-item">
+              <div class="switch-main">
+                <span class="switch-label">跳过证书</span>
+                <el-switch v-model="certOn" />
+              </div>
+              <div class="switch-hint">关闭 TLS 证书校验</div>
+            </div>
+          </el-col>
+        </el-row>
+
+        <!-- 分区三：节点 -->
+        <el-divider content-position="left">节点</el-divider>
+        <el-form-item label="选择节点">
+          <el-select v-model="value1" multiple filterable collapse-tags collapse-tags-tooltip placeholder="搜索并选择节点…" class="full">
+            <el-option v-for="item in NodesList" :key="item.Name" :label="item.Name" :value="item.Name" />
           </el-select>
-          <el-input v-else v-model="Clash" placeholder="clash模板 url" />
-        </el-col>
-        <el-col :span="12">
-          <div class="field-label">Surge 模板</div>
-          <el-radio-group v-model="surgeMode" class="ml-4">
-            <el-radio value="1">本地</el-radio>
-            <el-radio value="2">url链接</el-radio>
-          </el-radio-group>
-          <el-select v-if="surgeMode === '1'" v-model="Surge" placeholder="surge模板文件">
-            <el-option v-for="t in templist" :key="t.file" :label="t.file" :value="'./template/' + t.file" />
-          </el-select>
-          <el-input v-else v-model="Surge" placeholder="surge模板 url" />
-        </el-col>
-      </el-row>
-
-      <div class="field-label mt">强制开启选项</div>
-      <el-checkbox-group v-model="checkList" style="margin: 5px;">
-        <el-checkbox value="udp">UDP</el-checkbox>
-        <el-checkbox value="cert">跳过证书</el-checkbox>
-      </el-checkbox-group>
-
-      <div class="field-label mt">选择已有的节点列表</div>
-      <el-select v-model="value1" multiple placeholder="选择节点" style="width: 100%">
-        <el-option v-for="item in NodesList" :key="item.Name" :label="item.Name" :value="item.Name" />
-      </el-select>
-      <div class="field-label mt">已选节点（可拖拽排序）</div>
-      <VueDraggable v-model="value1" :animation="150" ghost-class="ghost">
-        <div v-for="(nodeName, index) in value1" :key="nodeName" class="draggable-item">
-          <span class="row-number">{{ index + 1 }}.</span> {{ nodeName }}
-        </div>
-      </VueDraggable>
+        </el-form-item>
+        <div class="field-label">已选节点（可拖拽排序）</div>
+        <VueDraggable v-model="value1" :animation="150" ghost-class="ghost" class="order-list">
+          <div v-for="(nodeName, index) in value1" :key="nodeName" class="order-item">
+            <span class="order-badge">{{ index + 1 }}</span>
+            <span class="order-name">{{ nodeName }}</span>
+            <span class="order-drag">☰</span>
+            <el-icon class="order-remove" @click="removeNode(nodeName)"><svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M764.288 214.592 512 466.88 259.712 214.592a31.936 31.936 0 0 0-45.12 45.12L466.752 512 214.528 764.224a31.936 31.936 0 1 0 45.12 45.184L512 557.184l252.288 252.288a31.936 31.936 0 0 0 45.12-45.12L557.12 512.064l252.288-252.352a31.936 31.936 0 1 0-45.12-45.184z"/></svg></el-icon>
+          </div>
+        </VueDraggable>
+        <div v-if="!value1.length" class="order-empty">尚未选择节点，该订阅将不含节点</div>
+      </el-form>
 
       <template #footer>
         <div class="dialog-footer">
-          <el-button @click="dialogVisible = false">关闭</el-button>
-          <el-button type="primary" @click="addSubs">确定</el-button>
+          <el-button text @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="addSubs">{{ SubTitle === '添加订阅' ? '添加订阅' : '保存修改' }}</el-button>
         </div>
       </template>
     </el-dialog>
@@ -448,12 +485,37 @@ const saveExpire = async () => {
 .cfg-val { word-break: break-all; }
 .expire-row { display: flex; align-items: center; gap: 10px; }
 .mt { margin-top: 12px; }
-.field-label { font-size: 13px; color: var(--el-text-color-secondary); margin-bottom: 4px; }
-.draggable-item {
-  padding: 8px 10px; margin-bottom: 5px; background-color: #f0f2f5;
-  border: 1px solid #dcdfe6; border-radius: 4px; display: flex; align-items: center; cursor: grab;
+.field-label { font-size: 13px; color: var(--el-text-color-secondary); margin-bottom: 6px; }
+.sub-form .el-divider { margin: 6px 0 16px; }
+.sub-form .el-form-item { margin-bottom: 16px; }
+.src-tabs { margin-bottom: 8px; display: block; }
+.full { width: 100%; }
+.switch-item {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px 14px; border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px; background: var(--el-fill-color-light); margin-bottom: 16px;
 }
-.draggable-item:hover { background-color: #e6e8eb; }
-.ghost { opacity: 0.5; background: #c8ebfb; }
-.row-number { margin-right: 10px; font-weight: bold; }
+.switch-main { display: flex; align-items: center; justify-content: space-between; }
+.switch-label { font-size: 13px; font-weight: 500; }
+.switch-hint { font-size: 12px; color: var(--el-text-color-secondary); }
+.order-list { display: flex; flex-direction: column; gap: 6px; }
+.order-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color-lighter); border-radius: 8px;
+  transition: background-color .15s;
+}
+.order-item:hover { background: var(--el-fill-color); }
+.order-badge {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  background: var(--el-color-primary-light-8); color: var(--el-color-primary);
+  font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;
+}
+html.dark .order-badge { background: var(--el-color-primary-light-3); color: #fff; }
+.order-name { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.order-drag { cursor: grab; color: var(--el-text-color-placeholder); font-size: 14px; }
+.order-remove { cursor: pointer; color: var(--el-text-color-placeholder); font-size: 14px; }
+.order-remove:hover { color: var(--el-color-danger); }
+.order-empty { padding: 14px 0; text-align: center; font-size: 12px; color: var(--el-text-color-placeholder); }
+.ghost { opacity: 0.5; background: var(--el-color-primary-light-8); }
 </style>
