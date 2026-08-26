@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sublink/models" // 导入 models 包
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -202,4 +203,66 @@ func SubDel(c *gin.Context) {
 		"code": "00000",
 		"msg":  "删除订阅成功",
 	})
+}
+
+// 重置订阅令牌（重置后旧订阅链接立即失效）
+// POST /api/v1/subcription/reset-token  body: id
+func ResetSubToken(c *gin.Context) {
+	idStr := c.PostForm("id")
+	if idStr == "" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "id 不能为空"})
+		return
+	}
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": "无效的 ID"})
+		return
+	}
+	sub := models.Subcription{ID: id}
+	if err := sub.Find(); err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": "查找订阅失败: " + err.Error()})
+		return
+	}
+	newToken := models.GenerateToken()
+	if err := models.DB.Model(&sub).Update("token", newToken).Error; err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "重置令牌失败: " + err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"token": newToken}, "msg": "订阅链接已重置"})
+}
+
+// 设置/清除订阅过期时间
+// POST /api/v1/subcription/set-expire  body: id + expire(Unix秒, 留空=永不过期)
+func SetSubExpire(c *gin.Context) {
+	idStr := c.PostForm("id")
+	if idStr == "" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "id 不能为空"})
+		return
+	}
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": "无效的 ID"})
+		return
+	}
+	sub := models.Subcription{ID: id}
+	if err := sub.Find(); err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": "查找订阅失败: " + err.Error()})
+		return
+	}
+	expireStr := c.PostForm("expire")
+	var expiresAt *time.Time
+	if expireStr != "" {
+		ts, err := strconv.ParseInt(expireStr, 10, 64)
+		if err != nil {
+			c.JSON(400, gin.H{"code": "40000", "msg": "过期时间格式错误"})
+			return
+		}
+		t := time.Unix(ts, 0)
+		expiresAt = &t
+	}
+	if err := models.DB.Model(&sub).Update("expires_at", expiresAt).Error; err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "设置过期失败: " + err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "msg": "过期时间已更新"})
 }

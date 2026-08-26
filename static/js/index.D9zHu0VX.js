@@ -1,0 +1,1 @@
+import{bi as t}from"./index.DsdZ_V2w.js";function e(){return t({url:"/api/v1/total/sub",method:"get"})}function n(){return t({url:"/api/v1/total/node",method:"get"})}function o(){return t({url:"/api/v1/nodes/map",method:"get"})}function r(){return t({url:"/api/v1/nodes/ping",method:"get"})}export{n as a,r as b,o as c,e as g};

@@ -2,8 +2,11 @@ package models
 
 import (
 	// 用于将配置解析为结构体
+	"crypto/rand"
+	"encoding/hex"
 	"log"
 	"strings" // 用于处理逗号分隔的字符串
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -13,10 +16,12 @@ type Subcription struct {
 	gorm.Model
 	ID        int
 	Name      string
-	Config    string    `gorm:"type:text"` // Config 存储为 JSON 字符串
-	NodeOrder string    `gorm:"type:text"`
-	Nodes     []Node    `gorm:"many2many:subcription_nodes;"`
-	SubLogs   []SubLogs `gorm:"foreignKey:SubcriptionID;"`
+	Config    string     `gorm:"type:text"` // Config 存储为 JSON 字符串
+	NodeOrder string     `gorm:"type:text"`
+	Token     string     `gorm:"type:text"` // 订阅链接身份令牌（随机生成，可重置）
+	ExpiresAt *time.Time // 过期时间，nil 表示永不过期
+	Nodes     []Node     `gorm:"many2many:subcription_nodes;"`
+	SubLogs   []SubLogs  `gorm:"foreignKey:SubcriptionID;"`
 }
 
 // Config 结构体，用于解析 Subcription.Config 字段的 JSON 内容
@@ -28,6 +33,28 @@ type SubscriptionConfig struct { // <--- 这里重命名了
 	Cert  bool   `json:"cert"`
 }
 
+// GenerateToken 生成随机订阅令牌（32 位十六进制）
+func GenerateToken() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		// 极罕见失败，退回时间戳哈希
+		return hex.EncodeToString([]byte(time.Now().Format("20060102150405.000000000")))
+	}
+	return hex.EncodeToString(b)
+}
+
+// EnsureToken 确保订阅有令牌，没有则生成并保存
+func (sub *Subcription) EnsureToken() error {
+	if sub.ID == 0 {
+		return nil
+	}
+	if sub.Token != "" {
+		return nil
+	}
+	sub.Token = GenerateToken()
+	return DB.Model(sub).Update("token", sub.Token).Error
+}
+
 // Add 添加订阅
 func (sub *Subcription) Add() error {
 	// 在创建订阅时，如果 sub.Nodes 已经被前端填充并排序，可以将其名称转换为 NodeOrder 字符串
@@ -37,6 +64,10 @@ func (sub *Subcription) Add() error {
 			names[i] = node.Name
 		}
 		sub.NodeOrder = strings.Join(names, ",")
+	}
+	// 生成订阅令牌
+	if sub.Token == "" {
+		sub.Token = GenerateToken()
 	}
 
 	// 首先创建 Subcription 记录，不包括多对多关系
@@ -120,6 +151,8 @@ func (sub *Subcription) List() ([]Subcription, error) {
 	}
 
 	for i := range subs {
+		// 确保老数据有令牌（惰性生成并落库）
+		_ = subs[i].EnsureToken()
 		// 根据 NodeOrder 字段重新排序每个订阅的 Nodes
 		if subs[i].NodeOrder != "" && len(subs[i].Nodes) > 0 {
 			orderedNames := strings.Split(subs[i].NodeOrder, ",")

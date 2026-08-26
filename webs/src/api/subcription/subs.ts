@@ -34,3 +34,25 @@ export function UpdateSub(data: any){
     },
   });
 }
+
+export function ResetToken(data: any){
+  return request({
+    url: "/api/v1/subcription/reset-token",
+    method: "post",
+    data,
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+}
+
+export function SetExpire(data: any){
+  return request({
+    url: "/api/v1/subcription/set-expire",
+    method: "post",
+    data,
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+}

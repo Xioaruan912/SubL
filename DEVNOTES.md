@@ -203,3 +203,16 @@ systemctl start sublink
 - **测前自动停旧测**：`stopOtherTestAndStart` 点击测速时先 `GetTestStatus`，若已有测试 `CancelTest` + 轮询等待锁释放（最多 3s）再 `startTest`。
 - **右上角状态卡片**：`NavbarRight.vue` 加测试状态图标（`el-badge` 红点提示有测试），点开 `TestStatusDialog.vue`（新）显示 节点/类型/已进行时长 + 停止按钮，3s 轮询。
 - **TestStatusDialog 结构坑**：`el-dialog` 的 `#footer` slot 必须直接是 dialog 子节点，放 `<template v-if>` 内会导致 vite build 报 compiler-core 错误。
+
+### 19. 订阅页重构：卡片+抽屉+订阅链接安全化
+- **需求**：订阅列表改卡片式（与节点页风格统一）+ 抽屉详情；订阅链接 token 安全化（不再 md5(name)）。
+- **后端**：
+  - `models/subcription.go`：`Subcription` 加 `Token`（随机 32 位 hex）+ `ExpiresAt *time.Time`；`GenerateToken()`/`EnsureToken()`；`Add` 生成 token，`List` 惰性填充老数据。
+  - `api/clients.go`：`GetClient` 匹配改为 `sub.Token == token`（忽略大小写），**兼容旧链接** `Md5(name)==token` 仍可访问；增加过期校验（过期返回"订阅已过期"）；**修复全局变量 `SunName` 并发串号 bug**（改为 `c.Set("subname")` + `subName(c)` 读取）。
+  - `api/sub.go`：新增 `ResetSubToken`（重置后旧链接立即失效）、`SetSubExpire`（expire=Unix 秒，留空=永不过期）。
+  - `routers/subcription.go`：注册 `POST /reset-token`、`POST /set-expire`。
+- **前端** `subs.vue` 重构：
+  - 卡片网格（响应式）：卡头 订阅名+过期 tag（永不过期/已过期/N天后）+节点数+总访问次数徽章；链接区 `el-segmented` 客户端切换（自动/V2Ray/Clash/Surge）+复制+二维码；操作 重置链接/详情/编辑/删除；顶部搜索过滤。
+  - 抽屉详情：节点状态（复用 `/nodes/overview` 按订阅节点过滤 → 国旗/国家/延迟徽章）、模板配置回显（parseConfig）、过期设置（日期选择+永不过期开关）、访问记录表（IP/次数/来源/时间）。
+  - 编辑回显修复：`clashMode/surgeMode` 按模板值是否 `./template/` 判断本地/url。
+- **验证**：新 token 三客户端正常；重置后旧失效新可用；过期拒绝；清除过期恢复；20 并发交错请求两订阅无串号（clash 内容 md5 恒定）。
