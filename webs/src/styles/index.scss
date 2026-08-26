@@ -2,18 +2,18 @@
 
 /* ===== OpenList manage 风格主题 =====
  * 参考 /root/openlist-frontend/src/app/theme.ts 与 store/settings.ts
- * 主色: Ant Design 蓝 #1890ff
+ * 主色: Tailwind 橙 #f97316
  * 背景: #f7f8fa  卡片: #ffffff / #f8f9fa
  * 圆角: 大圆角(lg≈12px)  输入框: filled 风格
  */
 :root {
-  --el-color-primary: #1890ff;
-  --el-color-primary-light-3: #4aa6ff;
-  --el-color-primary-light-5: #7fbfff;
-  --el-color-primary-light-7: #b3d9ff;
-  --el-color-primary-light-8: #cce6ff;
-  --el-color-primary-light-9: #e6f3ff;
-  --el-color-primary-dark-2: #0f6fd1;
+  --el-color-primary: #f97316;
+  --el-color-primary-light-3: #fb9d5c;
+  --el-color-primary-light-5: #fcb98b;
+  --el-color-primary-light-7: #fdd5b9;
+  --el-color-primary-light-8: #fee3d0;
+  --el-color-primary-light-9: #fef1e8;
+  --el-color-primary-dark-2: #c75c12;
   --el-border-radius-base: 8px;
   --el-border-radius-small: 6px;
   --el-border-radius-round: 20px;
@@ -102,10 +102,10 @@ html.dark .el-table th.el-table__cell {
 /* 链接颜色（openlist 主色） */
 .link-type,
 .link-type:focus {
-  color: #1890ff;
+  color: #f97316;
 
   &:hover {
-    color: #0f6fd1;
+    color: #c75c12;
   }
 }
 
@@ -124,10 +124,10 @@ html.dark .el-table th.el-table__cell {
 
 .link-type,
 .link-type:focus {
-  color: #337ab7;
+  color: #f97316;
   cursor: pointer;
 
   &:hover {
-    color: rgb(32 160 255);
+    color: rgb(249 115 22);
   }
 }

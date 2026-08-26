@@ -461,7 +461,7 @@ onMounted(loadAll)
   color: var(--el-text-color-regular);
 }
 .tree-item:hover { background: var(--el-fill-color-light); }
-.tree-item.active { background: #1890ff; color: #fff; }
+.tree-item.active { background: #f97316; color: #fff; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
 .toolbar .search { width: 200px; }
 .toolbar .country { width: 200px; }

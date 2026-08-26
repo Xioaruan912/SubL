@@ -70,9 +70,36 @@ const initChart = async () => {
   window.addEventListener("resize", () => chart.value?.resize());
 };
 
+// 同坐标（同国家）多个节点环形分散，避免重叠只显示一个
+const scatterPoints = () => {
+  const groups = new Map<string, MapPoint[]>();
+  for (const p of points.value) {
+    const key = `${p.lat.toFixed(3)},${p.lng.toFixed(3)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(p);
+  }
+  const out: MapPoint[] = [];
+  for (const arr of groups.values()) {
+    if (arr.length === 1) {
+      out.push(arr[0]);
+      continue;
+    }
+    // 环形分散：半径 0.9 度，按索引均匀分布角度
+    arr.forEach((p, i) => {
+      const angle = (i / arr.length) * Math.PI * 2;
+      out.push({
+        ...p,
+        lat: p.lat + Math.sin(angle) * 0.9,
+        lng: p.lng + Math.cos(angle) * 0.9,
+      });
+    });
+  }
+  return out;
+};
+
 const setOption = () => {
   if (!chart.value) return;
-  const mapData = points.value.map((p) => ({
+  const mapData = scatterPoints().map((p) => ({
     name: p.name,
     value: [p.lng, p.lat, 1],
     country: p.country,
@@ -117,9 +144,9 @@ const setOption = () => {
           rippleEffect: { brushType: "stroke", scale: 3 },
           symbolSize: 8,
           itemStyle: {
-            color: "#1890ff",
+            color: "#f97316",
             shadowBlur: 6,
-            shadowColor: "rgba(24, 144, 255, .6)",
+            shadowColor: "rgba(249, 115, 22, .6)",
           },
           data: mapData,
         },

@@ -123,12 +123,6 @@ const greetings = computed(() => {
   position: relative;
   padding: 24px;
 
-  .user-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-  }
-
   .data-box {
     display: flex;
     justify-content: space-between;

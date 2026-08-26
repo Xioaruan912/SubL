@@ -5,7 +5,6 @@ export interface UserInfo {
   userId?: number;
   username?: string;
   nickname?: string;
-  avatar?: string;
   roles: string[];
   perms: string[];
 }
@@ -28,7 +27,6 @@ export interface UserPageVO {
   /**
    * 用户头像地址
    */
-  avatar?: string;
   /**
    * 创建时间
    */
@@ -78,7 +76,6 @@ export interface UserForm {
   /**
    * 用户头像
    */
-  avatar?: string;
   /**
    * 部门ID
    */

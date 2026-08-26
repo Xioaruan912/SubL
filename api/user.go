@@ -11,7 +11,6 @@ type User struct {
 	ID       int
 	Username string
 	Nickname string
-	Avatar   string
 	Mobile   string
 	Email    string
 }
@@ -46,7 +45,6 @@ func UserMe(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"code": "00000",
 		"data": gin.H{
-			"avatar":   "",
 			"nickname": user.Nickname,
 			"userId":   user.ID,
 			"username": user.Username,
@@ -81,7 +79,6 @@ func UserPages(c *gin.Context) {
 			ID:       users[i].ID,
 			Username: users[i].Username,
 			Nickname: users[i].Nickname,
-			Avatar:   "",
 		})
 	}
 	c.JSON(200, gin.H{

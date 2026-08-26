@@ -120,6 +120,15 @@ function logout() {
 }
 </script>
 <style lang="scss" scoped>
+.test-badge {
+  display: inline-flex;
+  align-items: center;
+
+  :deep(.el-badge__content.is-dot) {
+    top: 12px;
+    right: 4px;
+  }
+}
 .user-badge {
   display: inline-flex;
   align-items: center;
