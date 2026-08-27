@@ -67,6 +67,18 @@ func (gn *GroupNode) Ass(n *Node) error {
 	return DB.Model(&gn).Association("Nodes").Append(n)
 }
 
+// UnbindGroup 将节点从指定分组解除绑定（不删除节点）
+func (n *Node) UnbindGroup(groupName string) error {
+	var gn GroupNode
+	if err := DB.Where("name = ?", groupName).First(&gn).Error; err != nil {
+		return err
+	}
+	if err := DB.Where("name = ?", n.Name).First(n).Error; err != nil {
+		return err
+	}
+	return DB.Model(&gn).Association("Nodes").Delete(n)
+}
+
 // 更新分组信息
 func (gn *GroupNode) Update(NewGn *GroupNode) error {
 	// 读取分组数据

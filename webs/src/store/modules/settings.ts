@@ -35,26 +35,30 @@ export const useSettingsStore = defineStore("setting", () => {
     defaultSettings.watermarkEnabled
   );
 
+  function applyTheme(newTheme: string, newThemeColor: string) {
+    if (newTheme === ThemeEnum.DARK) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+    const { DEFAULT, dark, light } = genMixColor(newThemeColor);
+    setStyleProperty(`--el-color-primary`, DEFAULT);
+    setStyleProperty(`--el-color-primary-dark-2`, dark[2]);
+    setStyleProperty(`--el-color-primary-light-3`, light[3]);
+    setStyleProperty(`--el-color-primary-light-5`, light[5]);
+    setStyleProperty(`--el-color-primary-light-7`, light[7]);
+    setStyleProperty(`--el-color-primary-light-8`, light[8]);
+    setStyleProperty(`--el-color-primary-light-9`, light[9]);
+  }
+
+  // 初始化即应用主题色，避免首次加载时保持 CSS 默认色（蓝色）
+  applyTheme(theme.value, themeColor.value);
+
   watch(
     [theme, themeColor],
     ([newTheme, newThemeColor], [oldTheme, oldThemeColor]) => {
-      if (newTheme !== oldTheme) {
-        if (newTheme === ThemeEnum.DARK) {
-          document.documentElement.classList.add("dark");
-        } else {
-          document.documentElement.classList.remove("dark");
-        }
-      }
-
-      if (newThemeColor !== oldThemeColor) {
-        const { DEFAULT, dark, light } = genMixColor(newThemeColor);
-        setStyleProperty(`--el-color-primary`, DEFAULT);
-        setStyleProperty(`--el-color-primary-dark-2`, dark[2]);
-        setStyleProperty(`--el-color-primary-light-3`, light[3]);
-        setStyleProperty(`--el-color-primary-light-5`, light[5]);
-        setStyleProperty(`--el-color-primary-light-7`, light[7]);
-        setStyleProperty(`--el-color-primary-light-8`, light[8]);
-        setStyleProperty(`--el-color-primary-light-9`, light[9]);
+      if (newTheme !== oldTheme || newThemeColor !== oldThemeColor) {
+        applyTheme(newTheme, newThemeColor);
       }
     },
     {

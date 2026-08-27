@@ -1,6 +1,6 @@
 <script setup lang='ts'>
 import { ref, computed, onMounted, nextTick } from 'vue'
-import { getNodes, getNodeOverview, AddNodes, DelNode, UpdateNode, GetGroup, SetGroup, DelGroup } from "@/api/subcription/node"
+import { getNodes, getNodeOverview, AddNodes, DelNode, UpdateNode, GetGroup, SetGroup, UnbindGroup, DelGroup } from "@/api/subcription/node"
 import { countryFlag } from "@/utils/flag"
 import NodeUnlockDialog from "@/components/NodeUnlockDialog.vue"
 import NodeTcpDialog from "@/components/NodeTcpDialog.vue"
@@ -35,6 +35,71 @@ const filterCountries = ref<string[]>([])        // 国家筛选（多选）
 // 表格选择
 const multipleSelection = ref<any[]>([])
 const multipleTable = ref<any>(null)
+
+// 卡片视图勾选（跨国家分组全局）
+const selectedIds = ref<Set<number>>(new Set())
+const selectedNodes = computed(() => filteredNodes.value.filter(n => selectedIds.value.has(n.id)))
+const selectedCount = computed(() => selectedIds.value.size)
+
+// 卡片勾选切换
+const toggleCardSelect = (id: number) => {
+  const s = new Set(selectedIds.value)
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
+  selectedIds.value = s
+}
+// 按国家全选/取消
+const toggleCountrySelect = (items: OverviewItem[]) => {
+  const ids = items.map(i => i.id)
+  const allSelected = ids.every(i => selectedIds.value.has(i))
+  const s = new Set(selectedIds.value)
+  for (const i of ids) {
+    if (allSelected) s.delete(i)
+    else s.add(i)
+  }
+  selectedIds.value = s
+}
+// 国家是否全选（用于按钮态）
+const countryAllSelected = (items: OverviewItem[]) => items.length > 0 && items.every((i: OverviewItem) => selectedIds.value.has(i.id))
+// 全局全选/取消
+const toggleAllNodes = () => {
+  const allIds = filteredNodes.value.map(n => n.id)
+  const allSelected = allIds.length > 0 && allIds.every(i => selectedIds.value.has(i))
+  const s = new Set(selectedIds.value)
+  for (const i of allIds) {
+    if (allSelected) s.delete(i)
+    else s.add(i)
+  }
+  selectedIds.value = s
+}
+// 清空选择
+const clearCardSelect = () => { selectedIds.value = new Set() }
+
+// 批量删除选中（卡片视图）
+const cardSelectDel = async () => {
+  const ids = [...selectedIds.value]
+  if (!ids.length) { ElMessage.warning('请选择要删除的节点'); return }
+  try {
+    await ElMessageBox.confirm(`是否删除选中的 ${ids.length} 条节点 ?`, '提示', { type: 'warning' })
+    for (const id of ids) await DelNode({ id })
+    ElMessage.success('批量删除成功')
+  } catch { /* cancel */ }
+  clearCardSelect(); loadAll()
+}
+// 批量移出当前分组（仅 activeGroup≠全部 时）
+const cardSelectUnbind = async () => {
+  const ids = [...selectedIds.value]
+  if (!ids.length) { ElMessage.warning('请选择节点'); return }
+  try {
+    await ElMessageBox.confirm(`是否将选中的 ${ids.length} 条节点移出分组「${activeGroup.value}」？仅解除绑定，不会删除节点。`, '提示', { type: 'warning' })
+    for (const id of ids) {
+      const n = filteredNodes.value.find(x => x.id === id)
+      if (n) await UnbindGroup({ name: n.name, group: activeGroup.value })
+    }
+    ElMessage.success('已移出分组')
+  } catch { /* cancel */ }
+  clearCardSelect(); loadAll()
+}
 
 // 弹窗
 const Nodedialog = ref(false)
@@ -280,6 +345,14 @@ onMounted(loadAll)
               <el-button :type="viewMode === 'card' ? 'primary' : ''" @click="viewMode = 'card'">卡片</el-button>
               <el-button :type="viewMode === 'list' ? 'primary' : ''" @click="viewMode = 'list'">列表</el-button>
             </el-button-group>
+            <template v-if="viewMode === 'card'">
+              <el-button size="small" @click="toggleAllNodes">
+                {{ filteredNodes.length && filteredNodes.every(n => selectedIds.has(n.id)) ? '取消全选' : '全选' }}
+              </el-button>
+              <el-button size="small" @click="clearCardSelect" :disabled="!selectedCount">取消选择</el-button>
+              <el-button v-if="activeGroup !== '全部'" size="small" type="warning" @click="cardSelectUnbind" :disabled="!selectedCount">移出分组</el-button>
+              <el-button size="small" type="danger" @click="cardSelectDel" :disabled="!selectedCount">删除选中({{ selectedCount }})</el-button>
+            </template>
             <div class="flex-1"></div>
             <el-button :loading="loading" @click="loadAll">刷新</el-button>
             <el-button type="primary" @click="handleAddNode">添加节点</el-button>
@@ -289,11 +362,22 @@ onMounted(loadAll)
           <!-- 卡片视图 -->
           <template v-if="viewMode === 'card'">
             <div v-for="g in cardGroups" :key="g.country" class="mb-6 last:mb-0">
-              <div class="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3 ml-1">{{ countryFlag(g.items[0].countryCode) }} {{ g.country }}（{{ g.items.length }}）</div>
+              <div class="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3 ml-1">
+                <el-checkbox
+                  :model-value="countryAllSelected(g.items)"
+                  @change="() => toggleCountrySelect(g.items)"
+                  size="small"
+                />
+                <span>{{ countryFlag(g.items[0].countryCode) }} {{ g.country }}（{{ g.items.length }}）</span>
+                <el-button link type="primary" size="small" @click="toggleCountrySelect(g.items)">
+                  {{ countryAllSelected(g.items) ? '取消全选' : '全选' }}
+                </el-button>
+              </div>
               <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                <div v-for="n in g.items" :key="n.id" class="bg-white dark:bg-[#202322] rounded-xl p-4 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)] hover:shadow-md transition-all duration-150 group">
+                <div v-for="n in g.items" :key="n.id" class="bg-white dark:bg-[#202322] rounded-xl p-4 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)] hover:shadow-md transition-all duration-150 group" :class="selectedIds.has(n.id) ? 'node-card-selected' : ''">
                   <div class="flex justify-between items-start mb-2">
                     <div class="flex items-center gap-2 overflow-hidden flex-1 pr-2">
+                      <el-checkbox :model-value="selectedIds.has(n.id)" @change="() => toggleCardSelect(n.id)" size="small" class="node-check" />
                       <span class="text-lg">{{ countryFlag(n.countryCode) }}</span>
                       <span class="font-medium text-gray-800 dark:text-gray-200 truncate" :title="n.name">{{ n.name }}</span>
                     </div>
@@ -423,12 +507,15 @@ onMounted(loadAll)
           <el-button type="primary" @click="AddGroup">绑定</el-button>
         </div>
 
-        <el-divider content-position="left">删除分组</el-divider>
-        <div class="del-group-row">
-          <el-select v-model="delGroupName" placeholder="选择要删除的分组" class="full">
-            <el-option v-for="g in allGroupNames" :key="g" :label="g" :value="g" />
-          </el-select>
-          <el-button type="danger" @click="delGroup(delGroupName)">删除分组</el-button>
+        <div class="del-group-card">
+          <div class="del-group-title">删除分组</div>
+          <div class="del-group-row">
+            <el-select v-model="delGroupName" placeholder="选择要删除的分组" class="full">
+              <el-option v-for="g in allGroupNames" :key="g" :label="g" :value="g" />
+            </el-select>
+            <el-button type="danger" @click="delGroup(delGroupName)">删除所选</el-button>
+          </div>
+          <div class="text-xs text-gray-400 mt-1">删除分组仅解除节点绑定，不会删除节点本身。</div>
         </div>
       </el-form>
       <template #footer>
@@ -495,6 +582,19 @@ onMounted(loadAll)
 .group-tabs { display: block; margin-bottom: 10px; }
 .group-field { margin-bottom: 4px; }
 .full { width: 100%; }
+.node-card-selected {
+  box-shadow: inset 0 0 0 2px var(--el-color-primary), 0 1px 2px rgba(0,0,0,0.02) !important;
+}
+.node-check { margin-right: 0; }
 .group-actions { margin-top: 4px; }
+.del-group-card {
+  margin-top: 4px;
+  padding: 12px 14px;
+  background: var(--el-color-danger-light-9);
+  border: 1px solid var(--el-color-danger-light-7);
+  border-radius: 10px;
+}
+html.dark .del-group-card { background: rgba(245, 108, 108, 0.08); border-color: rgba(245, 108, 108, 0.2); }
+.del-group-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--el-color-danger); }
 .del-group-row .el-select { flex: 1; }
 </style>

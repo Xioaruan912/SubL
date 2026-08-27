@@ -105,6 +105,17 @@ export function SetGroup(data: any){
     },
   });
 }
+// 解除节点与分组绑定
+export function UnbindGroup(data: any){
+  return request({
+    url: "/api/v1/nodes/group/unbind",
+    method: "post",
+    data,
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+}
 // 删除分组
 
 export function DelGroup(data: any){

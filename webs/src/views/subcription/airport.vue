@@ -93,14 +93,35 @@
           <div class="info-item"><span class="info-label">当前存活</span><span class="info-val">{{ drawerDetail.nodes?.length || 0 }}</span></div>
         </div>
 
-        <div class="section-title">节点预览（{{ drawerDetail.nodes?.length || 0 }}）</div>
-        <div v-if="drawerDetail.nodes?.length" class="node-list">
-          <div v-for="n in drawerDetail.nodes" :key="n.ID" class="node-item">
-            <span class="node-name" :title="n.Name">{{ n.Name }}</span>
-            <span class="node-link" :title="n.Link">{{ (n.Link || '').slice(0, 40) }}</span>
+        <div class="section-title node-select-head">
+          <span>节点选择（已选 {{ selectedNodeNames.length }} / 共 {{ drawerDetail.nodes?.length || 0 }}）</span>
+          <div class="node-select-actions">
+            <el-button link type="primary" size="small" @click="toggleAllNodes">
+              {{ selectedNodeNames.length === (drawerDetail.nodes?.length || 0) && drawerDetail.nodes?.length ? '取消全选' : '全选' }}
+            </el-button>
           </div>
         </div>
+        <div v-if="drawerDetail.nodes?.length" class="node-check-list">
+          <el-checkbox
+            v-for="n in drawerDetail.nodes"
+            :key="n.ID"
+            :model-value="selectedNodeNames.includes(n.Name)"
+            :value="n.Name"
+            class="node-check-item"
+            @update:model-value="(v: any) => {
+              if (v) { if (!selectedNodeNames.includes(n.Name)) selectedNodeNames.push(n.Name) }
+              else { selectedNodeNames = selectedNodeNames.filter(x => x !== n.Name) }
+            }"
+          >
+            <span class="node-name" :title="n.Name">{{ n.Name }}</span>
+            <span class="node-link" :title="n.Link">{{ (n.Link || '').slice(0, 40) }}</span>
+          </el-checkbox>
+        </div>
         <el-empty v-else description="该机场尚无节点，点击「测活&同步」获取" :image-size="50" />
+        <div class="node-select-foot">
+          <span class="text-xs text-gray-400">未勾选任何节点时，订阅引用该机场将默认全量导入。</span>
+          <el-button type="primary" size="small" :loading="savingNodes" @click="saveNodeSelection">保存选择</el-button>
+        </div>
       </div>
     </el-drawer>
   </div>
@@ -108,7 +129,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getAirports, getAirportDetail, AddAirport, UpdateAirport, DelAirport, SyncAirport } from '@/api/subcription/airport'
+import { getAirports, getAirportDetail, selectAirportNodes, AddAirport, UpdateAirport, DelAirport, SyncAirport } from '@/api/subcription/airport'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 
@@ -119,19 +140,45 @@ const tableData = ref<any[]>([])
 const drawerVisible = ref(false)
 const drawerDetail = ref<any>(null)
 const drawerLoading = ref(false)
+const selectedNodeNames = ref<string[]>([])
+const savingNodes = ref(false)
 
 const openDetail = async (row: any) => {
   drawerVisible.value = true
   drawerLoading.value = true
   drawerDetail.value = null
+  selectedNodeNames.value = []
   try {
     const { data } = await getAirportDetail(row.ID)
     drawerDetail.value = data
+    selectedNodeNames.value = data?.selected_nodes || []
   } catch {
     ElMessage.error('获取机场详情失败')
   } finally {
     drawerLoading.value = false
   }
+}
+
+const saveNodeSelection = async () => {
+  const d = drawerDetail.value
+  if (!d) return
+  savingNodes.value = true
+  try {
+    await selectAirportNodes({ id: d.id, nodes: selectedNodeNames.value.join(',') })
+    ElMessage.success('节点选择已保存')
+  } catch (err: any) {
+    ElMessage.error(err.response?.data?.msg || '保存失败')
+  } finally {
+    savingNodes.value = false
+  }
+}
+
+const toggleAllNodes = () => {
+  const d = drawerDetail.value
+  if (!d?.nodes?.length) return
+  selectedNodeNames.value = selectedNodeNames.value.length === d.nodes.length
+    ? []
+    : d.nodes.map((n: any) => n.Name)
 }
 
 const dialogVisible = ref(false)
@@ -219,11 +266,15 @@ onMounted(() => {
 .detail-body .info-label { font-size: 12px; color: var(--el-text-color-secondary); }
 .detail-body .info-val { font-size: 13px; font-weight: 500; color: var(--el-text-color-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .detail-body .section-title { font-weight: 600; margin: 14px 0 8px; color: var(--el-text-color-primary); }
-.detail-body .node-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
-.detail-body .node-item {
+.detail-body .node-select-head { display: flex; align-items: center; justify-content: space-between; }
+.detail-body .node-select-actions { font-weight: 400; }
+.detail-body .node-check-list { display: flex; flex-direction: column; gap: 6px; max-height: 45vh; overflow-y: auto; }
+.detail-body .node-check-item {
   display: flex; align-items: center; gap: 8px; padding: 6px 10px;
-  background: var(--el-fill-color-light); border-radius: 8px;
+  background: var(--el-fill-color-light); border-radius: 8px; margin-right: 0;
 }
+.detail-body .node-check-item:hover { background: var(--el-fill-color); }
 .detail-body .node-name { flex-shrink: 0; max-width: 45%; font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .detail-body .node-link { font-size: 11px; color: var(--el-text-color-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-body .node-select-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
 </style>

@@ -35,11 +35,6 @@ func mergeGroupNodes(sub *models.Subcription) error {
 	if err := models.DB.Preload("Nodes").Preload("GroupRefs.Nodes").First(&withRefs, sub.ID).Error; err != nil {
 		return err
 	}
-	// 无分组引用则直接采用现有节点
-	if len(withRefs.GroupRefs) == 0 {
-		sub.Nodes = withRefs.Nodes
-		return nil
-	}
 	// 收集当前手动节点（按名称去重）
 	seen := map[string]bool{}
 	merged := []models.Node{}
@@ -60,6 +55,25 @@ func mergeGroupNodes(sub *models.Subcription) error {
 			merged = append(merged, n)
 		}
 	}
+
+	// 订阅名匹配机场且机场勾选了节点时，统一按勾选过滤（覆盖手动 Nodes 与分组节点）
+	var ap models.Airport
+	if err := models.DB.Where("name = ?", sub.Name).First(&ap).Error; err == nil && ap.SelectedNodes != "" {
+		selectedSet := map[string]bool{}
+		for _, s := range strings.Split(ap.SelectedNodes, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				selectedSet[s] = true
+			}
+		}
+		filtered := merged[:0]
+		for _, n := range merged {
+			if selectedSet[n.Name] {
+				filtered = append(filtered, n)
+			}
+		}
+		merged = filtered
+	}
+
 	sub.Nodes = merged
 	return nil
 }

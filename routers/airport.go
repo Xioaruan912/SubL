@@ -15,5 +15,6 @@ func AirportRoutes(r *gin.Engine) {
 		airport.POST("/update", api.AirportUpdate)
 		airport.DELETE("/delete", api.AirportDelete)
 		airport.POST("/sync", api.AirportSync)
+		airport.POST("/select", api.AirportSelectNodes)
 	}
 }

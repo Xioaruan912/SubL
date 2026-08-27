@@ -289,6 +289,22 @@ func GroupNodeSet(c *gin.Context) {
 	})
 }
 
+// 解除节点与指定分组的绑定（不删除节点）
+func GroupNodeUnbind(c *gin.Context) {
+	name := c.PostForm("name")
+	group := c.PostForm("group")
+	if name == "" || group == "" {
+		c.JSON(400, gin.H{"msg": "节点名和分组名不能为空"})
+		return
+	}
+	n := models.Node{Name: name}
+	if err := n.UnbindGroup(group); err != nil {
+		c.JSON(400, gin.H{"msg": "解除绑定失败: " + err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "msg": "已解除绑定"})
+}
+
 // 添加节点
 func NodeAdd(c *gin.Context) {
 	var n models.Node

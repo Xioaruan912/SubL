@@ -2,6 +2,7 @@ package api
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"ppeelink/models"
@@ -141,21 +142,64 @@ func AirportDetail(c *gin.Context) {
 	if gnErr == nil {
 		nodes = gn.Nodes
 	}
+	var selected []string
+	if a.SelectedNodes != "" {
+		for _, s := range strings.Split(a.SelectedNodes, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				selected = append(selected, s)
+			}
+		}
+	}
 	c.JSON(200, gin.H{
 		"code": "00000",
 		"data": gin.H{
-			"id":           a.ID,
-			"name":         a.Name,
-			"url":          a.URL,
-			"auto_cleanup": a.AutoCleanup,
-			"is_dedicated": a.IsDedicated,
-			"last_sync":    a.LastSync,
-			"node_count":   a.NodeCount,
-			"group_id":     gn.ID,
-			"nodes":        nodes,
+			"id":             a.ID,
+			"name":           a.Name,
+			"url":            a.URL,
+			"auto_cleanup":   a.AutoCleanup,
+			"is_dedicated":   a.IsDedicated,
+			"last_sync":      a.LastSync,
+			"node_count":     a.NodeCount,
+			"group_id":       gn.ID,
+			"nodes":          nodes,
+			"selected_nodes": selected,
 		},
 		"msg": "获取成功",
 	})
+}
+
+// 保存机场勾选节点（按节点名，逗号分隔）
+func AirportSelectNodes(c *gin.Context) {
+	idStr := c.PostForm("id")
+	if idStr == "" {
+		c.JSON(400, gin.H{"msg": "无效的ID"})
+		return
+	}
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(400, gin.H{"msg": "无效的ID"})
+		return
+	}
+	a := models.Airport{ID: id}
+	if err := a.Find(); err != nil {
+		c.JSON(404, gin.H{"msg": "机场不存在"})
+		return
+	}
+	// 规范化存储：去重、去空
+	seen := map[string]bool{}
+	var names []string
+	for _, s := range strings.Split(c.PostForm("nodes"), ",") {
+		s = strings.TrimSpace(s)
+		if s != "" && !seen[s] {
+			seen[s] = true
+			names = append(names, s)
+		}
+	}
+	if err := models.DB.Model(&a).Update("selected_nodes", strings.Join(names, ",")).Error; err != nil {
+		c.JSON(500, gin.H{"msg": "保存失败: " + err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "msg": "保存成功"})
 }
 
 // 手动同步机场 (调用 Cron 的逻辑)

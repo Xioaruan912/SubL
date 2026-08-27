@@ -15,6 +15,29 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// ensureAirportFromSub 订阅从外部机场URL导入节点后，自动创建/复用同名机场记录
+func ensureAirportFromSub(name, url string, nodeCount int) {
+	now := time.Now()
+	var ap models.Airport
+	err := models.DB.Where("name = ?", name).First(&ap).Error
+	if err == nil {
+		// 复用更新
+		models.DB.Model(&ap).Updates(map[string]interface{}{
+			"url":        url,
+			"node_count": nodeCount,
+			"last_sync":  now,
+		})
+		return
+	}
+	// 新建
+	models.DB.Create(&models.Airport{
+		Name:      name,
+		URL:       url,
+		LastSync:  &now,
+		NodeCount: nodeCount,
+	})
+}
+
 // parseGroups 解析逗号分隔的分组 ID 参数为 GroupNode 引用列表
 func parseGroups(groups string) ([]models.GroupNode, error) {
 	var refs []models.GroupNode
@@ -155,6 +178,8 @@ func SubAdd(c *gin.Context) {
 				dbNode.UpdateGroup([]models.GroupNode{{Name: name}})
 			}
 		}
+		// 自动创建/复用同名机场记录，使其出现在机场管理
+		ensureAirportFromSub(name, airportUrl, len(nodeNames))
 	} else {
 		// 常规的手动选择节点
 		for _, nodeName := range strings.Split(nodes, ",") {
@@ -268,6 +293,8 @@ func SubUpdate(c *gin.Context) {
 				dbNode.UpdateGroup([]models.GroupNode{{Name: NewName}})
 			}
 		}
+		// 自动创建/复用同名机场记录，使其出现在机场管理
+		ensureAirportFromSub(NewName, airportUrl, len(nodeNames))
 	} else {
 		for _, nodeName := range strings.Split(nodes, ",") {
 			if strings.TrimSpace(nodeName) == "" {

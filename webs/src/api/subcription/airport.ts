@@ -15,6 +15,17 @@ export function getAirportDetail(id: number) {
   });
 }
 
+export function selectAirportNodes(data: { id: number; nodes: string }) {
+  return request({
+    url: "/api/v1/airport/select",
+    method: "post",
+    data,
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+  });
+}
+
 export function AddAirport(data: any) {
   return request({
     url: "/api/v1/airport/add",
