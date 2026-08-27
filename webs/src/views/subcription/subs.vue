@@ -196,6 +196,18 @@ const removeNode = (name: string) => {
   value1.value = value1.value.filter(n => n !== name)
 }
 
+// 全选全部节点
+const selectAllNodes = () => {
+  const s = new Set(value1.value)
+  for (const n of NodesList.value) s.add(n.Name)
+  value1.value = [...s]
+}
+
+// 一键清空已选节点
+const clearAllNodes = () => {
+  value1.value = []
+}
+
 // ---- 删除 ----
 const handleDel = (sub: Sub) => {
   ElMessageBox.confirm(`你是否要删除 ${sub.Name} ?`, '提示', {
@@ -448,9 +460,13 @@ const saveExpire = async () => {
         
         <template v-else>
           <el-form-item label="选择节点">
-            <el-select v-model="value1" multiple filterable collapse-tags collapse-tags-tooltip placeholder="搜索并选择节点…" class="full">
-              <el-option v-for="item in NodesList" :key="item.Name" :label="item.Name" :value="item.Name" />
-            </el-select>
+            <div class="node-pick-tools">
+              <el-select v-model="value1" multiple filterable collapse-tags collapse-tags-tooltip placeholder="搜索并选择节点…" class="full">
+                <el-option v-for="item in NodesList" :key="item.Name" :label="item.Name" :value="item.Name" />
+              </el-select>
+              <el-button link type="primary" size="small" @click="selectAllNodes">全选</el-button>
+              <el-button link type="danger" size="small" @click="clearAllNodes" :disabled="!value1.length">清空已选</el-button>
+            </div>
           </el-form-item>
           <div class="field-label">已选节点（可拖拽排序）</div>
           <VueDraggable v-model="value1" :animation="150" ghost-class="ghost" class="order-list">
@@ -611,6 +627,8 @@ html.dark .order-badge { background: var(--el-color-primary-light-3); color: #ff
 .group-checkbox-list { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
 .group-checkbox { margin-right: 0; width: 100%; padding: 4px 8px; border-radius: 6px; }
 .group-checkbox:hover { background: var(--el-fill-color-light); }
+.node-pick-tools { display: flex; align-items: center; gap: 8px; width: 100%; }
+.node-pick-tools .el-select { flex: 1; }
 .gc-name { font-size: 13px; }
 .gc-count { margin-left: 8px; font-size: 12px; color: var(--el-text-color-secondary); }
 </style>

@@ -63,8 +63,9 @@ var unlockServices = []UnlockService{
 
 // UnlockTestConfig 一次解锁测试的配置
 type UnlockTestConfig struct {
-	Link    string
-	Timeout time.Duration // 每个目标请求超时，默认 8s
+	Link          string
+	Timeout       time.Duration // 每个目标请求超时，默认 8s
+	ServiceFilter string        // 非空时只测试指定服务 Key（如 google-gemini）
 }
 
 var (
@@ -146,8 +147,20 @@ func RunUnlockTest(ctx context.Context, cfg UnlockTestConfig) (*UnlockResult, er
 		Timeout:   timeout,
 	}
 
-	result := &UnlockResult{NodeName: nodeName, Results: make([]UnlockCheckResult, 0, len(unlockServices))}
-	for _, svc := range unlockServices {
+	// 是否过滤到指定服务（如仅测 Gemini）
+	targets := unlockServices
+	if cfg.ServiceFilter != "" {
+		filtered := targets[:0]
+		for _, s := range targets {
+			if s.Key == cfg.ServiceFilter {
+				filtered = append(filtered, s)
+			}
+		}
+		targets = filtered
+	}
+
+	result := &UnlockResult{NodeName: nodeName, Results: make([]UnlockCheckResult, 0, len(targets))}
+	for _, svc := range targets {
 		// 客户端断开则提前返回，释放锁
 		select {
 		case <-ctx.Done():

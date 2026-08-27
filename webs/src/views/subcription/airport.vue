@@ -113,8 +113,20 @@
               else { selectedNodeNames = selectedNodeNames.filter(x => x !== n.Name) }
             }"
           >
-            <span class="node-name" :title="n.Name">{{ n.Name }}</span>
-            <span class="node-link" :title="n.Link">{{ (n.Link || '').slice(0, 40) }}</span>
+            <div class="node-cell">
+              <div class="node-cell-main">
+                <span class="node-name" :title="n.Name">{{ n.Name }}</span>
+                <span class="node-link" :title="n.Link">{{ (n.Link || '').slice(0, 36) }}</span>
+              </div>
+              <div class="node-cell-meta">
+                <span v-if="nodeRtt(n.Name) !== -2" class="node-rtt" :style="{ background: rttColor(nodeRtt(n.Name)), color: '#fff' }">{{ rttText(nodeRtt(n.Name)) }}</span>
+                <span v-else class="node-rtt node-rtt-loading">…</span>
+                <el-tag v-if="geminiBadge(n.Name)" :type="geminiBadge(n.Name)!.type" size="small" effect="light" :class="geminiBadge(n.Name)!.cls">
+                  {{ geminiBadge(n.Name)!.text }}
+                </el-tag>
+                <el-button link type="primary" size="small" @click.stop.prevent="testGemini(n)" :disabled="!!geminiTesting">测AI</el-button>
+              </div>
+            </div>
           </el-checkbox>
         </div>
         <el-empty v-else description="该机场尚无节点，点击「测活&同步」获取" :image-size="50" />
@@ -128,8 +140,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { getAirports, getAirportDetail, selectAirportNodes, AddAirport, UpdateAirport, DelAirport, SyncAirport } from '@/api/subcription/airport'
+import { getNodeOverview } from '@/api/subcription/node'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 
@@ -142,21 +155,94 @@ const drawerDetail = ref<any>(null)
 const drawerLoading = ref(false)
 const selectedNodeNames = ref<string[]>([])
 const savingNodes = ref(false)
+const rttMap = ref<Record<string, number>>({}) // 节点名 -> 延迟
+const geminiStatus = ref<Record<string, string>>({}) // 节点名 -> idle/testing/ok/fail
+const geminiTesting = ref('') // 当前测试中的节点名
+
+// 延迟徽标
+const rttColor = (rtt: number) => {
+  if (rtt < 0) return '#95a5a6'
+  if (rtt < 100) return '#2ecc71'
+  if (rtt < 300) return '#f1c40f'
+  return '#e74c3c'
+}
+const rttText = (rtt: number) => rtt < 0 ? '超时' : rtt + 'ms'
+const nodeRtt = (name: string) => {
+  const v = rttMap.value[name]
+  return v === undefined ? -2 : v // -2 表示未知(加载中)
+}
 
 const openDetail = async (row: any) => {
   drawerVisible.value = true
   drawerLoading.value = true
   drawerDetail.value = null
   selectedNodeNames.value = []
+  geminiStatus.value = {}
+  geminiTesting.value = ''
   try {
     const { data } = await getAirportDetail(row.ID)
     drawerDetail.value = data
     selectedNodeNames.value = data?.selected_nodes || []
+    // 并行拉取节点概览（含延迟）
+    loadNodeRtt()
   } catch {
     ElMessage.error('获取机场详情失败')
   } finally {
     drawerLoading.value = false
   }
+}
+
+const loadNodeRtt = async () => {
+  try {
+    const { data } = await getNodeOverview()
+    const map: Record<string, number> = {}
+    for (const n of data || []) map[n.name] = n.rtt
+    rttMap.value = map
+  } catch { /* ignore */ }
+}
+
+// 测试某节点的 Gemini 解锁（走解锁接口，只测 google-gemini）
+const testGemini = async (node: any) => {
+  if (geminiTesting.value) {
+    ElMessage.warning(`已有节点测试中（${geminiTesting.value}），请稍候`)
+    return
+  }
+  geminiTesting.value = node.Name
+  geminiStatus.value[node.Name] = 'testing'
+  try {
+    const token = localStorage.getItem('accessToken') || ''
+    const payload = new URLSearchParams()
+    payload.append('link', node.Link)
+    payload.append('service', 'google-gemini')
+    const res = await fetch('/api/v1/nodes/unlock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: token },
+      body: payload.toString(),
+    })
+    const json = await res.json()
+    if (json?.code === '00000') {
+      const r = (json.data?.results || []).find((x: any) => x.key === 'google-gemini')
+      geminiStatus.value[node.Name] = r?.ok ? 'ok' : 'fail'
+    } else if (json?.code === '42900') {
+      geminiStatus.value[node.Name] = 'idle'
+      ElMessage.warning(json.msg || '已有测试进行中')
+    } else {
+      geminiStatus.value[node.Name] = 'fail'
+      ElMessage.error(json?.msg || '测试失败')
+    }
+  } catch {
+    geminiStatus.value[node.Name] = 'fail'
+  } finally {
+    geminiTesting.value = ''
+  }
+}
+
+const geminiBadge = (name: string) => {
+  const s = geminiStatus.value[name]
+  if (s === 'testing') return { type: 'info' as const, text: '测试中', cls: 'gemini-testing' }
+  if (s === 'ok') return { type: 'success' as const, text: 'AI ✓', cls: '' }
+  if (s === 'fail') return { type: 'danger' as const, text: 'AI ✗', cls: '' }
+  return null
 }
 
 const saveNodeSelection = async () => {
@@ -271,10 +357,17 @@ onMounted(() => {
 .detail-body .node-check-list { display: flex; flex-direction: column; gap: 6px; max-height: 45vh; overflow-y: auto; }
 .detail-body .node-check-item {
   display: flex; align-items: center; gap: 8px; padding: 6px 10px;
-  background: var(--el-fill-color-light); border-radius: 8px; margin-right: 0;
+  background: var(--el-fill-color-light); border-radius: 8px; margin-right: 0; width: 100%;
 }
 .detail-body .node-check-item:hover { background: var(--el-fill-color); }
-.detail-body .node-name { flex-shrink: 0; max-width: 45%; font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-body .node-cell { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.detail-body .node-cell-main { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.detail-body .node-name { font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .detail-body .node-link { font-size: 11px; color: var(--el-text-color-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-body .node-cell-meta { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.detail-body .node-rtt { font-size: 11px; padding: 1px 6px; border-radius: 6px; font-weight: 600; }
+.detail-body .node-rtt-loading { background: var(--el-fill-color); color: var(--el-text-color-secondary); }
+.gemini-testing { animation: geminiPulse 1s ease-in-out infinite; }
+@keyframes geminiPulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
 .detail-body .node-select-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
 </style>

@@ -316,7 +316,7 @@ onMounted(loadAll)
               @click="activeGroup = '全部'"
             >
               <span>全部</span>
-              <span class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full text-gray-600 dark:text-gray-300">{{ overviewList.length }}</span>
+              <span class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full text-gray-600 dark:text-gray-300">{{ loading ? '…' : overviewList.length }}</span>
             </div>
             <div
               v-for="g in groupTree"
@@ -358,7 +358,7 @@ onMounted(loadAll)
             <el-button type="primary" @click="handleAddNode">添加节点</el-button>
           </div>
 
-          <div class="p-5 bg-gray-50/30 dark:bg-black/10 flex-1">
+          <div class="p-5 bg-gray-50/30 dark:bg-black/10 flex-1 node-loading-area" v-loading="loading">
           <!-- 卡片视图 -->
           <template v-if="viewMode === 'card'">
             <div v-for="g in cardGroups" :key="g.country" class="mb-6 last:mb-0">
@@ -582,6 +582,7 @@ onMounted(loadAll)
 .group-tabs { display: block; margin-bottom: 10px; }
 .group-field { margin-bottom: 4px; }
 .full { width: 100%; }
+.node-loading-area { min-height: 460px; }
 .node-card-selected {
   box-shadow: inset 0 0 0 2px var(--el-color-primary), 0 1px 2px rgba(0,0,0,0.02) !important;
 }

@@ -200,6 +200,7 @@ var uCache = &unlockCache{entries: make(map[string]*unlockCacheEntry)}
 func NodeUnlock(c *gin.Context) {
 	idStr := c.PostForm("id")
 	link := c.PostForm("link")
+	service := c.PostForm("service") // 可选：只测指定服务（如 google-gemini）
 	if idStr == "" && link == "" {
 		c.JSON(400, gin.H{"code": "40000", "msg": "需要提供节点 id 或 link"})
 		return
@@ -252,7 +253,7 @@ func NodeUnlock(c *gin.Context) {
 	defer node.EndTest()
 	_ = cancel
 
-	result, err := node.RunUnlockTest(ctx, node.UnlockTestConfig{Link: link, Timeout: 8 * time.Second})
+	result, err := node.RunUnlockTest(ctx, node.UnlockTestConfig{Link: link, Timeout: 8 * time.Second, ServiceFilter: service})
 	if err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "解锁测试失败: " + err.Error()})
 		return
