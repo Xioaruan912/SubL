@@ -25,6 +25,45 @@ func Md5(src string) string {
 	return res
 }
 
+// mergeGroupNodes 将订阅引用的分组节点合并进 sub.Nodes（去重，分组节点在后）
+// 分组引用按 ID 关联，机场重同步后分组节点更新，订阅拉取时自动跟进
+func mergeGroupNodes(sub *models.Subcription) error {
+	if sub.ID == 0 {
+		return nil
+	}
+	var withRefs models.Subcription
+	if err := models.DB.Preload("Nodes").Preload("GroupRefs.Nodes").First(&withRefs, sub.ID).Error; err != nil {
+		return err
+	}
+	// 无分组引用则直接采用现有节点
+	if len(withRefs.GroupRefs) == 0 {
+		sub.Nodes = withRefs.Nodes
+		return nil
+	}
+	// 收集当前手动节点（按名称去重）
+	seen := map[string]bool{}
+	merged := []models.Node{}
+	for _, n := range withRefs.Nodes {
+		if n.Name == "" || seen[n.Name] {
+			continue
+		}
+		seen[n.Name] = true
+		merged = append(merged, n)
+	}
+	// 追加各分组当前节点
+	for _, g := range withRefs.GroupRefs {
+		for _, n := range g.Nodes {
+			if n.Name == "" || seen[n.Name] {
+				continue
+			}
+			seen[n.Name] = true
+			merged = append(merged, n)
+		}
+	}
+	sub.Nodes = merged
+	return nil
+}
+
 // subName 从请求上下文取订阅名（由 GetClient 匹配后设置，避免全局变量并发串号）
 func subName(c *gin.Context) string {
 	v, _ := c.Get("subname")
@@ -120,10 +159,9 @@ func GetV2ray(c *gin.Context) {
 		c.Writer.WriteString("找不到这个订阅:" + subName(c))
 		return
 	}
-	err = sub.Find()
-	if err != nil {
-		c.Writer.WriteString("读取错误")
-		return
+	// 合并引用分组节点（机场同步自动跟进）
+	if err := mergeGroupNodes(&sub); err != nil {
+		log.Println("合并分组节点失败:", err)
 	}
 	baselist := ""
 	for _, v := range sub.Nodes {
@@ -166,11 +204,13 @@ func GetClash(c *gin.Context) {
 		c.Writer.WriteString("找不到这个订阅:" + subName(c))
 		return
 	}
-	// err = sub.Find()
+	// 合并引用分组节点（机场同步自动跟进）
+	if err := mergeGroupNodes(&sub); err != nil {
+		log.Println("合并分组节点失败:", err)
+	}
 
 	urls := []string{}
 
-	models.DB.Model(sub).Preload("Nodes").Find(&sub)
 	log.Println("订阅名:", sub.Nodes)
 	for _, v := range sub.Nodes {
 		log.Println("节点信息:", v)
@@ -227,10 +267,9 @@ func GetSurge(c *gin.Context) {
 		c.Writer.WriteString("找不到这个订阅:" + subName(c))
 		return
 	}
-	err = sub.Find()
-	if err != nil {
-		c.Writer.WriteString("读取错误")
-		return
+	// 合并引用分组节点（机场同步自动跟进）
+	if err := mergeGroupNodes(&sub); err != nil {
+		log.Println("合并分组节点失败:", err)
 	}
 	urls := []string{}
 	for _, v := range sub.Nodes {
@@ -295,6 +334,10 @@ func GetLoon(c *gin.Context) {
 	if err != nil {
 		c.Writer.WriteString("找不到这个订阅:" + subName(c))
 		return
+	}
+	// 合并引用分组节点（机场同步自动跟进）
+	if err := mergeGroupNodes(&sub); err != nil {
+		log.Println("合并分组节点失败:", err)
 	}
 
 	urls := []string{}

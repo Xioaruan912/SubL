@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { getSubs, AddSub, DelSub, UpdateSub, ResetToken, SetExpire } from "@/api/subcription/subs"
 import { getTemp } from "@/api/subcription/temp"
-import { getNodes, getNodeOverview } from "@/api/subcription/node"
+import { getNodes, getNodeOverview, GetGroupFull } from "@/api/subcription/node"
 import QrcodeVue from 'qrcode.vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import { countryFlag } from "@/utils/flag"
@@ -17,9 +17,11 @@ interface Sub {
   Token: string
   ExpiresAt: string | null
   Nodes: Node[]
+  GroupRefs?: GroupRef[]
   SubLogs: SubLogs[]
 }
 interface Node { ID: number; Name: string; Link: string }
+interface GroupRef { ID: number; Name: string; NodeCount: number }
 interface Config { clash: string; surge: string; loon: string; udp: boolean; cert: boolean }
 interface SubLogs { IP: string; Count: number; Addr: string; Date: string }
 interface Temp { file: string }
@@ -44,6 +46,8 @@ const isAirportUrl = ref(false)
 const dialogVisible = ref(false)
 const NodesList = ref<Node[]>([])
 const value1 = ref<string[]>([])
+const allGroups = ref<GroupRef[]>([])
+const selectedGroups = ref<number[]>([])
 const udpOn = ref(false)
 const certOn = ref(false)
 const qrcode = ref('')
@@ -100,6 +104,10 @@ onMounted(async () => {
   gettemps()
   const { data } = await getNodes()
   NodesList.value = data || []
+  try {
+    const gp = await GetGroupFull()
+    allGroups.value = Array.isArray(gp.data) ? gp.data.map((g: any) => ({ ID: g.id, Name: g.name, NodeCount: g.node_count || 0 })) : []
+  } catch { /* ignore */ }
 })
 
 // ---- 添加/编辑 ----
@@ -108,8 +116,8 @@ const addSubs = async () => {
     ElMessage.warning("订阅名称不能为空")
     return
   }
-  if (!isAirportUrl.value && value1.value.length === 0) {
-    ElMessage.warning("请选择至少一个节点")
+  if (!isAirportUrl.value && value1.value.length === 0 && selectedGroups.value.length === 0) {
+    ElMessage.warning("请选择至少一个节点或分组")
     return
   }
   if (isAirportUrl.value && !airportUrl.value.trim()) {
@@ -124,11 +132,12 @@ const addSubs = async () => {
     "udp": udpOn.value,
     "cert": certOn.value
   })
+  const groupStr = selectedGroups.value.join(',')
   if (SubTitle.value === '添加订阅') {
-    await AddSub({ config, name: Subname.value.trim(), nodes: value1.value.join(','), airport_url: isAirportUrl.value ? airportUrl.value.trim() : '' })
+    await AddSub({ config, name: Subname.value.trim(), nodes: value1.value.join(','), groups: groupStr, airport_url: isAirportUrl.value ? airportUrl.value.trim() : '' })
     ElMessage.success("添加成功")
   } else {
-    await UpdateSub({ config, name: Subname.value.trim(), nodes: value1.value.join(','), oldname: oldSubname.value, airport_url: isAirportUrl.value ? airportUrl.value.trim() : '' })
+    await UpdateSub({ config, name: Subname.value.trim(), nodes: value1.value.join(','), groups: groupStr, oldname: oldSubname.value, airport_url: isAirportUrl.value ? airportUrl.value.trim() : '' })
     ElMessage.success("更新成功")
   }
   getsubs()
@@ -150,6 +159,7 @@ const handleAddSub = () => {
   surgeMode.value = '1'
   loonMode.value = '1'
   value1.value = []
+  selectedGroups.value = []
   dialogVisible.value = true
 }
 
@@ -177,6 +187,7 @@ const handleEdit = (sub: Sub) => {
   surgeMode.value = config.surge.startsWith('./template/') ? '1' : '2'
   loonMode.value = config.loon.startsWith('./template/') ? '1' : '2'
   value1.value = sub.Nodes.map(n => n.Name)
+  selectedGroups.value = (sub.GroupRefs || []).map(g => g.ID)
   dialogVisible.value = true
 }
 
@@ -269,6 +280,12 @@ const drawerNodes = computed(() => {
   if (!sub) return []
   const names = new Set(sub.Nodes.map(n => n.Name))
   return overview.value.filter(o => names.has(o.name))
+})
+
+const drawerGroupRefs = computed(() => {
+  const sub = drawerSub.value
+  if (!sub) return []
+  return (sub.GroupRefs || []).map(g => ({ ...g }))
 })
 
 const rttLabel = (rtt: number) => (rtt < 0 ? '不可达' : `${rtt}ms`)
@@ -446,6 +463,21 @@ const saveExpire = async () => {
           </VueDraggable>
           <div v-if="!value1.length" class="order-empty">尚未选择节点，该订阅将不含节点</div>
         </template>
+
+        <!-- 分区四：按分组引用（机场同步自动更新） -->
+        <el-divider content-position="left">关联分组（机场同步自动更新节点）</el-divider>
+        <div class="group-pick">
+          <el-checkbox-group v-model="selectedGroups" class="group-checkbox-list">
+            <el-checkbox v-for="g in allGroups" :key="g.ID" :value="g.ID" class="group-checkbox">
+              <span class="gc-name">{{ g.Name }}</span>
+              <span class="gc-count">{{ g.NodeCount }} 节点</span>
+            </el-checkbox>
+          </el-checkbox-group>
+          <el-empty v-if="!allGroups.length" description="暂无分组，可在节点管理中添加" :image-size="40" />
+          <div v-if="selectedGroups.length" class="text-xs text-orange-500 mt-2">
+            已关联 {{ selectedGroups.length }} 个分组，订阅拉取时自动展开其全部节点（机场重新同步后自动更新）。
+          </div>
+        </div>
       </el-form>
 
       <template #footer>
@@ -459,6 +491,14 @@ const saveExpire = async () => {
     <!-- 抽屉详情 -->
     <el-drawer v-model="drawerVisible" :title="drawerSub?.Name" size="620px">
       <div v-if="drawerSub" class="drawer-body">
+        <!-- 关联分组 -->
+        <div v-if="drawerGroupRefs.length" class="section-title">关联分组（机场同步自动更新节点）</div>
+        <div v-if="drawerGroupRefs.length" class="group-tags">
+          <el-tag v-for="g in drawerGroupRefs" :key="g.ID" type="warning" effect="plain" size="small">
+            {{ g.Name }} · {{ g.NodeCount }} 节点
+          </el-tag>
+        </div>
+
         <!-- 节点状态 -->
         <div class="section-title">节点状态（{{ drawerNodes.length }}）</div>
         <div v-if="drawerNodes.length" class="node-list">
@@ -523,6 +563,7 @@ const saveExpire = async () => {
 .qr-body { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .qr-actions { display: flex; gap: 8px; }
 .drawer-body .section-title { font-weight: 600; margin: 16px 0 8px; color: var(--el-text-color-primary); }
+.group-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 .node-list { display: flex; flex-direction: column; gap: 6px; }
 .node-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--el-fill-color-light); border-radius: 8px; }
 .node-flag { font-size: 18px; }
@@ -567,4 +608,9 @@ html.dark .order-badge { background: var(--el-color-primary-light-3); color: #ff
 .order-remove:hover { color: var(--el-color-danger); }
 .order-empty { padding: 14px 0; text-align: center; font-size: 12px; color: var(--el-text-color-placeholder); }
 .ghost { opacity: 0.5; background: var(--el-color-primary-light-8); }
+.group-checkbox-list { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+.group-checkbox { margin-right: 0; width: 100%; padding: 4px 8px; border-radius: 6px; }
+.group-checkbox:hover { background: var(--el-fill-color-light); }
+.gc-name { font-size: 13px; }
+.gc-count { margin-left: 8px; font-size: 12px; color: var(--el-text-color-secondary); }
 </style>

@@ -7,6 +7,14 @@ export function getAirports() {
   });
 }
 
+export function getAirportDetail(id: number) {
+  return request({
+    url: "/api/v1/airport/detail",
+    method: "get",
+    params: { id },
+  });
+}
+
 export function AddAirport(data: any) {
   return request({
     url: "/api/v1/airport/add",

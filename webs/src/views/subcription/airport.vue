@@ -38,9 +38,10 @@
               <span class="text-xs text-gray-500">{{ row.LastSync ? new Date(row.LastSync).toLocaleString() : '从未同步' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="220" fixed="right" align="center">
+          <el-table-column label="操作" width="280" fixed="right" align="center">
             <template #default="{ row }">
               <el-button link type="success" size="small" @click="handleSync(row)">测活&同步</el-button>
+              <el-button link type="primary" size="small" @click="openDetail(row)">详情</el-button>
               <el-button link type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
               <el-button link type="danger" size="small" @click="handleDel(row)">删除</el-button>
             </template>
@@ -79,17 +80,59 @@
         <el-button type="primary" @click="submitForm">{{ dialogTitle === '添加机场' ? '添加' : '保存' }}</el-button>
       </template>
     </el-dialog>
+
+    <!-- 详情抽屉 -->
+    <el-drawer v-model="drawerVisible" :title="drawerDetail?.name || '机场详情'" size="560px" v-loading="drawerLoading">
+      <div v-if="drawerDetail" class="detail-body">
+        <div class="info-grid">
+          <div class="info-item"><span class="info-label">订阅链接</span><span class="info-val truncate" :title="drawerDetail.url">{{ drawerDetail.url }}</span></div>
+          <div class="info-item"><span class="info-label">清理死节点</span><span class="info-val">{{ drawerDetail.auto_cleanup ? '是' : '否' }}</span></div>
+          <div class="info-item"><span class="info-label">专线免死</span><span class="info-val">{{ drawerDetail.is_dedicated ? '是' : '否' }}</span></div>
+          <div class="info-item"><span class="info-label">上次同步</span><span class="info-val">{{ drawerDetail.last_sync ? new Date(drawerDetail.last_sync).toLocaleString() : '从未同步' }}</span></div>
+          <div class="info-item"><span class="info-label">节点总数</span><span class="info-val">{{ drawerDetail.node_count }}</span></div>
+          <div class="info-item"><span class="info-label">当前存活</span><span class="info-val">{{ drawerDetail.nodes?.length || 0 }}</span></div>
+        </div>
+
+        <div class="section-title">节点预览（{{ drawerDetail.nodes?.length || 0 }}）</div>
+        <div v-if="drawerDetail.nodes?.length" class="node-list">
+          <div v-for="n in drawerDetail.nodes" :key="n.ID" class="node-item">
+            <span class="node-name" :title="n.Name">{{ n.Name }}</span>
+            <span class="node-link" :title="n.Link">{{ (n.Link || '').slice(0, 40) }}</span>
+          </div>
+        </div>
+        <el-empty v-else description="该机场尚无节点，点击「测活&同步」获取" :image-size="50" />
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getAirports, AddAirport, UpdateAirport, DelAirport, SyncAirport } from '@/api/subcription/airport'
+import { getAirports, getAirportDetail, AddAirport, UpdateAirport, DelAirport, SyncAirport } from '@/api/subcription/airport'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 
 const loading = ref(false)
 const tableData = ref<any[]>([])
+
+// 详情抽屉
+const drawerVisible = ref(false)
+const drawerDetail = ref<any>(null)
+const drawerLoading = ref(false)
+
+const openDetail = async (row: any) => {
+  drawerVisible.value = true
+  drawerLoading.value = true
+  drawerDetail.value = null
+  try {
+    const { data } = await getAirportDetail(row.ID)
+    drawerDetail.value = data
+  } catch {
+    ElMessage.error('获取机场详情失败')
+  } finally {
+    drawerLoading.value = false
+  }
+}
 
 const dialogVisible = ref(false)
 const dialogTitle = ref('添加机场')
@@ -164,3 +207,23 @@ onMounted(() => {
   loadData()
 })
 </script>
+
+<style scoped>
+.detail-body .info-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-bottom: 18px;
+}
+.detail-body .info-item {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 10px; background: var(--el-fill-color-light); border-radius: 8px; min-width: 0;
+}
+.detail-body .info-label { font-size: 12px; color: var(--el-text-color-secondary); }
+.detail-body .info-val { font-size: 13px; font-weight: 500; color: var(--el-text-color-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-body .section-title { font-weight: 600; margin: 14px 0 8px; color: var(--el-text-color-primary); }
+.detail-body .node-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
+.detail-body .node-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  background: var(--el-fill-color-light); border-radius: 8px;
+}
+.detail-body .node-name { flex-shrink: 0; max-width: 45%; font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-body .node-link { font-size: 11px; color: var(--el-text-color-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>

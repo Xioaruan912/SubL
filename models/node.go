@@ -9,9 +9,10 @@ import (
 
 type GroupNode struct {
 	gorm.Model
-	ID    int
-	Name  string
-	Nodes []Node `gorm:"many2many:group_node_nodes"` // 多对多关联字段
+	ID        int
+	Name      string
+	Nodes     []Node `gorm:"many2many:group_node_nodes"` // 多对多关联字段
+	NodeCount int    `gorm:"-"`                          // 仅用于前端展示，不入库
 }
 
 type Node struct {

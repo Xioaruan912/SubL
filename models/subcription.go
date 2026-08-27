@@ -19,9 +19,10 @@ type Subcription struct {
 	Config    string     `gorm:"type:text"` // Config 存储为 JSON 字符串
 	NodeOrder string     `gorm:"type:text"`
 	Token     string     `gorm:"type:text"` // 订阅链接身份令牌（随机生成，可重置）
-	ExpiresAt *time.Time // 过期时间，nil 表示永不过期
-	Nodes     []Node     `gorm:"many2many:subcription_nodes;"`
-	SubLogs   []SubLogs  `gorm:"foreignKey:SubcriptionID;"`
+	ExpiresAt *time.Time  // 过期时间，nil 表示永不过期
+	Nodes     []Node      `gorm:"many2many:subcription_nodes;"`
+	GroupRefs []GroupNode `gorm:"many2many:subcription_groups;"` // 引用的分组（机场同步后节点自动跟进）
+	SubLogs   []SubLogs   `gorm:"foreignKey:SubcriptionID;"`
 }
 
 // Config 结构体，用于解析 Subcription.Config 字段的 JSON 内容
@@ -78,7 +79,11 @@ func (sub *Subcription) Add() error {
 	// 然后建立多对多关系
 
 	// log.Println("Adding subscription nodes:", sub.Nodes)
-	return DB.Model(sub).Association("Nodes").Append(sub.Nodes)
+	if err := DB.Model(sub).Association("Nodes").Append(sub.Nodes); err != nil {
+		return err
+	}
+	// 建立分组引用关系
+	return DB.Model(sub).Association("GroupRefs").Replace(sub.GroupRefs)
 }
 
 // Update 更新订阅
@@ -112,7 +117,11 @@ func (sub *Subcription) Update(NewName *Subcription) error {
 	// 更新多对多关系: Replace 会清除旧关联并建立新关联
 	// 确保 sub.Nodes 包含了新的排序后的节点对象
 	log.Println("Updating subscription nodes:", NewName.SubLogs)
-	return DB.Model(&existingSub).Association("Nodes").Replace(NewName.Nodes)
+	if err := DB.Model(&existingSub).Association("Nodes").Replace(NewName.Nodes); err != nil {
+		return err
+	}
+	// 更新分组引用关系
+	return DB.Model(&existingSub).Association("GroupRefs").Replace(NewName.GroupRefs)
 }
 
 // Find 查找订阅 (通常用于获取单个订阅的详细信息，包括其关联节点和日志)
@@ -184,6 +193,11 @@ func (sub *Subcription) IPlogUpdate() error {
 func (sub *Subcription) Del() error {
 	// 清除多对多关系
 	err := DB.Model(sub).Association("Nodes").Clear()
+	if err != nil {
+		return err
+	}
+	// 清除分组引用关系
+	err = DB.Model(sub).Association("GroupRefs").Clear()
 	if err != nil {
 		return err
 	}

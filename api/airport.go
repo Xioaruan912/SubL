@@ -85,11 +85,77 @@ func AirportDelete(c *gin.Context) {
 		return
 	}
 	a := models.Airport{ID: id}
+	if err := a.Find(); err != nil {
+		c.JSON(500, gin.H{"msg": "删除失败: " + err.Error()})
+		return
+	}
+	// 删除机场前，自动解除所有订阅对该机场同名分组的引用
+	var gn models.GroupNode
+	if err := models.DB.Where("name = ?", a.Name).First(&gn).Error; err == nil && gn.ID != 0 {
+		var subs []models.Subcription
+		models.DB.Preload("GroupRefs").Find(&subs)
+		for i := range subs {
+			var refs []models.GroupNode
+			for _, r := range subs[i].GroupRefs {
+				if r.ID != gn.ID {
+					refs = append(refs, r)
+				}
+			}
+			if len(refs) != len(subs[i].GroupRefs) {
+				_ = models.DB.Model(&subs[i]).Association("GroupRefs").Replace(refs)
+			}
+		}
+	}
 	if err := a.Delete(); err != nil {
 		c.JSON(500, gin.H{"msg": "删除失败: " + err.Error()})
 		return
 	}
+	// 删除同名分组（若已无任何引用）
+	if gn.ID != 0 {
+		var refCnt int64
+		models.DB.Table("subcription_groups").Where("group_node_id = ?", gn.ID).Count(&refCnt)
+		if refCnt == 0 {
+			_ = models.DB.Model(&gn).Association("Nodes").Clear()
+			_ = models.DB.Delete(&gn).Error
+		}
+	}
 	c.JSON(200, gin.H{"code": "00000", "msg": "删除成功"})
+}
+
+// 机场详情（含同名分组节点列表，供抽屉展示）
+func AirportDetail(c *gin.Context) {
+	idStr := c.Query("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(400, gin.H{"msg": "无效的ID"})
+		return
+	}
+	a := models.Airport{ID: id}
+	if err := a.Find(); err != nil {
+		c.JSON(404, gin.H{"msg": "机场不存在"})
+		return
+	}
+	var gn models.GroupNode
+	nodes := []models.Node{}
+	gnErr := models.DB.Where("name = ?", a.Name).Preload("Nodes").First(&gn).Error
+	if gnErr == nil {
+		nodes = gn.Nodes
+	}
+	c.JSON(200, gin.H{
+		"code": "00000",
+		"data": gin.H{
+			"id":           a.ID,
+			"name":         a.Name,
+			"url":          a.URL,
+			"auto_cleanup": a.AutoCleanup,
+			"is_dedicated": a.IsDedicated,
+			"last_sync":    a.LastSync,
+			"node_count":   a.NodeCount,
+			"group_id":     gn.ID,
+			"nodes":        nodes,
+		},
+		"msg": "获取成功",
+	})
 }
 
 // 手动同步机场 (调用 Cron 的逻辑)

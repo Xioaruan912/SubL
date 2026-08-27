@@ -27,6 +27,7 @@ func Nodes(r *gin.Engine) {
 	Group := NodesGroup.Group("/group")
 	{
 		Group.GET("/get", api.GroupNodeGet)  // 添加分组
+		Group.GET("/full", api.GroupNodeGetFull)  // 分组完整信息（含 ID/节点数）
 		Group.POST("/set", api.GroupNodeSet) // 绑定创建分组
 		Group.DELETE("/delete", api.GroupNodeDel) // 删除分组
 		// Group.POST("/update", api.GroupNodeUpdate) // 更新分组

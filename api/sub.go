@@ -15,6 +15,26 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// parseGroups 解析逗号分隔的分组 ID 参数为 GroupNode 引用列表
+func parseGroups(groups string) ([]models.GroupNode, error) {
+	var refs []models.GroupNode
+	if groups == "" {
+		return refs, nil
+	}
+	for _, g := range strings.Split(groups, ",") {
+		id, err := strconv.Atoi(strings.TrimSpace(g))
+		if err != nil || id == 0 {
+			continue
+		}
+		var gn models.GroupNode
+		if err := models.DB.Where("id = ?", id).First(&gn).Error; err != nil {
+			return nil, err
+		}
+		refs = append(refs, models.GroupNode{ID: gn.ID})
+	}
+	return refs, nil
+}
+
 func SubTotal(c *gin.Context) {
 	var Sub models.Subcription
 	subs, err := Sub.List()
@@ -42,6 +62,15 @@ func SubGet(c *gin.Context) {
 		})
 		return
 	}
+	// 加载每个订阅引用的分组（含节点数），供前端回显
+	for i := range Subs {
+		models.DB.Preload("GroupRefs").First(&Subs[i], Subs[i].ID)
+		for j := range Subs[i].GroupRefs {
+			var cnt int64
+			models.DB.Table("group_node_nodes").Where("group_node_id = ?", Subs[i].GroupRefs[j].ID).Count(&cnt)
+			Subs[i].GroupRefs[j].NodeCount = int(cnt)
+		}
+	}
 	c.JSON(200, gin.H{
 		"code": "00000",
 		"data": Subs,
@@ -55,6 +84,7 @@ func SubAdd(c *gin.Context) {
 	configs := c.PostForm("config")
 	nodes := c.PostForm("nodes")
 	airportUrl := c.PostForm("airport_url")
+	groups := c.PostForm("groups")
 
 	if name == "" {
 		c.JSON(400, gin.H{
@@ -62,10 +92,16 @@ func SubAdd(c *gin.Context) {
 		})
 		return
 	}
-	if nodes == "" && airportUrl == "" {
+	if nodes == "" && airportUrl == "" && groups == "" {
 		c.JSON(400, gin.H{
-			"msg": "必须提供节点列表或机场订阅链接",
+			"msg": "必须提供节点列表、机场订阅链接或分组引用",
 		})
+		return
+	}
+
+	groupRefs, err := parseGroups(groups)
+	if err != nil {
+		c.JSON(400, gin.H{"msg": "分组引用无效: " + err.Error()})
 		return
 	}
 
@@ -143,8 +179,9 @@ func SubAdd(c *gin.Context) {
 		Config:    configs,
 		NodeOrder: strings.Join(nodeNames, ","),
 		Nodes:     NodesData,
+		GroupRefs: groupRefs,
 	}
-	err := sub.Add()
+	err = sub.Add()
 	if err != nil {
 		c.JSON(400, gin.H{
 			"msg": "添加订阅失败: " + err.Error(),
@@ -165,6 +202,7 @@ func SubUpdate(c *gin.Context) {
 	configs := c.PostForm("config")
 	nodes := c.PostForm("nodes")
 	airportUrl := c.PostForm("airport_url")
+	groups := c.PostForm("groups")
 
 	if NewName == "" {
 		c.JSON(400, gin.H{
@@ -172,10 +210,16 @@ func SubUpdate(c *gin.Context) {
 		})
 		return
 	}
-	if nodes == "" && airportUrl == "" {
+	if nodes == "" && airportUrl == "" && groups == "" {
 		c.JSON(400, gin.H{
-			"msg": "必须提供节点列表或机场订阅链接",
+			"msg": "必须提供节点列表、机场订阅链接或分组引用",
 		})
+		return
+	}
+
+	groupRefs, err := parseGroups(groups)
+	if err != nil {
+		c.JSON(400, gin.H{"msg": "分组引用无效: " + err.Error()})
 		return
 	}
 
@@ -248,9 +292,10 @@ func SubUpdate(c *gin.Context) {
 		Config:    configs,
 		NodeOrder: strings.Join(nodeNames, ","),
 		Nodes:     NodesData,
+		GroupRefs: groupRefs,
 	}
 
-	err := OldSub.Update(&NewSub)
+	err = OldSub.Update(&NewSub)
 	if err != nil {
 		c.JSON(400, gin.H{
 			"msg": "更新订阅失败: " + err.Error(),

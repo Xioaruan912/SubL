@@ -87,6 +87,13 @@ export function GetGroup(){
     method: "get",
   });
 }
+// 获取分组完整信息（含 ID/节点数）
+export function GetGroupFull(){
+  return request({
+    url: "/api/v1/nodes/group/full",
+    method: "get",
+  });
+}
 // 设置关联分组
 export function SetGroup(data: any){
   return request({

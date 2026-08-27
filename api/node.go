@@ -180,6 +180,28 @@ func GroupNodeGet(c *gin.Context) {
 	})
 }
 
+// 获取分组列表（含 ID 与节点数，供订阅分组选择器使用）
+func GroupNodeGetFull(c *gin.Context) {
+	Gns, err := models.GetGroupNodeList()
+	if err != nil {
+		c.JSON(400, gin.H{"msg": err.Error()})
+		return
+	}
+	var data []gin.H
+	for _, g := range Gns {
+		data = append(data, gin.H{
+			"id":         g.ID,
+			"name":       g.Name,
+			"node_count": len(g.Nodes),
+		})
+	}
+	c.JSON(200, gin.H{
+		"code": "00000",
+		"data": data,
+		"msg":  "GroupNode get",
+	})
+}
+
 // 删除分组（按 name 或 id）
 func GroupNodeDel(c *gin.Context) {
 	name := c.Query("name")
