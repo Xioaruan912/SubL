@@ -136,6 +136,8 @@ func NodeUpdadte(c *gin.Context) {
 		return
 	}
 
+	InvalidateOverview() // 节点变更，使概览缓存失效
+
 	c.JSON(200, gin.H{
 		"code": "00000",
 		"msg":  "更新成功",
@@ -224,6 +226,7 @@ func GroupNodeDel(c *gin.Context) {
 		c.JSON(400, gin.H{"msg": "删除分组失败: " + err.Error()})
 		return
 	}
+	InvalidateOverview() // 节点分组变更，使概览缓存失效
 	c.JSON(200, gin.H{"code": "00000", "msg": "删除分组成功"})
 }
 
@@ -283,6 +286,7 @@ func GroupNodeSet(c *gin.Context) {
 		})
 		return
 	}
+	InvalidateOverview() // 节点分组变更，使概览缓存失效
 	c.JSON(200, gin.H{
 		"code": "00000",
 		"msg":  "更新关联分组成功",
@@ -302,6 +306,7 @@ func GroupNodeUnbind(c *gin.Context) {
 		c.JSON(400, gin.H{"msg": "解除绑定失败: " + err.Error()})
 		return
 	}
+	InvalidateOverview() // 节点分组变更，使概览缓存失效
 	c.JSON(200, gin.H{"code": "00000", "msg": "已解除绑定"})
 }
 
@@ -370,6 +375,8 @@ func NodeAdd(c *gin.Context) {
 	}
 	//关联分组结束
 
+	InvalidateOverview() // 节点变更，使概览缓存失效
+
 	c.JSON(200, gin.H{
 		"code": "00000",
 		"msg":  "添加成功",
@@ -395,6 +402,7 @@ func NodeDel(c *gin.Context) {
 		})
 		return
 	}
+	InvalidateOverview() // 节点变更，使概览缓存失效
 	c.JSON(200, gin.H{
 		"code": "00000",
 		"msg":  "删除成功",

@@ -31,6 +31,14 @@ type overviewCache struct {
 
 var oCache = &overviewCache{}
 
+// InvalidateOverview 节点数据变更后调用，使概览缓存立即失效
+func InvalidateOverview() {
+	oCache.mu.Lock()
+	oCache.data = nil
+	oCache.expires = time.Time{}
+	oCache.mu.Unlock()
+}
+
 // NodeOverview 返回所有节点概览：国家（GeoIP）+ 服务器 TCP 延迟 + 分组。
 // GET /api/v1/nodes/overview
 func NodeOverview(c *gin.Context) {

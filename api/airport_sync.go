@@ -159,5 +159,7 @@ func SyncAirportNodeTask(airportID int) {
 	a.NodeCount = len(aliveNodes)
 	a.Update()
 
+	InvalidateOverview() // 机场同步增删节点，使概览缓存失效
+
 	log.Printf("[Sync] 机场 %s 同步并落库完成。\n", a.Name)
 }
