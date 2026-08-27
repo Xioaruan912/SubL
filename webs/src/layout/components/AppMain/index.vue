@@ -27,7 +27,8 @@ const cachedViews = computed(() => useTagsViewStore().cachedViews); // 缓存页
   width: 100%;
   min-height: calc(100vh - $navbar-height);
   overflow: hidden;
-  background-color: var(--el-bg-color-page);
+  /* 移除原有的固定白色背景，融入全局底色 */
+  background-color: transparent;
 }
 
 .hasTagsView .app-main {

@@ -4,7 +4,8 @@
       :is-active="appStore.sidebar.opened"
       @toggle-click="toggleSideBar"
     />
-    <breadcrumb />
+    <!-- 极简模式：移除生硬的面包屑，使顶栏更像客户端工具栏 -->
+    <!-- <breadcrumb /> -->
   </div>
 </template>
 

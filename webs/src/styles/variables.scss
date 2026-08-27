@@ -1,30 +1,31 @@
 /** 全局SCSS变量 */
 
 :root {
-  --menu-background: #ffffff;
-  --menu-text: #4e5969;
-  --menu-active-text: var(--el-menu-active-color);
-  --menu-hover: rgba(132, 133, 141, 0.18);
-  --sidebar-logo-background: #ffffff;
-  --el-menu-active-color: #f97316;
+  /* 侧边栏和顶栏背景完全透明，融入 html 的 f6f7f5 / 111412 背景 */
+  --menu-background: transparent;
+  --menu-text: #52525b;
+  --menu-active-text: #3b82f6;
+  --menu-hover: rgba(0, 0, 0, 0.04);
+  --sidebar-logo-background: transparent;
+  --el-menu-active-color: #3b82f6;
 }
 
 /** 暗黑主题 */
 html.dark {
-  --menu-background: #202425;
-  --menu-text: #bfcbd9;
-  --menu-active-text: #f97316;
-  --menu-hover: rgba(255, 255, 255, 0.12);
-  --sidebar-logo-background: #202425;
+  --menu-background: transparent;
+  --menu-text: #a1a1aa;
+  --menu-active-text: #3b82f6;
+  --menu-hover: rgba(255, 255, 255, 0.04);
+  --sidebar-logo-background: transparent;
 }
 
-$menu-background: var(--menu-background); // 菜单背景色
-$menu-text: var(--menu-text); // 菜单文字颜色
-$menu-active-text: var(--menu-active-text); // 菜单激活文字颜色
-$menu-hover: var(--menu-hover); // 菜单悬停背景色
-$sidebar-logo-background: var(--sidebar-logo-background); // 侧边栏 Logo 背景色
+$menu-background: var(--menu-background); 
+$menu-text: var(--menu-text); 
+$menu-active-text: var(--menu-active-text);
+$menu-hover: var(--menu-hover); 
+$sidebar-logo-background: var(--sidebar-logo-background);
 
-$sidebar-width: 210px; // 侧边栏宽度
-$sidebar-width-collapsed: 54px; // 侧边栏收缩宽度
-$navbar-height: 50px; // 导航栏高度
-$tags-view-height: 34px; // TagsView 高度
+$sidebar-width: 240px; 
+$sidebar-width-collapsed: 64px; 
+$navbar-height: 60px; 
+$tags-view-height: 0px; /* Hide tags view space */

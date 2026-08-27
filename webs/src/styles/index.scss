@@ -1,133 +1,235 @@
 @use "./reset";
 
-/* ===== OpenList manage 风格主题 =====
- * 参考 /root/openlist-frontend/src/app/theme.ts 与 store/settings.ts
- * 主色: Tailwind 橙 #f97316
- * 背景: #f7f8fa  卡片: #ffffff / #f8f9fa
- * 圆角: 大圆角(lg≈12px)  输入框: filled 风格
- */
+/* ===== Advanced Web UI Theme (EasyCLIProxyAPI Aesthetics) ===== */
+
 :root {
-  --el-color-primary: #f97316;
-  --el-color-primary-light-3: #fb9d5c;
-  --el-color-primary-light-5: #fcb98b;
-  --el-color-primary-light-7: #fdd5b9;
-  --el-color-primary-light-8: #fee3d0;
-  --el-color-primary-light-9: #fef1e8;
-  --el-color-primary-dark-2: #c75c12;
-  --el-border-radius-base: 8px;
-  --el-border-radius-small: 6px;
+  /* Primary Color: Professional Slate Blue */
+  --el-color-primary: #3b82f6; /* A clean, professional blue */
+  --el-color-primary-light-3: #60a5fa;
+  --el-color-primary-light-5: #93c5fd;
+  --el-color-primary-light-7: #bfdbfe;
+  --el-color-primary-light-8: #dbeafe;
+  --el-color-primary-light-9: #eff6ff;
+  --el-color-primary-dark-2: #2563eb;
+  
+  --el-border-radius-base: 8px; /* Inner cards/buttons */
+  --el-border-radius-small: 6px; /* Tags */
   --el-border-radius-round: 20px;
   --el-border-radius-circle: 100%;
+
+  /* Transitions */
+  --el-transition-duration: 150ms;
+  --el-transition-duration-fast: 150ms;
+  --el-transition-all: all var(--el-transition-duration) ease-in-out;
 }
 
-html {
-  background-color: #f7f8fa;
+/* Base Backgrounds - Removing app-main backgrounds to float on base html background */
+html, body {
+  background-color: #f6f7f5;
+  transition: background-color 150ms ease-in-out;
 }
 
-html.dark {
-  background-color: #151718;
+html.dark, html.dark body {
+  background-color: #111412;
 }
 
-body {
-  background-color: #f7f8fa;
+/* Ensure no rogue shadows on fixed header */
+.fixed-header {
+  box-shadow: none !important;
+  border-bottom: none !important;
+  background: transparent !important;
 }
 
-html.dark body {
-  background-color: #151718;
+/* Sidebar Menu Tweaks for "Pill Shape" modern feel */
+.el-menu {
+  border-right: none !important;
+  background-color: transparent !important;
 }
-
-/* 卡片：大圆角 + 细边框 + 柔和阴影（openlist 卡片风格） */
-.app-container .el-card,
-.el-card {
-  border-radius: 12px;
-  border: 1px solid var(--el-border-color-lighter);
-  --el-card-padding: 20px;
+.el-menu-item {
+  border-radius: 8px !important;
+  margin: 4px 12px !important;
+  height: 44px !important;
+  line-height: 44px !important;
+  color: #52525b !important;
 }
-
-/* 按钮：大圆角（openlist 默认 lg 圆角） */
-.el-button {
-  border-radius: 10px;
+html.dark .el-menu-item {
+  color: #a1a1aa !important;
+}
+.el-menu-item.is-active {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+  color: var(--el-color-primary) !important;
   font-weight: 500;
 }
-
-/* 输入框 / 选择器 / 文本域：filled 风格 + 大圆角 */
-.el-input__wrapper,
-.el-textarea__inner {
-  border-radius: 10px;
+.el-menu-item:hover:not(.is-active) {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+html.dark .el-menu-item:hover:not(.is-active) {
+  background-color: rgba(255, 255, 255, 0.04) !important;
 }
 
-/* 搜索区卡片化（openlist 卡片观感） */
+/* Global Transition for Interactive Elements */
+a, button, input, textarea, .el-button, .el-input__wrapper, .el-card {
+  transition: all 150ms ease-in-out !important;
+}
+
+/* Modals & Dialogs Shadow */
+.el-dialog, .el-drawer, .el-message-box, .el-popover {
+  border-radius: 12px !important;
+  border: none !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08) !important;
+}
+
+html.dark .el-dialog, html.dark .el-drawer, html.dark .el-message-box, html.dark .el-popover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Cards (Outer Panels) */
+.app-container .el-card,
+.el-card,
 .search-container {
   border-radius: 12px;
+  border: none !important; /* Remove solid border */
+  background-color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+  --el-card-padding: 24px; /* More breathing room */
+}
+
+html.dark .app-container .el-card,
+html.dark .el-card,
+html.dark .search-container {
+  background-color: #1a1d1b;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Buttons (Inner Elements) */
+.el-button {
+  border-radius: 8px !important;
+  border: none !important;
+  font-weight: 500;
+}
+.el-button:not(.is-text):not(.is-link) {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1) !important;
+}
+.el-button--primary:not(.is-text):not(.is-link) {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2) !important;
+}
+html.dark .el-button:not(.is-text):not(.is-link) {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15) !important;
+}
+html.dark .el-button--primary:not(.is-text):not(.is-link) {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Hover/Focus States for Buttons */
+.el-button:hover {
+  transform: translateY(-1px);
+}
+.el-button:active {
+  transform: translateY(0);
+}
+
+/* Inputs & Textareas */
+.el-input__wrapper,
+.el-textarea__inner {
+  border-radius: 8px !important;
+  border: none !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
   background-color: #ffffff;
 }
 
-html.dark .search-container {
-  background-color: var(--el-bg-color-overlay);
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus {
+  box-shadow: inset 0 0 0 1px var(--el-color-primary), 0 0 0 2px var(--el-color-primary-light-8) !important;
 }
 
-/* 表格：圆角容器 + hover 高亮 */
+html.dark .el-input__wrapper,
+html.dark .el-textarea__inner {
+  background-color: #161917;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+}
+html.dark .el-input__wrapper.is-focus,
+html.dark .el-textarea__inner:focus {
+  box-shadow: inset 0 0 0 1px var(--el-color-primary), 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+}
+
+/* Table */
 .el-table {
   border-radius: 12px;
-  --el-table-border-color: var(--el-border-color-lighter);
+  --el-table-border-color: transparent !important;
+  border: none !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
+}
+
+html.dark .el-table {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+  background-color: #1a1d1b;
 }
 
 .el-table th.el-table__cell {
-  background-color: #fafbfc !important;
+  background-color: #fafafa !important;
   font-weight: 600;
-  color: #1f2329;
+  color: #3f3f46;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04) !important;
 }
 
 html.dark .el-table th.el-table__cell {
-  background-color: var(--el-fill-color-light) !important;
+  background-color: #161917 !important;
+  color: #d4d4d8;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
 }
 
-/* 标签 / 徽章：柔和圆角 */
+/* Tags */
 .el-tag {
-  border-radius: 6px;
+  border-radius: 6px !important;
+  border: none !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05) !important;
+}
+html.dark .el-tag {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
 }
 
-/* 弹窗 / 抽屉：大圆角 */
-.el-dialog,
-.el-drawer,
-.el-message-box {
-  border-radius: 12px;
-}
-
-/* 分页 */
+/* Pagination */
 .el-pagination.is-background .el-pager li {
-  border-radius: 8px;
+  border-radius: 8px !important;
+  border: none !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
+}
+html.dark .el-pagination.is-background .el-pager li {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
 }
 
-/* 链接颜色（openlist 主色） */
-.link-type,
-.link-type:focus {
-  color: #f97316;
-
-  &:hover {
-    color: #c75c12;
-  }
-}
-
+/* Search Container Specifics */
 .search-container {
-  padding: 18px 0 0 10px;
-  margin-bottom: 10px;
-  background-color: var(--el-bg-color-overlay);
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 4px;
-  box-shadow: var(--el-box-shadow-light);
+  padding: 24px;
+  margin-bottom: 16px;
 }
 
+/* Table Header Padding Fix */
 .table-container > .el-card__header {
-  padding: calc(var(--el-card-padding) - 8px) var(--el-card-padding);
+  padding: 16px 24px;
 }
 
-.link-type,
-.link-type:focus {
-  color: #f97316;
+/* Links */
+.link-type, .link-type:focus {
+  color: var(--el-color-primary);
   cursor: pointer;
+}
+.link-type:hover {
+  color: var(--el-color-primary-light-3);
+}
 
-  &:hover {
-    color: rgb(249 115 22);
-  }
+/* Scrollbar tweaks to look more modern */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
 }

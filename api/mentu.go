@@ -105,6 +105,18 @@ func GetMenus(c *gin.Context) {
 						KeepAlive: true,
 					},
 				},
+				{
+					Path:      "airport",
+					Component: "subcription/airport",
+					Name:      "Airport",
+					Meta: Meta{
+						Title:     "机场管理",
+						Icon:      "upload",
+						Hidden:    false,
+						Roles:     []string{"ADMIN"},
+						KeepAlive: true,
+					},
+				},
 			},
 		},
 		// 测试

@@ -67,6 +67,16 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
           rewrite: (path) =>
             path.replace(new RegExp("^" + env.VITE_APP_BASE_API), ""),
         },
+        /** 解决订阅短链穿透问题 */
+        "^/c/": {
+          target: env.VITE_APP_API_URL,
+          changeOrigin: true,
+        },
+        /** 解决部分静态资源可能加载失败的问题 */
+        "^/static/": {
+          target: env.VITE_APP_API_URL,
+          changeOrigin: true,
+        },
       },
     },
     plugins: [

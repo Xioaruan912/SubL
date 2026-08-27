@@ -235,47 +235,45 @@ onMounted(loadAll)
 </script>
 
 <template>
-  <div class="nodes-container">
-    <el-row :gutter="16">
+  <div class="p-4 md:p-6 lg:p-8 h-full flex flex-col gap-6">
+    <el-row :gutter="24">
       <!-- 左侧分组树 -->
       <el-col :span="5" :xs="24">
-        <el-card shadow="never" class="group-card">
-          <template #header>
-            <div class="group-header">
-              <span>分组</span>
-              <el-button link type="primary" size="small" @click="Groupdialog = true">管理</el-button>
-            </div>
-          </template>
-          <div class="group-tree">
+        <div class="bg-white dark:bg-[#1a1d1b] rounded-xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] p-5 sticky top-6">
+          <div class="flex justify-between items-center mb-4">
+            <span class="font-semibold text-gray-700 dark:text-gray-200">分组</span>
+            <el-button link type="primary" size="small" @click="Groupdialog = true">管理</el-button>
+          </div>
+          <div class="flex flex-col gap-1">
             <div
-              class="tree-item"
-              :class="{ active: activeGroup === '全部' }"
+              class="px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 flex justify-between items-center"
+              :class="activeGroup === '全部' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium' : 'hover:bg-gray-50 dark:hover:bg-white/5 text-gray-600 dark:text-gray-400'"
               @click="activeGroup = '全部'"
             >
               <span>全部</span>
-              <el-tag size="small" type="info">{{ overviewList.length }}</el-tag>
+              <span class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full text-gray-600 dark:text-gray-300">{{ overviewList.length }}</span>
             </div>
             <div
               v-for="g in groupTree"
               :key="g.id"
-              class="tree-item"
-              :class="{ active: activeGroup === g.id }"
+              class="px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 flex justify-between items-center"
+              :class="activeGroup === g.id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium' : 'hover:bg-gray-50 dark:hover:bg-white/5 text-gray-600 dark:text-gray-400'"
               @click="activeGroup = g.id"
             >
-              <span>{{ g.label }}</span>
-              <el-tag size="small">{{ g.count }}</el-tag>
+              <span class="truncate pr-2">{{ g.label }}</span>
+              <span class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full text-gray-600 dark:text-gray-300">{{ g.count }}</span>
             </div>
           </div>
-        </el-card>
+        </div>
       </el-col>
 
       <!-- 主区 -->
       <el-col :span="19" :xs="24">
-        <el-card shadow="never">
+        <div class="bg-white dark:bg-[#1a1d1b] rounded-xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] flex flex-col overflow-hidden min-h-[500px]">
           <!-- 工具条 -->
-          <div class="toolbar">
-            <el-input v-model="searchText" placeholder="搜索节点名" clearable class="search" />
-            <el-select v-model="filterCountries" multiple collapse-tags placeholder="国家筛选" class="country">
+          <div class="p-5 border-b border-gray-100 dark:border-white/5 flex flex-wrap gap-3 items-center">
+            <el-input v-model="searchText" placeholder="搜索节点名" clearable class="w-64" />
+            <el-select v-model="filterCountries" multiple collapse-tags placeholder="国家筛选" class="w-48">
               <el-option v-for="c in countryOptions" :key="c" :label="c" :value="c" />
             </el-select>
             <el-button-group>
@@ -287,19 +285,22 @@ onMounted(loadAll)
             <el-button type="primary" @click="handleAddNode">添加节点</el-button>
           </div>
 
+          <div class="p-5 bg-gray-50/30 dark:bg-black/10 flex-1">
           <!-- 卡片视图 -->
           <template v-if="viewMode === 'card'">
-            <div v-for="g in cardGroups" :key="g.country" class="card-group">
-              <div class="card-group-title">{{ countryFlag(g.items[0].countryCode) }} {{ g.country }}（{{ g.items.length }}）</div>
-              <div class="card-grid">
-                <div v-for="n in g.items" :key="n.id" class="node-card">
-                  <div class="card-top">
-                    <span class="card-flag">{{ countryFlag(n.countryCode) }}</span>
-                    <span class="card-name" :title="n.name">{{ n.name }}</span>
-                    <span class="rtt-badge" :style="{ background: rttColor(n.rtt), color: '#fff' }">{{ rttText(n.rtt) }}</span>
+            <div v-for="g in cardGroups" :key="g.country" class="mb-6 last:mb-0">
+              <div class="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3 ml-1">{{ countryFlag(g.items[0].countryCode) }} {{ g.country }}（{{ g.items.length }}）</div>
+              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div v-for="n in g.items" :key="n.id" class="bg-white dark:bg-[#202322] rounded-xl p-4 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)] hover:shadow-md transition-all duration-150 group">
+                  <div class="flex justify-between items-start mb-2">
+                    <div class="flex items-center gap-2 overflow-hidden flex-1 pr-2">
+                      <span class="text-lg">{{ countryFlag(n.countryCode) }}</span>
+                      <span class="font-medium text-gray-800 dark:text-gray-200 truncate" :title="n.name">{{ n.name }}</span>
+                    </div>
+                    <span class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap" :style="{ background: rttColor(n.rtt), color: '#fff' }">{{ rttText(n.rtt) }}</span>
                   </div>
-                  <div class="card-country">{{ n.country }} · {{ n.server }}</div>
-                  <div class="card-actions">
+                  <div class="text-xs text-gray-500 dark:text-gray-400 mb-4 truncate">{{ n.country }} · {{ n.server }}</div>
+                  <div class="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                     <el-button link type="primary" size="small" @click="openUnlock(n)">解锁</el-button>
                     <el-button link type="success" size="small" @click="openTcp(n)">TCP</el-button>
                     <el-button link type="primary" size="small" @click="handleEditNode(n)">编辑</el-button>
@@ -352,14 +353,15 @@ onMounted(loadAll)
                 </template>
               </el-table-column>
             </el-table>
-            <div class="list-actions">
+            <div class="mt-4 flex gap-2">
               <el-button size="small" @click="selectAll">全选</el-button>
               <el-button size="small" @click="selectClear">取消</el-button>
               <el-button size="small" type="primary" @click="selectCopy">复制选中</el-button>
               <el-button size="small" type="danger" @click="selectDel">删除选中</el-button>
             </div>
           </template>
-        </el-card>
+          </div>
+        </div>
       </el-col>
     </el-row>
 

@@ -39,6 +39,8 @@ const loonMode = ref('1')
 const SubTitle = ref('')
 const Subname = ref('')
 const oldSubname = ref('')
+const airportUrl = ref('')
+const isAirportUrl = ref(false)
 const dialogVisible = ref(false)
 const NodesList = ref<Node[]>([])
 const value1 = ref<string[]>([])
@@ -102,6 +104,19 @@ onMounted(async () => {
 
 // ---- 添加/编辑 ----
 const addSubs = async () => {
+  if (!Subname.value.trim()) {
+    ElMessage.warning("订阅名称不能为空")
+    return
+  }
+  if (!isAirportUrl.value && value1.value.length === 0) {
+    ElMessage.warning("请选择至少一个节点")
+    return
+  }
+  if (isAirportUrl.value && !airportUrl.value.trim()) {
+    ElMessage.warning("机场订阅链接不能为空")
+    return
+  }
+
   const config = JSON.stringify({
     "clash": Clash.value.trim(),
     "surge": Surge.value.trim(),
@@ -110,10 +125,10 @@ const addSubs = async () => {
     "cert": certOn.value
   })
   if (SubTitle.value === '添加订阅') {
-    await AddSub({ config, name: Subname.value.trim(), nodes: value1.value.join(',') })
+    await AddSub({ config, name: Subname.value.trim(), nodes: value1.value.join(','), airport_url: isAirportUrl.value ? airportUrl.value.trim() : '' })
     ElMessage.success("添加成功")
   } else {
-    await UpdateSub({ config, name: Subname.value.trim(), nodes: value1.value.join(','), oldname: oldSubname.value })
+    await UpdateSub({ config, name: Subname.value.trim(), nodes: value1.value.join(','), oldname: oldSubname.value, airport_url: isAirportUrl.value ? airportUrl.value.trim() : '' })
     ElMessage.success("更新成功")
   }
   getsubs()
@@ -124,6 +139,8 @@ const handleAddSub = () => {
   SubTitle.value = '添加订阅'
   Subname.value = ''
   oldSubname.value = ''
+  airportUrl.value = ''
+  isAirportUrl.value = false
   udpOn.value = false
   certOn.value = false
   Clash.value = './template/clash.yaml'
@@ -150,6 +167,8 @@ const handleEdit = (sub: Sub) => {
   SubTitle.value = '编辑订阅'
   Subname.value = sub.Name
   oldSubname.value = sub.Name
+  airportUrl.value = ''
+  isAirportUrl.value = false
   udpOn.value = !!config.udp
   certOn.value = !!config.cert
   Clash.value = config.clash
@@ -298,13 +317,10 @@ const saveExpire = async () => {
         <!-- 链接区 -->
         <div class="link-area">
           <el-segmented v-model="activeClient[sub.ID]" :options="clientOptions" size="small" class="client-tabs" />
-          <div class="link-row">
-            <el-input :model-value="currentUrl(sub)" readonly size="small">
-              <template #append>
-                <el-button @click="copyUrl(currentUrl(sub))">复制</el-button>
-                <el-button @click="handleQrcode(currentUrl(sub), sub.Name)">二维码</el-button>
-              </template>
-            </el-input>
+          <div class="flex items-center gap-2">
+            <el-input :model-value="currentUrl(sub)" readonly size="small" class="flex-1" />
+            <el-button size="small" class="shrink-0" @click="copyUrl(currentUrl(sub))">复制</el-button>
+            <el-button size="small" class="shrink-0" @click="handleQrcode(currentUrl(sub), sub.Name)">二维码</el-button>
           </div>
         </div>
 
@@ -400,23 +416,36 @@ const saveExpire = async () => {
           </el-col>
         </el-row>
 
-        <!-- 分区三：节点 -->
-        <el-divider content-position="left">节点</el-divider>
-        <el-form-item label="选择节点">
-          <el-select v-model="value1" multiple filterable collapse-tags collapse-tags-tooltip placeholder="搜索并选择节点…" class="full">
-            <el-option v-for="item in NodesList" :key="item.Name" :label="item.Name" :value="item.Name" />
-          </el-select>
-        </el-form-item>
-        <div class="field-label">已选节点（可拖拽排序）</div>
-        <VueDraggable v-model="value1" :animation="150" ghost-class="ghost" class="order-list">
-          <div v-for="(nodeName, index) in value1" :key="nodeName" class="order-item">
-            <span class="order-badge">{{ index + 1 }}</span>
-            <span class="order-name">{{ nodeName }}</span>
-            <span class="order-drag">☰</span>
-            <el-icon class="order-remove" @click="removeNode(nodeName)"><svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M764.288 214.592 512 466.88 259.712 214.592a31.936 31.936 0 0 0-45.12 45.12L466.752 512 214.528 764.224a31.936 31.936 0 1 0 45.12 45.184L512 557.184l252.288 252.288a31.936 31.936 0 0 0 45.12-45.12L557.12 512.064l252.288-252.352a31.936 31.936 0 1 0-45.12-45.184z"/></svg></el-icon>
-          </div>
-        </VueDraggable>
-        <div v-if="!value1.length" class="order-empty">尚未选择节点，该订阅将不含节点</div>
+        <!-- 分区三：节点与机场订阅 -->
+        <el-divider content-position="left">节点配置</el-divider>
+        <div class="mb-4">
+          <el-switch v-model="isAirportUrl" active-text="从外部机场订阅导入节点" inactive-text="手动选择本地节点" />
+        </div>
+
+        <template v-if="isAirportUrl">
+          <el-form-item label="机场订阅链接">
+            <el-input v-model="airportUrl" placeholder="输入机场提供的订阅链接 (通常返回 Base64 节点列表)" clearable />
+            <div class="text-xs text-gray-500 mt-1">提交后，系统将自动拉取链接中的所有节点，存入本地数据库并与此订阅绑定。</div>
+          </el-form-item>
+        </template>
+        
+        <template v-else>
+          <el-form-item label="选择节点">
+            <el-select v-model="value1" multiple filterable collapse-tags collapse-tags-tooltip placeholder="搜索并选择节点…" class="full">
+              <el-option v-for="item in NodesList" :key="item.Name" :label="item.Name" :value="item.Name" />
+            </el-select>
+          </el-form-item>
+          <div class="field-label">已选节点（可拖拽排序）</div>
+          <VueDraggable v-model="value1" :animation="150" ghost-class="ghost" class="order-list">
+            <div v-for="(nodeName, index) in value1" :key="nodeName" class="order-item">
+              <span class="order-badge">{{ index + 1 }}</span>
+              <span class="order-name">{{ nodeName }}</span>
+              <span class="order-drag">☰</span>
+              <el-icon class="order-remove" @click="removeNode(nodeName)"><svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M764.288 214.592 512 466.88 259.712 214.592a31.936 31.936 0 0 0-45.12 45.12L466.752 512 214.528 764.224a31.936 31.936 0 1 0 45.12 45.184L512 557.184l252.288 252.288a31.936 31.936 0 0 0 45.12-45.12L557.12 512.064l252.288-252.352a31.936 31.936 0 1 0-45.12-45.184z"/></svg></el-icon>
+            </div>
+          </VueDraggable>
+          <div v-if="!value1.length" class="order-empty">尚未选择节点，该订阅将不含节点</div>
+        </template>
       </el-form>
 
       <template #footer>

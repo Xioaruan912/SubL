@@ -99,15 +99,25 @@ func DecodeVLESSURL(s string) (VLESS, error) {
 	/*
 		base64(username@host:port?encryption=none&security=auto&type=tcp)
 	*/
-	// 解析base64然后重新url编码
+	// 针对新版直接给出原链接的情况，如果不包含vless://则报错，如果包含则先尝试直接解析，如果解析失败或host为空，再尝试Base64解码
 	if !strings.Contains(s, "vless://") {
 		return VLESS{}, fmt.Errorf("非vless协议: %s", s)
 	}
-	s = "vless://" + Base64Decode(strings.Split(s, "://")[1])
-	// 解析url
-	u, err := url.Parse(s)
-	if err != nil {
-		return VLESS{}, fmt.Errorf("url parse error: %v", err)
+	
+	var u *url.URL
+	var err error
+	
+	// 有些机场返回的不是 Base64 编码的 vless 字符串，而是原生的 vless://xxxx 链接
+	// 我们先尝试直接作为 URL 解析
+	u, err = url.Parse(s)
+	
+	// 如果直接解析失败，或者解析出来的Host为空（比如vless://[Base64]的情况），我们再尝试走Base64解码
+	if err != nil || u.Host == "" {
+		s = "vless://" + Base64Decode(strings.Split(s, "://")[1])
+		u, err = url.Parse(s)
+		if err != nil {
+			return VLESS{}, fmt.Errorf("url parse error: %v", err)
+		}
 	}
 	uuid := u.User.Username()
 	hostname := u.Hostname()

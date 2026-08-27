@@ -98,7 +98,7 @@ const startTest = async () => {
   try {
     const payload = new URLSearchParams();
     payload.append("id", String(props.nodeId));
-    const res = await fetch("/api/v1/nodes/unlock", {
+    const res = await fetch(import.meta.env.VITE_APP_BASE_API + "/api/v1/nodes/unlock", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: "Bearer " + getToken() },
       body: payload.toString(),

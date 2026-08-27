@@ -1,12 +1,13 @@
 <template>
-  <div class="dashboard-container">
-    <el-card shadow="never">
+  <div class="p-4 md:p-6 lg:p-8 h-full flex flex-col gap-6">
+    <!-- Top greeting bar (Tailwind Card) -->
+    <div class="bg-white dark:bg-[#1a1d1b] rounded-xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] p-6">
       <el-row justify="space-between">
         <el-col :span="18" :xs="24">
           <div class="flex h-full items-center">
-            <span class="dashboard-badge">{{ (userStore.user.username || 'U').charAt(0).toUpperCase() }}</span>
+            <span class="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xl font-bold mr-4">{{ (userStore.user.username || 'U').charAt(0).toUpperCase() }}</span>
             <div>
-              <p>{{ greetings }}</p>
+              <p class="text-lg font-medium text-gray-800 dark:text-gray-200">{{ greetings }}</p>
             </div>
           </div>
         </el-col>
@@ -19,23 +20,28 @@
               :value="item.value"
             >
               <template #title>
-                <div class="flex items-center">
-                  <svg-icon :icon-class="item.iconClass" size="20px" />
-                  <span class="text-[16px] ml-1">{{ item.title }}</span>
+                <div class="flex items-center text-gray-500 dark:text-gray-400">
+                  <svg-icon :icon-class="item.iconClass" size="18px" />
+                  <span class="text-sm ml-1">{{ item.title }}</span>
                 </div>
               </template>
             </el-statistic>
           </div>
         </el-col>
       </el-row>
-    </el-card>
+    </div>
 
-    <el-row :gutter="16" class="mt-4">
-      <el-col :span="16" :xs="24">
-        <world-map />
+    <!-- Map & Ping Section -->
+    <el-row :gutter="24" class="flex-1">
+      <el-col :span="16" :xs="24" class="mb-4">
+        <div class="bg-white dark:bg-[#1a1d1b] rounded-xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] p-6 h-full">
+          <world-map />
+        </div>
       </el-col>
-      <el-col :span="8" :xs="24">
-        <node-ping />
+      <el-col :span="8" :xs="24" class="mb-4">
+        <div class="bg-white dark:bg-[#1a1d1b] rounded-xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] p-6 h-full">
+          <node-ping />
+        </div>
       </el-col>
     </el-row>
   </div>
@@ -105,23 +111,8 @@ const greetings = computed(() => {
 </script>
 
 <style lang="scss" scoped>
-.dashboard-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 64px;
-  height: 64px;
-  margin-right: 20px;
-  border-radius: 50%;
-  background: var(--el-color-primary);
-  color: #fff;
-  font-size: 30px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
 .dashboard-container {
   position: relative;
-  padding: 24px;
 
   .data-box {
     display: flex;

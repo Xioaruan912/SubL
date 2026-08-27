@@ -3,13 +3,14 @@
 package api
 
 import (
-	// 导入 json 包，用于解析 config 字符串
-
-	"log"
+	"io"
+	"net/http"
 	"strconv"
 	"strings"
-	"ppeelink/models" // 导入 models 包
 	"time"
+
+	"ppeelink/models"
+	"ppeelink/node"
 
 	"github.com/gin-gonic/gin"
 )
@@ -51,45 +52,97 @@ func SubGet(c *gin.Context) {
 // 添加订阅
 func SubAdd(c *gin.Context) {
 	name := c.PostForm("name")
-	configs := c.PostForm("config") // 这里的 configString 是前端传来的 JSON 字符串
+	configs := c.PostForm("config")
 	nodes := c.PostForm("nodes")
+	airportUrl := c.PostForm("airport_url")
 
-	if name == "" || nodes == "" {
+	if name == "" {
 		c.JSON(400, gin.H{
-			"msg": "订阅名称或节点不能为空",
+			"msg": "订阅名称不能为空",
+		})
+		return
+	}
+	if nodes == "" && airportUrl == "" {
+		c.JSON(400, gin.H{
+			"msg": "必须提供节点列表或机场订阅链接",
 		})
 		return
 	}
 
-	// 1. 根据 nodesString 字符串，构建 models.Node 数组
 	var NodesData []models.Node
+	var nodeNames []string
 
-	for _, nodeName := range strings.Split(nodes, ",") {
-		if strings.TrimSpace(nodeName) == "" {
-			continue
-		}
-		FirstNode := models.Node{
-			Name: nodeName,
-		}
-
-		// 查出node的数据
-		result := models.DB.Model(models.Node{}).Where("name = ?", FirstNode.Name).First(&FirstNode)
-		if result.Error != nil {
-			log.Println(result.Error)
-			c.JSON(400, gin.H{
-				"msg": result.Error,
-			})
+	// 如果提供了机场URL，优先从机场获取节点
+	if airportUrl != "" {
+		req, err := http.NewRequest("GET", airportUrl, nil)
+		if err != nil {
+			c.JSON(400, gin.H{"msg": "无效的订阅链接: " + err.Error()})
 			return
 		}
-		// 插入nodes
-		NodesData = append(NodesData, FirstNode)
+		req.Header.Set("User-Agent", "v2rayNG/1.8.5")
+		client := &http.Client{Timeout: 15 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			c.JSON(400, gin.H{"msg": "请求订阅链接失败: " + err.Error()})
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		
+		// 尝试 Base64 解码，绝大多数标准订阅都是 Base64 编码的链接列表
+		decodedStr := node.Base64Decode(string(body))
+		links := strings.Split(decodedStr, "\n")
+		
+		for _, link := range links {
+			link = strings.TrimSpace(link)
+			if link == "" || !strings.Contains(link, "://") {
+				continue
+			}
+			n := models.Node{Link: link}
+			n, err = DocodeNodeName(&n) // 解析节点名称
+			if err != nil || n.Name == "" {
+				continue
+			}
+			// 保存到数据库
+			n.Add() 
+			
+			// 为了防止重名导致获取错节点，我们通过精确查找获取 ID
+			var dbNode models.Node
+			models.DB.Model(models.Node{}).Where("name = ? AND link = ?", n.Name, n.Link).First(&dbNode)
+			if dbNode.ID != 0 {
+				NodesData = append(NodesData, dbNode)
+				nodeNames = append(nodeNames, dbNode.Name)
+				
+				// 自动将机场抓取到的节点归类到一个以订阅名称命名的分组，防止在节点列表中过于杂乱
+				gn := models.GroupNode{Name: name}
+				gn.Add()
+				dbNode.UpdateGroup([]models.GroupNode{{Name: name}})
+			}
+		}
+	} else {
+		// 常规的手动选择节点
+		for _, nodeName := range strings.Split(nodes, ",") {
+			if strings.TrimSpace(nodeName) == "" {
+				continue
+			}
+			FirstNode := models.Node{
+				Name: nodeName,
+			}
+			result := models.DB.Model(models.Node{}).Where("name = ?", FirstNode.Name).First(&FirstNode)
+			if result.Error != nil {
+				c.JSON(400, gin.H{"msg": "节点不存在: " + result.Error.Error()})
+				return
+			}
+			NodesData = append(NodesData, FirstNode)
+			nodeNames = append(nodeNames, FirstNode.Name)
+		}
 	}
+
 	sub := models.Subcription{
 		Name:      name,
-		Config:    configs,   // 这里直接赋值字符串
-		NodeOrder: nodes,     // 这里直接赋值字符串
-		Nodes:     NodesData, // 这里直接赋值 nodes 数组
-
+		Config:    configs,
+		NodeOrder: strings.Join(nodeNames, ","),
+		Nodes:     NodesData,
 	}
 	err := sub.Add()
 	if err != nil {
@@ -109,48 +162,92 @@ func SubAdd(c *gin.Context) {
 func SubUpdate(c *gin.Context) {
 	NewName := c.PostForm("name")
 	OldName := c.PostForm("oldname")
-	configs := c.PostForm("config") // 这里的 configString 是前端传来的 JSON 字符串
+	configs := c.PostForm("config")
 	nodes := c.PostForm("nodes")
+	airportUrl := c.PostForm("airport_url")
 
-	if NewName == "" || nodes == "" {
+	if NewName == "" {
 		c.JSON(400, gin.H{
-			"msg": "订阅名称或节点不能为空",
+			"msg": "订阅名称不能为空",
+		})
+		return
+	}
+	if nodes == "" && airportUrl == "" {
+		c.JSON(400, gin.H{
+			"msg": "必须提供节点列表或机场订阅链接",
 		})
 		return
 	}
 
-	// 1. 根据 nodesString 字符串，构建 models.Node 数组
 	var NodesData []models.Node
+	var nodeNames []string
 
-	for _, nodeName := range strings.Split(nodes, ",") {
-		if strings.TrimSpace(nodeName) == "" {
-			continue
-		}
-		FirstNode := models.Node{
-			Name: nodeName,
-		}
-
-		// 查出node的数据
-		result := models.DB.Model(models.Node{}).Where("name = ?", FirstNode.Name).First(&FirstNode)
-		if result.Error != nil {
-			log.Println(result.Error)
-			c.JSON(400, gin.H{
-				"msg": result.Error,
-			})
+	if airportUrl != "" {
+		req, err := http.NewRequest("GET", airportUrl, nil)
+		if err != nil {
+			c.JSON(400, gin.H{"msg": "无效的订阅链接: " + err.Error()})
 			return
 		}
-		// 插入nodes
-		NodesData = append(NodesData, FirstNode)
+		req.Header.Set("User-Agent", "v2rayNG/1.8.5")
+		client := &http.Client{Timeout: 15 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			c.JSON(400, gin.H{"msg": "请求订阅链接失败: " + err.Error()})
+			return
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		
+		decodedStr := node.Base64Decode(string(body))
+		links := strings.Split(decodedStr, "\n")
+		
+		for _, link := range links {
+			link = strings.TrimSpace(link)
+			if link == "" || !strings.Contains(link, "://") {
+				continue
+			}
+			n := models.Node{Link: link}
+			n, err = DocodeNodeName(&n)
+			if err != nil || n.Name == "" {
+				continue
+			}
+			n.Add() 
+			
+			var dbNode models.Node
+			models.DB.Model(models.Node{}).Where("name = ? AND link = ?", n.Name, n.Link).First(&dbNode)
+			if dbNode.ID != 0 {
+				NodesData = append(NodesData, dbNode)
+				nodeNames = append(nodeNames, dbNode.Name)
+				
+				gn := models.GroupNode{Name: NewName}
+				gn.Add()
+				dbNode.UpdateGroup([]models.GroupNode{{Name: NewName}})
+			}
+		}
+	} else {
+		for _, nodeName := range strings.Split(nodes, ",") {
+			if strings.TrimSpace(nodeName) == "" {
+				continue
+			}
+			FirstNode := models.Node{
+				Name: nodeName,
+			}
+			result := models.DB.Model(models.Node{}).Where("name = ?", FirstNode.Name).First(&FirstNode)
+			if result.Error != nil {
+				c.JSON(400, gin.H{"msg": result.Error.Error()})
+				return
+			}
+			NodesData = append(NodesData, FirstNode)
+			nodeNames = append(nodeNames, FirstNode.Name)
+		}
 	}
-	OldSub := models.Subcription{
-		Name: OldName,
-	}
+
+	OldSub := models.Subcription{Name: OldName}
 	NewSub := models.Subcription{
 		Name:      NewName,
-		Config:    configs,   // 这里直接赋值字符串
-		NodeOrder: nodes,     // 这里直接赋值字符串
-		Nodes:     NodesData, // 这里直接赋值 nodes 数组
-
+		Config:    configs,
+		NodeOrder: strings.Join(nodeNames, ","),
+		Nodes:     NodesData,
 	}
 
 	err := OldSub.Update(&NewSub)

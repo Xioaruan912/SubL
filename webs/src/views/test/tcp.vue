@@ -351,7 +351,7 @@ const startTest = async () => {
   if (filterIsps.value.length) payload.append("isps", filterIsps.value.join(","));
 
   try {
-    const res = await fetch("/api/v1/nodes/chinaping/stream", {
+    const res = await fetch(import.meta.env.VITE_APP_BASE_API + "/api/v1/nodes/chinaping/stream", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: "Bearer " + getToken() },
       body: payload.toString(),

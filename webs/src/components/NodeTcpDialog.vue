@@ -254,7 +254,7 @@ const startTest = async () => {
   payload.append("id", String(props.nodeId));
   payload.append("zstatic_port", zstaticPort.value);
   try {
-    const res = await fetch("/api/v1/nodes/chinaping/stream", {
+    const res = await fetch(import.meta.env.VITE_APP_BASE_API + "/api/v1/nodes/chinaping/stream", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: "Bearer " + getToken() },
       body: payload.toString(),

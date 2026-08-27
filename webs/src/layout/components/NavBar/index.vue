@@ -13,6 +13,8 @@
   @apply flex-x-between;
 
   height: $navbar-height;
-  background: var(--el-bg-color);
+  /* 移除NavBar白色背景，使其与整体 f6f7f5 底色融合 */
+  background: transparent;
+  border-bottom: none;
 }
 </style>

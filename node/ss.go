@@ -84,6 +84,14 @@ func EncodeSSURL(s Ss) string {
 }
 
 func DecodeSSURL(s string) (Ss, error) {
+	// 容错: 有可能是纯粹的 ss://Base64(整个链接)
+	if !strings.Contains(s, "@") {
+		// 尝试全局 base64 解码
+		decoded := "ss://" + Base64Decode(strings.Split(s, "://")[1])
+		if strings.Contains(decoded, "@") {
+			s = decoded
+		}
+	}
 	// 解析ss链接
 	param, addr, name := parsingSS(s)
 	// base64解码

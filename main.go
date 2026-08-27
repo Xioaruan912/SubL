@@ -152,9 +152,14 @@ func Run(port int) {
 	routers.Templates(r)
 	routers.Version(r, version)
 	routers.Downloads(r)
+	routers.AirportRoutes(r) // 注册机场管理路由
 	// 客户端下载目录 + 定时检查更新（启动即查 + 每 24h）
 	os.MkdirAll("downloads", 0o755)
 	client.Start()
+	
+	// 启动后台定时测活任务 (Cron)
+	StartCronTasks()
+
 	// 启动服务
 	r.Run(fmt.Sprintf("0.0.0.0:%d", port))
 }

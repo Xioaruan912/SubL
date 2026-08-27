@@ -9,7 +9,7 @@ const defaultSettings: AppSettings = {
   title: "PPEELink",
   version: pkg.version,
   showSettings: true,
-  tagsView: true,
+  tagsView: false,
   fixedHeader: true,
   sidebarLogo: true,
   layout: LayoutEnum.LEFT,

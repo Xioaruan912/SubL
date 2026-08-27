@@ -22,9 +22,11 @@
         </div>
       </div>
 
-      <div :class="{ hasTagsView: showTagsView }" class="main-container">
+      <!-- 极简模式：去掉背景色和边框，融入底色，并移除 NavBar 下方的细线 -->
+      <div :class="{ hasTagsView: false }" class="main-container" style="background: transparent;">
         <div :class="{ 'fixed-header': fixedHeader }">
-          <TagsView v-if="showTagsView" />
+          <!-- 强制隐藏 TagsView 以保持极简桌面风格 -->
+          <!-- <TagsView v-if="showTagsView" /> -->
         </div>
         <AppMain />
         <Settings v-if="defaultSettings.showSettings" />
@@ -32,10 +34,12 @@
     </div>
 
     <!-- 左侧和顶部布局 -->
-    <div v-else :class="{ hasTagsView: showTagsView }" class="main-container">
-      <div :class="{ 'fixed-header': fixedHeader }">
+    <!-- 极简模式：去掉背景色和边框，融入底色，并移除 NavBar 下方的细线 -->
+    <div v-else :class="{ hasTagsView: false }" class="main-container" style="background: transparent;">
+      <div :class="{ 'fixed-header': fixedHeader }" style="box-shadow: none; border-bottom: none;">
         <NavBar v-if="layout === 'left'" />
-        <TagsView v-if="showTagsView" />
+        <!-- 强制隐藏 TagsView 以保持极简桌面风格 -->
+        <!-- <TagsView v-if="showTagsView" /> -->
       </div>
       <AppMain />
       <Settings v-if="defaultSettings.showSettings" />
@@ -156,11 +160,12 @@ function toggleSidebar() {
       height: $navbar-height;
     }
 
-    :deep(.el-menu-item),
-    :deep(.el-sub-menu__title),
-    :deep(.el-menu--horizontal) {
-      height: $navbar-height;
-      line-height: $navbar-height;
+    :deep(.el-menu-item) {
+      margin: 4px 12px;
+      border-radius: 8px;
+    }
+    :deep(.el-menu-item.is-active) {
+      background: rgba(59, 130, 246, 0.1);
     }
 
     :deep(.el-menu--collapse) {
@@ -185,11 +190,12 @@ function toggleSidebar() {
       height: $navbar-height;
     }
 
-    :deep(.el-menu-item),
-    :deep(.el-sub-menu__title),
-    :deep(.el-menu--horizontal) {
-      height: $navbar-height;
-      line-height: $navbar-height;
+    :deep(.el-menu-item) {
+      margin: 4px 12px;
+      border-radius: 8px;
+    }
+    :deep(.el-menu-item.is-active) {
+      background: rgba(59, 130, 246, 0.1);
     }
 
     :deep(.el-menu--horizontal.el-menu) {
