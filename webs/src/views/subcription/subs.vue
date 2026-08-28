@@ -283,6 +283,8 @@ const fmtTime = (s: string) => {
 
 const previewNodesList = ref<Node[]>([])
 
+import { testLocalAll } from "@/utils/ping"
+
 // ---- 抽屉 ----
 const openDrawer = async (sub: Sub) => {
   drawerSub.value = sub
@@ -299,6 +301,23 @@ const openDrawer = async (sub: Sub) => {
     ])
     if (overview.value.length === 0) overview.value = ovRes.data || []
     previewNodesList.value = previewRes.data || []
+
+    const names = new Set(previewNodesList.value.map(n => n.Name))
+    overview.value.forEach(o => {
+      if (names.has(o.name)) {
+        o.rtt = o.rtt === -1 ? -1 : -2;
+      }
+    })
+
+    const nodesToTest = overview.value.filter(o => names.has(o.name));
+    testLocalAll(nodesToTest, (index, rtt) => {
+      const targetNode = nodesToTest[index];
+      const ovIndex = overview.value.findIndex(o => o.name === targetNode.name);
+      if (ovIndex !== -1) {
+        overview.value[ovIndex].rtt = rtt;
+      }
+    });
+
   } catch { /* ignore */ } finally {
     drawerLoading.value = false
   }
@@ -329,8 +348,9 @@ const drawerGroupRefs = computed(() => {
   return (sub.GroupRefs || []).map(g => ({ ...g }))
 })
 
-const rttLabel = (rtt: number) => (rtt < 0 ? '不可达' : `${rtt}ms`)
+const rttLabel = (rtt: number) => rtt === -2 ? '测试中…' : (rtt < 0 ? '不可达' : `${rtt}ms`)
 const rttColor = (rtt: number) => {
+  if (rtt === -2) return 'info' as const
   if (rtt < 0) return 'danger' as const
   if (rtt < 100) return 'success' as const
   if (rtt < 200) return 'warning' as const

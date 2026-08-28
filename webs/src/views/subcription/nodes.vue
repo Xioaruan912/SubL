@@ -142,12 +142,13 @@ const groupTree = computed(() => {
 
 // 延迟颜色
 const rttColor = (rtt: number) => {
+  if (rtt === -2) return "#95a5a6"
   if (rtt < 0) return "#95a5a6"
   if (rtt < 100) return "#2ecc71"
   if (rtt < 300) return "#f1c40f"
   return "#e74c3c"
 }
-const rttText = (rtt: number) => rtt < 0 ? "超时" : rtt + "ms"
+const rttText = (rtt: number) => rtt === -2 ? "测试中…" : (rtt < 0 ? "超时" : rtt + "ms")
 
 // ===== 测试弹窗状态 =====
 const unlockDialogVisible = ref(false)
@@ -156,18 +157,41 @@ const testNode = ref<{ id: number; name: string } | null>(null)
 const openUnlock = (node: OverviewItem) => { testNode.value = { id: node.id, name: node.name }; unlockDialogVisible.value = true }
 const openTcp = (node: OverviewItem) => { testNode.value = { id: node.id, name: node.name }; tcpDialogVisible.value = true }
 
+import { testLocalAll } from "@/utils/ping"
+
 // ===== 数据加载 =====
+const localTesting = ref(false)
+
 const loadAll = async () => {
   loading.value = true
   try {
     const [ov, nd, gp] = await Promise.all([
       getNodeOverview(), getNodes(), GetGroup()
     ])
-    overviewList.value = ov?.data || []
+    const data = ov?.data || []
+    data.forEach((n: any) => {
+      n.rtt = n.rtt === -1 ? -1 : -2; // VPS marks dead as -1, otherwise set to testing state
+    })
+    overviewList.value = data
     fullNodes.value = nd?.data || []
     allGroupNames.value = Array.isArray(gp?.data) ? gp.data : []
+    
+    triggerLocalPing()
   } catch { /* ignore */ } finally {
     loading.value = false
+  }
+}
+
+const triggerLocalPing = async () => {
+  localTesting.value = true
+  try {
+    await testLocalAll(overviewList.value, (index, rtt) => {
+      if (overviewList.value[index]) {
+        overviewList.value[index].rtt = rtt
+      }
+    })
+  } finally {
+    localTesting.value = false
   }
 }
 
@@ -354,6 +378,7 @@ onMounted(loadAll)
               <el-button size="small" type="danger" @click="cardSelectDel" :disabled="!selectedCount">删除选中({{ selectedCount }})</el-button>
             </template>
             <div class="flex-1"></div>
+            <el-button :loading="localTesting" type="success" @click="triggerLocalPing">测本地</el-button>
             <el-button :loading="loading" @click="loadAll">刷新</el-button>
             <el-button type="primary" @click="handleAddNode">添加节点</el-button>
           </div>
@@ -418,7 +443,7 @@ onMounted(loadAll)
               </el-table-column>
               <el-table-column label="延迟" width="90">
                 <template #default="{ row }">
-                  <el-tag :type="row.rtt < 0 ? 'danger' : row.rtt < 100 ? 'success' : row.rtt < 300 ? 'warning' : 'danger'" size="small">
+                  <el-tag :type="row.rtt === -2 ? 'info' : row.rtt < 0 ? 'danger' : row.rtt < 100 ? 'success' : row.rtt < 300 ? 'warning' : 'danger'" size="small">
                     {{ rttText(row.rtt) }}
                   </el-tag>
                 </template>

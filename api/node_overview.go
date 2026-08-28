@@ -16,6 +16,7 @@ type NodeOverviewItem struct {
 	Name        string   `json:"name"`
 	Link        string   `json:"link"`
 	Server      string   `json:"server"`
+	Port        int      `json:"port"`
 	Country     string   `json:"country"`
 	CountryCode string   `json:"countryCode"`
 	Rtt         int      `json:"rtt"` // 毫秒，-1 失败
@@ -76,6 +77,7 @@ func NodeOverview(c *gin.Context) {
 			host, port := node.ExtractServerHost(n.Link)
 			if host != "" {
 				item.Server = host
+				item.Port = port
 				item.CountryCode = node.LookupCountry(host)
 				item.Country = countryName(item.CountryCode)
 				addr := host

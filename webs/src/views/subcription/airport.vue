@@ -161,12 +161,13 @@ const geminiTesting = ref('') // 当前测试中的节点名
 
 // 延迟徽标
 const rttColor = (rtt: number) => {
+  if (rtt === -2) return '#95a5a6'
   if (rtt < 0) return '#95a5a6'
   if (rtt < 100) return '#2ecc71'
   if (rtt < 300) return '#f1c40f'
   return '#e74c3c'
 }
-const rttText = (rtt: number) => rtt < 0 ? '超时' : rtt + 'ms'
+const rttText = (rtt: number) => rtt === -2 ? '测试中…' : (rtt < 0 ? '超时' : rtt + 'ms')
 const nodeRtt = (name: string) => {
   const v = rttMap.value[name]
   return v === undefined ? -2 : v // -2 表示未知(加载中)
@@ -192,12 +193,25 @@ const openDetail = async (row: any) => {
   }
 }
 
+import { testLocalAll } from "@/utils/ping"
+
 const loadNodeRtt = async () => {
   try {
     const { data } = await getNodeOverview()
+    const nodes = data || []
     const map: Record<string, number> = {}
-    for (const n of data || []) map[n.name] = n.rtt
+    for (const n of nodes) {
+      n.rtt = n.rtt === -1 ? -1 : -2;
+      map[n.name] = n.rtt
+    }
     rttMap.value = map
+
+    testLocalAll(nodes, (index, rtt) => {
+      const node = nodes[index];
+      if (node && rttMap.value[node.name] !== undefined) {
+        rttMap.value[node.name] = rtt;
+      }
+    })
   } catch { /* ignore */ }
 }
 

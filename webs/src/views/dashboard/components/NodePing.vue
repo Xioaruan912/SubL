@@ -16,12 +16,12 @@
 
     <!-- 常见目标延迟 -->
     <div class="section" v-loading="loading">
-      <div class="section-title">常见目标延迟（VPS 出口）</div>
+      <div class="section-title">常见目标延迟</div>
       <div class="target-list">
         <div v-for="t in targets" :key="t.name" class="target-item">
           <span class="target-name">{{ t.name }}</span>
           <el-tag :type="tagType(t.rtt)" size="small" effect="light">
-            {{ t.rtt < 0 ? "--" : t.rtt + " ms" }}
+            {{ t.rtt === -2 ? "测试中…" : (t.rtt < 0 ? "超时" : t.rtt + " ms") }}
           </el-tag>
         </div>
       </div>
@@ -39,7 +39,7 @@
             <span class="node-name" :title="n.name">{{ n.name }}</span>
             <span class="node-server">{{ n.server }}</span>
             <el-tag :type="tagType(n.rtt)" size="small" effect="light">
-              {{ n.rtt < 0 ? "超时" : n.rtt + " ms" }}
+              {{ n.rtt === -2 ? "测试中…" : (n.rtt < 0 ? "超时" : n.rtt + " ms") }}
             </el-tag>
           </div>
         </div>
@@ -80,24 +80,68 @@ const sortedNodes = computed(() =>
 );
 
 const tagType = (rtt: number) => {
+  if (rtt === -2) return "info";
   if (rtt < 0) return "danger";
   if (rtt < 100) return "success";
   if (rtt < 300) return "warning";
   return "danger";
 };
 
+import { testLocalAll } from "@/utils/ping"
+
 const load = async () => {
   loading.value = true;
   try {
     const { data } = await getNodePing();
-    targets.value = data?.targets || [];
-    nodes.value = data?.nodes || [];
+    const ts = data?.targets || [];
+    ts.forEach((t: any) => {
+      t.rtt = t.rtt === -1 ? -1 : -2;
+    });
+    targets.value = ts;
+    
+    const ns = data?.nodes || [];
+    ns.forEach((n: any) => {
+      n.rtt = n.rtt === -1 ? -1 : -2;
+    });
+    nodes.value = ns;
+
+    triggerDashboardPings();
   } catch {
     targets.value = [];
     nodes.value = [];
   } finally {
     loading.value = false;
   }
+};
+
+const triggerDashboardPings = () => {
+  const targetsToTest = targets.value.map(t => {
+    const parts = t.addr.split(':');
+    return {
+      server: parts[0],
+      port: parseInt(parts[1]) || 443,
+      rtt: t.rtt
+    };
+  });
+  testLocalAll(targetsToTest, (index, rtt) => {
+    if (targets.value[index]) {
+      targets.value[index].rtt = rtt;
+    }
+  });
+
+  const nodesToTest = nodes.value.map(n => {
+    const parts = n.server.split(':');
+    return {
+      server: parts[0],
+      port: parseInt(parts[1]) || 443,
+      rtt: n.rtt
+    };
+  });
+  testLocalAll(nodesToTest, (index, rtt) => {
+    if (nodes.value[index]) {
+      nodes.value[index].rtt = rtt;
+    }
+  });
 };
 
 onMounted(load);
