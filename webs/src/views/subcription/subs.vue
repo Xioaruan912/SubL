@@ -1,6 +1,6 @@
 <script setup lang='ts'>
 import { ref, computed, onMounted } from 'vue'
-import { getSubs, AddSub, DelSub, UpdateSub, ResetToken, SetExpire } from "@/api/subcription/subs"
+import { getSubs, getSubPreviewNodes, AddSub, DelSub, UpdateSub, ResetToken, SetExpire } from "@/api/subcription/subs"
 import { getTemp } from "@/api/subcription/temp"
 import { getNodes, getNodeOverview, GetGroupFull } from "@/api/subcription/node"
 import QrcodeVue from 'qrcode.vue'
@@ -57,6 +57,7 @@ const templist = ref<Temp[]>([])
 
 // 抽屉
 const drawerVisible = ref(false)
+const drawerLoading = ref(false)
 const drawerSub = ref<Sub | null>(null)
 const overview = ref<OverviewItem[]>([])
 const expirePick = ref('')
@@ -280,25 +281,46 @@ const fmtTime = (s: string) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
+const previewNodesList = ref<Node[]>([])
+
 // ---- 抽屉 ----
 const openDrawer = async (sub: Sub) => {
   drawerSub.value = sub
   drawerVisible.value = true
+  drawerLoading.value = true
   expireClear.value = !sub.ExpiresAt
   expirePick.value = sub.ExpiresAt || ''
-  if (overview.value.length === 0) {
-    try {
-      const { data } = await getNodeOverview()
-      overview.value = data || []
-    } catch { /* ignore */ }
+  previewNodesList.value = []
+
+  try {
+    const [ovRes, previewRes] = await Promise.all([
+      overview.value.length === 0 ? getNodeOverview() : Promise.resolve({ data: overview.value }),
+      getSubPreviewNodes(sub.ID)
+    ])
+    if (overview.value.length === 0) overview.value = ovRes.data || []
+    previewNodesList.value = previewRes.data || []
+  } catch { /* ignore */ } finally {
+    drawerLoading.value = false
   }
 }
 
-const drawerNodes = computed(() => {
-  const sub = drawerSub.value
-  if (!sub) return []
-  const names = new Set(sub.Nodes.map(n => n.Name))
-  return overview.value.filter(o => names.has(o.name))
+// 将拉取到的所有真实节点按国家分组
+const drawerNodesByCountry = computed(() => {
+  if (!previewNodesList.value.length) return []
+  // 取所有的名字
+  const names = new Set(previewNodesList.value.map(n => n.Name))
+  
+  // 从 overview 中找到对应的数据
+  const mapped = overview.value.filter(o => names.has(o.name))
+  
+  // 按国家聚合
+  const byCountry: Record<string, OverviewItem[]> = {}
+  for (const n of mapped) {
+    const key = n.country || '未知'
+    if (!byCountry[key]) byCountry[key] = []
+    byCountry[key].push(n)
+  }
+  return Object.keys(byCountry).sort().map(c => ({ country: c, items: byCountry[c] }))
 })
 
 const drawerGroupRefs = computed(() => {
@@ -525,16 +547,26 @@ const saveExpire = async () => {
         </div>
 
         <!-- 节点状态 -->
-        <div class="section-title">节点状态（{{ drawerNodes.length }}）</div>
-        <div v-if="drawerNodes.length" class="node-list">
-          <div v-for="n in drawerNodes" :key="n.id" class="node-item">
-            <span class="node-flag">{{ countryFlag(n.countryCode) }}</span>
-            <span class="node-name">{{ n.name }}</span>
-            <span class="node-country">{{ n.country }}</span>
-            <el-tag :type="rttColor(n.rtt)" size="small" effect="light">{{ rttLabel(n.rtt) }}</el-tag>
+        <div class="section-title">包含节点详情（共 {{ previewNodesList.length }} 个）</div>
+        <div v-loading="drawerLoading" style="min-height: 100px;">
+          <div v-if="drawerNodesByCountry.length" class="country-node-groups">
+            <div v-for="g in drawerNodesByCountry" :key="g.country" class="country-group">
+              <div class="country-group-title">
+                <span class="country-group-flag">{{ countryFlag(g.items[0].countryCode) }}</span>
+                <span class="country-group-name">{{ g.country }}</span>
+                <span class="country-group-count">（{{ g.items.length }}）</span>
+              </div>
+              <div class="node-list">
+                <div v-for="n in g.items" :key="n.id" class="node-item">
+                  <span class="node-name">{{ n.name }}</span>
+                  <span class="node-country">{{ n.server }}</span>
+                  <el-tag :type="rttColor(n.rtt)" size="small" effect="light">{{ rttLabel(n.rtt) }}</el-tag>
+                </div>
+              </div>
+            </div>
           </div>
+          <el-empty v-else-if="!drawerLoading" description="该订阅暂无节点" :image-size="50" />
         </div>
-        <el-empty v-else description="该订阅暂无节点" :image-size="50" />
 
         <!-- 模板配置 -->
         <div class="section-title">模板配置</div>
@@ -639,6 +671,9 @@ html.dark .order-badge { background: var(--el-color-primary-light-3); color: #ff
 .group-checkbox:hover { background: var(--el-fill-color-light); }
 .node-pick-tools { display: flex; align-items: center; gap: 8px; width: 100%; }
 .node-pick-tools .el-select { flex: 1; }
+.country-node-groups { display: flex; flex-direction: column; gap: 16px; max-height: 400px; overflow-y: auto; padding-right: 4px; }
+.country-group-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--el-text-color-primary); }
+.country-group-count { color: var(--el-text-color-secondary); font-size: 12px; font-weight: normal; }
 .gc-name { font-size: 13px; }
 .gc-count { margin-left: 8px; font-size: 12px; color: var(--el-text-color-secondary); }
 </style>

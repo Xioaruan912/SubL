@@ -6,6 +6,14 @@ export function getSubs(){
   });
 }
 
+export function getSubPreviewNodes(id: number){
+  return request({
+    url: "/api/v1/subcription/preview-nodes",
+    method: "get",
+    params: { id },
+  });
+}
+
 export function AddSub(data: any){
   return request({
     url: "/api/v1/subcription/add",

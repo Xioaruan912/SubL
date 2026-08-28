@@ -101,6 +101,34 @@ func SubGet(c *gin.Context) {
 	})
 }
 
+// SubPreviewNodes 预览合并后的订阅节点（不记录日志、不下发配置）
+func SubPreviewNodes(c *gin.Context) {
+	idStr := c.Query("id")
+	if idStr == "" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "id 不能为空"})
+		return
+	}
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": "无效的 ID"})
+		return
+	}
+	var sub models.Subcription
+	if err := models.DB.First(&sub, id).Error; err != nil {
+		c.JSON(404, gin.H{"code": "40400", "msg": "订阅不存在"})
+		return
+	}
+	if err := mergeGroupNodes(&sub); err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "合并节点失败", "error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{
+		"code": "00000",
+		"data": sub.Nodes,
+		"msg":  "节点预览",
+	})
+}
+
 // 添加订阅
 func SubAdd(c *gin.Context) {
 	name := c.PostForm("name")
