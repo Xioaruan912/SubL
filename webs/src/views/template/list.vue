@@ -37,9 +37,16 @@ const fileSize = (text: string) => {
   return `${(bytes / 1024 / 1024).toFixed(2)}MB`
 }
 
+const loading = ref(false)
+
 async function gettemps() {
-  const { data } = await getTemp()
-  tableData.value = data
+  loading.value = true
+  try {
+    const { data } = await getTemp()
+    tableData.value = data
+  } finally {
+    loading.value = false
+  }
 }
 onMounted(gettemps)
 
@@ -100,8 +107,9 @@ const copyText = async (row: Temp) => {
       <el-button type="primary" @click="handleAddTemp">添加模板</el-button>
     </div>
 
-    <el-empty v-if="!filteredData.length" description="暂无模板，点击右上角「添加模板」" />
-    <div v-else class="card-grid">
+    <div v-loading="loading" class="tpl-loading-area">
+      <el-empty v-if="!loading && !filteredData.length" description="暂无模板，点击右上角「添加模板」" />
+      <div v-if="filteredData.length" class="card-grid">
       <el-card v-for="t in filteredData" :key="t.file" shadow="hover" class="tpl-card">
         <template #header>
           <div class="card-head">
@@ -122,6 +130,7 @@ const copyText = async (row: Temp) => {
           <el-button link type="danger" size="small" @click="handleDel(t)">删除</el-button>
         </div>
       </el-card>
+      </div>
     </div>
 
     <!-- 添加/编辑弹窗 -->
@@ -146,6 +155,7 @@ const copyText = async (row: Temp) => {
 .tpl-page { padding: 10px; }
 .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
 .toolbar .search { width: 260px; }
+.tpl-loading-area { min-height: 400px; }
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

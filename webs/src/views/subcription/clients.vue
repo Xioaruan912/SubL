@@ -59,12 +59,17 @@ const fmtTime = (t: number) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 
-const load = async () => {
+const loading = ref(false);
+
+const load = async (showLoading = false) => {
+  if (showLoading) loading.value = true;
   try {
     const { data } = await getClientList();
     items.value = data?.items || [];
     lastCheck.value = data?.lastCheck || 0;
-  } catch { /* ignore */ }
+  } catch { /* ignore */ } finally {
+    if (showLoading) loading.value = false;
+  }
 };
 
 const doCheck = async () => {
@@ -77,7 +82,7 @@ const doCheck = async () => {
 
 const poll = async () => {
   clearTimeout(timer.value);
-  await load();
+  await load(false);
   const anyBusy = items.value.some(c => c.platforms.some(p => p.status === "downloading"));
   if (anyBusy) {
     timer.value = setTimeout(poll, 3000);
@@ -117,7 +122,7 @@ const download = async (client: string, p: PlatformItem) => {
 const goRepo = (c: ClientItem) => window.open(c.type === "appstore" ? c.appStoreUrl : `https://github.com/${c.owner}/${c.repo}`);
 
 onMounted(() => {
-  load();
+  load(true);
   timer.value = setTimeout(poll, 3000);
 });
 onBeforeUnmount(() => clearTimeout(timer.value));
@@ -136,8 +141,9 @@ onBeforeUnmount(() => clearTimeout(timer.value));
       </el-button>
     </div>
 
-    <el-empty v-if="!items.length" description="暂无客户端" />
-    <div v-else class="card-grid">
+    <div v-loading="loading" class="client-loading-area">
+      <el-empty v-if="!loading && !items.length" description="暂无客户端" />
+      <div v-if="items.length" class="card-grid">
       <el-card v-for="c in items" :key="c.name" shadow="hover" class="client-card">
         <template #header>
           <div class="card-head">
@@ -181,11 +187,13 @@ onBeforeUnmount(() => clearTimeout(timer.value));
           </div>
         </div>
       </el-card>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.client-loading-area { min-height: 400px; }
 .clients-page { padding: 10px; }
 .toolbar {
   display: flex; align-items: center; justify-content: space-between;

@@ -91,9 +91,16 @@ const currentUrl = (sub: Sub) => {
   return subUrl(sub, activeClient.value[sub.ID] || 'auto')
 }
 
+const loading = ref(false)
+
 async function getsubs() {
-  const { data } = await getSubs()
-  tableData.value = data || []
+  loading.value = true
+  try {
+    const { data } = await getSubs()
+    tableData.value = data || []
+  } finally {
+    loading.value = false
+  }
 }
 async function gettemps() {
   const { data } = await getTemp()
@@ -327,8 +334,9 @@ const saveExpire = async () => {
     </div>
 
     <!-- 订阅卡片 -->
-    <el-empty v-if="!filteredSubs.length" description="暂无订阅，点击右上角「添加订阅」" />
-    <div v-else class="card-grid">
+    <div v-loading="loading" class="subs-loading-area">
+      <el-empty v-if="!loading && !filteredSubs.length" description="暂无订阅，点击右上角「添加订阅」" />
+      <div v-if="filteredSubs.length" class="card-grid">
       <el-card v-for="sub in filteredSubs" :key="sub.ID" shadow="hover" class="sub-card">
         <template #header>
           <div class="card-head">
@@ -361,6 +369,7 @@ const saveExpire = async () => {
           <el-button link type="danger" size="small" @click="handleDel(sub)">删除</el-button>
         </div>
       </el-card>
+      </div>
     </div>
 
     <!-- 二维码弹窗 -->
@@ -561,6 +570,7 @@ const saveExpire = async () => {
 .subs-page { padding: 10px; }
 .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
 .toolbar .search { width: 260px; }
+.subs-loading-area { min-height: 400px; }
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));

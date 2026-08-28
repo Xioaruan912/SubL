@@ -27,34 +27,36 @@
       </div>
 
       <!-- 测试结果 -->
-      <template v-if="result">
-        <div class="result-summary">
-          <el-tag :type="result.ok ? 'success' : 'danger'" effect="dark" size="large">
-            {{ result.ok ? "有可解锁服务" : "无可解锁服务" }}
-          </el-tag>
-        </div>
+      <div v-loading="loading" class="unlock-loading-area">
+        <template v-if="result">
+          <div class="result-summary">
+            <el-tag :type="result.ok ? 'success' : 'danger'" effect="dark" size="large">
+              {{ result.ok ? "有可解锁服务" : "无可解锁服务" }}
+            </el-tag>
+          </div>
 
-        <div v-for="group in groups" :key="group.key" class="group-section">
-          <div class="group-title">{{ group.label }}</div>
-          <div class="group-grid">
-            <div v-for="r in resultByGroup(group.key)" :key="r.key" class="unlock-item">
-              <div class="unlock-item-top">
-                <span class="status-dot" :class="r.ok ? 'ok' : 'fail'" />
-                <span class="item-name">{{ r.name }}</span>
-                <el-tag :type="r.ok ? 'success' : 'danger'" size="small" effect="light">
-                  {{ r.ok ? "解锁" : "未解锁" }}
-                </el-tag>
-              </div>
-              <div class="item-meta">
-                <span v-if="r.rtt > 0">延迟 {{ r.rtt }}ms</span>
-                <span v-if="!r.ok && r.note" class="item-note">{{ shortNote(r.note) }}</span>
+          <div v-for="group in groups" :key="group.key" class="group-section">
+            <div class="group-title">{{ group.label }}</div>
+            <div class="group-grid">
+              <div v-for="r in resultByGroup(group.key)" :key="r.key" class="unlock-item">
+                <div class="unlock-item-top">
+                  <span class="status-dot" :class="r.ok ? 'ok' : 'fail'" />
+                  <span class="item-name">{{ r.name }}</span>
+                  <el-tag :type="r.ok ? 'success' : 'danger'" size="small" effect="light">
+                    {{ r.ok ? "解锁" : "未解锁" }}
+                  </el-tag>
+                </div>
+                <div class="item-meta">
+                  <span v-if="r.rtt > 0">延迟 {{ r.rtt }}ms</span>
+                  <span v-if="!r.ok && r.note" class="item-note">{{ shortNote(r.note) }}</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </template>
+        </template>
 
-      <el-empty v-else-if="!loading" description="选择节点后点击「开始测试」" />
+        <el-empty v-else-if="!loading" description="选择节点后点击「开始测试」" />
+      </div>
     </el-card>
   </div>
 </template>
@@ -135,6 +137,7 @@ onMounted(async () => {
 </script>
 
 <style lang="scss" scoped>
+.unlock-loading-area { min-height: 300px; }
 .card-header {
   font-size: 15px;
   font-weight: 600;

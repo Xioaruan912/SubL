@@ -15,8 +15,10 @@
         </div>
       </div>
     </template>
-    <div id="nodeWorldMap" class="world-map"></div>
-    <el-empty v-if="!loading && points.length === 0" description="暂无节点" :image-size="60" />
+    <div v-loading="loading" class="map-loading-area">
+      <div id="nodeWorldMap" class="world-map"></div>
+      <el-empty v-if="!loading && points.length === 0" description="暂无节点" :image-size="60" />
+    </div>
   </el-card>
 </template>
 
@@ -200,6 +202,8 @@ onBeforeUnmount(() => {
     font-size: 16px;
   }
 }
+
+.map-loading-area { position: relative; min-height: 480px; }
 
 .world-map {
   width: 100%;

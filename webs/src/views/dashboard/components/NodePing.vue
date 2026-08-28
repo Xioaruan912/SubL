@@ -15,7 +15,7 @@
     </template>
 
     <!-- 常见目标延迟 -->
-    <div class="section">
+    <div class="section" v-loading="loading">
       <div class="section-title">常见目标延迟（VPS 出口）</div>
       <div class="target-list">
         <div v-for="t in targets" :key="t.name" class="target-item">
@@ -28,7 +28,7 @@
     </div>
 
     <!-- 节点延迟 -->
-    <div class="section">
+    <div class="section" v-loading="loading">
       <div class="section-title">
         当前节点延迟
         <span class="node-count">({{ nodes.length }} 个节点)</span>

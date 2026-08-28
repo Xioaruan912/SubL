@@ -62,13 +62,13 @@
       <!-- 左地图 + 右网格（始终渲染，页面加载即显示空地图） -->
       <el-row :gutter="16">
         <el-col :span="14" :xs="24">
-          <div class="map-card">
+          <div class="map-card" v-loading="loading">
             <div id="chinaTcpMap" class="china-map"></div>
             <el-empty v-if="!loading && mapEmpty" description="无测试数据" :image-size="50" />
           </div>
         </el-col>
         <el-col :span="10" :xs="24">
-          <el-scrollbar height="560px" class="grid-scroll">
+          <el-scrollbar height="560px" class="grid-scroll" v-loading="loading">
             <div v-for="g in provinceGroups" :key="g.province" class="province-card">
               <div class="province-title">
                 {{ g.province }}

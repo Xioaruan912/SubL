@@ -28,7 +28,7 @@
       </span>
     </div>
 
-    <el-row :gutter="12">
+    <el-row :gutter="12" v-loading="loading">
       <!-- 左地图 -->
       <el-col :span="14" :xs="24">
         <div id="chinaTcpMapDialog" class="china-map"></div>
