@@ -477,9 +477,12 @@ const saveExpire = async () => {
         </el-row>
 
         <!-- 分区三：节点与机场订阅 -->
-        <el-divider content-position="left">节点配置</el-divider>
+        <el-divider content-position="left">节点来源</el-divider>
         <div class="mb-4">
-          <el-switch v-model="isAirportUrl" active-text="从外部机场订阅导入节点" inactive-text="手动选择本地节点" />
+          <el-radio-group v-model="isAirportUrl" class="w-full" style="display: flex;">
+            <el-radio-button :value="false" style="flex: 1;" class="text-center">本地配置 (手动选择/关联分组)</el-radio-button>
+            <el-radio-button :value="true" style="flex: 1;" class="text-center">机场订阅导入</el-radio-button>
+          </el-radio-group>
         </div>
 
         <template v-if="isAirportUrl">
@@ -490,41 +493,47 @@ const saveExpire = async () => {
         </template>
         
         <template v-else>
-          <el-form-item label="选择节点">
-            <div class="node-pick-tools">
-              <el-select v-model="value1" multiple filterable collapse-tags collapse-tags-tooltip placeholder="搜索并选择节点…" class="full">
-                <el-option v-for="item in NodesList" :key="item.Name" :label="item.Name" :value="item.Name" />
-              </el-select>
-              <el-button link type="primary" size="small" @click="selectAllNodes">全选</el-button>
-              <el-button link type="danger" size="small" @click="clearAllNodes" :disabled="!value1.length">清空已选</el-button>
-            </div>
-          </el-form-item>
-          <div class="field-label">已选节点（可拖拽排序）</div>
-          <VueDraggable v-model="value1" :animation="150" ghost-class="ghost" class="order-list">
-            <div v-for="(nodeName, index) in value1" :key="nodeName" class="order-item">
-              <span class="order-badge">{{ index + 1 }}</span>
-              <span class="order-name">{{ nodeName }}</span>
-              <span class="order-drag">☰</span>
-              <el-icon class="order-remove" @click="removeNode(nodeName)"><svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M764.288 214.592 512 466.88 259.712 214.592a31.936 31.936 0 0 0-45.12 45.12L466.752 512 214.528 764.224a31.936 31.936 0 1 0 45.12 45.184L512 557.184l252.288 252.288a31.936 31.936 0 0 0 45.12-45.12L557.12 512.064l252.288-252.352a31.936 31.936 0 1 0-45.12-45.184z"/></svg></el-icon>
-            </div>
-          </VueDraggable>
-          <div v-if="!value1.length" class="order-empty">尚未选择节点，该订阅将不含节点</div>
-        </template>
+          <el-row :gutter="24">
+            <el-col :span="12">
+              <el-form-item label="选择具体节点">
+                <div class="node-pick-tools">
+                  <el-select v-model="value1" multiple filterable collapse-tags collapse-tags-tooltip placeholder="搜索并选择节点…" class="full">
+                    <el-option v-for="item in NodesList" :key="item.Name" :label="item.Name" :value="item.Name" />
+                  </el-select>
+                  <el-button link type="primary" size="small" @click="selectAllNodes">全选</el-button>
+                  <el-button link type="danger" size="small" @click="clearAllNodes" :disabled="!value1.length">清空已选</el-button>
+                </div>
+              </el-form-item>
+              <div class="field-label">已选节点（可拖拽排序）</div>
+              <VueDraggable v-model="value1" :animation="150" ghost-class="ghost" class="order-list">
+                <div v-for="(nodeName, index) in value1" :key="nodeName" class="order-item">
+                  <span class="order-badge">{{ index + 1 }}</span>
+                  <span class="order-name">{{ nodeName }}</span>
+                  <span class="order-drag">☰</span>
+                  <el-icon class="order-remove" @click="removeNode(nodeName)"><svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M764.288 214.592 512 466.88 259.712 214.592a31.936 31.936 0 0 0-45.12 45.12L466.752 512 214.528 764.224a31.936 31.936 0 1 0 45.12 45.184L512 557.184l252.288 252.288a31.936 31.936 0 0 0 45.12-45.12L557.12 512.064l252.288-252.352a31.936 31.936 0 1 0-45.12-45.184z"/></svg></el-icon>
+                </div>
+              </VueDraggable>
+              <div v-if="!value1.length" class="order-empty">尚未选择节点，该订阅将不含节点</div>
+            </el-col>
 
-        <!-- 分区四：按分组引用（机场同步自动更新） -->
-        <el-divider content-position="left">关联分组（机场同步自动更新节点）</el-divider>
-        <div class="group-pick">
-          <el-checkbox-group v-model="selectedGroups" class="group-checkbox-list">
-            <el-checkbox v-for="g in allGroups" :key="g.ID" :value="g.ID" class="group-checkbox">
-              <span class="gc-name">{{ g.Name }}</span>
-              <span class="gc-count">{{ g.NodeCount }} 节点</span>
-            </el-checkbox>
-          </el-checkbox-group>
-          <el-empty v-if="!allGroups.length" description="暂无分组，可在节点管理中添加" :image-size="40" />
-          <div v-if="selectedGroups.length" class="text-xs text-orange-500 mt-2">
-            已关联 {{ selectedGroups.length }} 个分组，订阅拉取时自动展开其全部节点（机场重新同步后自动更新）。
-          </div>
-        </div>
+            <el-col :span="12">
+              <el-form-item label="关联节点分组">
+                <div class="group-pick" style="width: 100%;">
+                  <el-checkbox-group v-model="selectedGroups" class="group-checkbox-list">
+                    <el-checkbox v-for="g in allGroups" :key="g.ID" :value="g.ID" class="group-checkbox">
+                      <span class="gc-name">{{ g.Name }}</span>
+                      <span class="gc-count">{{ g.NodeCount }} 节点</span>
+                    </el-checkbox>
+                  </el-checkbox-group>
+                  <el-empty v-if="!allGroups.length" description="暂无分组" :image-size="40" />
+                  <div v-if="selectedGroups.length" class="text-xs text-orange-500 mt-2">
+                    已关联 {{ selectedGroups.length }} 个分组，订阅拉取时自动展开其全部节点（随机场重新同步后自动更新）。
+                  </div>
+                </div>
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </template>
       </el-form>
 
       <template #footer>
@@ -646,7 +655,7 @@ const saveExpire = async () => {
 .switch-main { display: flex; align-items: center; justify-content: space-between; }
 .switch-label { font-size: 13px; font-weight: 500; }
 .switch-hint { font-size: 12px; color: var(--el-text-color-secondary); }
-.order-list { display: flex; flex-direction: column; gap: 6px; }
+.order-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; padding-right: 4px; }
 .order-item {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 12px; background: var(--el-fill-color-light);
@@ -666,7 +675,7 @@ html.dark .order-badge { background: var(--el-color-primary-light-3); color: #ff
 .order-remove:hover { color: var(--el-color-danger); }
 .order-empty { padding: 14px 0; text-align: center; font-size: 12px; color: var(--el-text-color-placeholder); }
 .ghost { opacity: 0.5; background: var(--el-color-primary-light-8); }
-.group-checkbox-list { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+.group-checkbox-list { display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow-y: auto; padding-right: 4px; }
 .group-checkbox { margin-right: 0; width: 100%; padding: 4px 8px; border-radius: 6px; }
 .group-checkbox:hover { background: var(--el-fill-color-light); }
 .node-pick-tools { display: flex; align-items: center; gap: 8px; width: 100%; }

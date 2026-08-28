@@ -320,10 +320,25 @@ const submitForm = async () => {
 }
 
 const handleDel = (row: any) => {
-  ElMessageBox.confirm(`确定删除机场 [${row.Name}] 吗？`, '提示', { type: 'warning' }).then(async () => {
-    await DelAirport({ id: row.ID })
-    ElMessage.success('删除成功')
+  ElMessageBox.confirm(
+    `确定删除机场 [${row.Name}] 吗？\n是否同时删除该机场所属的所有节点？`,
+    '确认删除',
+    {
+      distinguishCancelAndClose: true,
+      confirmButtonText: '删除机场和节点',
+      cancelButtonText: '仅删除机场',
+      type: 'warning'
+    }
+  ).then(async () => {
+    await DelAirport({ id: row.ID, delete_nodes: true })
+    ElMessage.success('机场及所属节点已删除')
     loadData()
+  }).catch(async (action) => {
+    if (action === 'cancel') {
+      await DelAirport({ id: row.ID, delete_nodes: false })
+      ElMessage.success('仅删除机场成功，节点已保留')
+      loadData()
+    }
   })
 }
 

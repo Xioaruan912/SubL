@@ -80,6 +80,7 @@ func AirportUpdate(c *gin.Context) {
 // 删除机场
 func AirportDelete(c *gin.Context) {
 	idStr := c.Query("id")
+	deleteNodes := c.Query("delete_nodes") == "true"
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		c.JSON(400, gin.H{"msg": "无效的ID"})
@@ -92,7 +93,13 @@ func AirportDelete(c *gin.Context) {
 	}
 	// 删除机场前，自动解除所有订阅对该机场同名分组的引用
 	var gn models.GroupNode
-	if err := models.DB.Where("name = ?", a.Name).First(&gn).Error; err == nil && gn.ID != 0 {
+	if err := models.DB.Where("name = ?", a.Name).Preload("Nodes").First(&gn).Error; err == nil && gn.ID != 0 {
+		if deleteNodes {
+			for _, n := range gn.Nodes {
+				_ = n.Del()
+			}
+		}
+
 		var subs []models.Subcription
 		models.DB.Preload("GroupRefs").Find(&subs)
 		for i := range subs {
@@ -120,6 +127,9 @@ func AirportDelete(c *gin.Context) {
 			_ = models.DB.Delete(&gn).Error
 		}
 	}
+	
+	InvalidateOverview() // 刷新缓存
+
 	c.JSON(200, gin.H{"code": "00000", "msg": "删除成功"})
 }
 
