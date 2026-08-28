@@ -45,10 +45,34 @@ func mergeGroupNodes(sub *models.Subcription) error {
 		seen[n.Name] = true
 		merged = append(merged, n)
 	}
+
+	// 提前查出所有配置了勾选节点的机场，按名称构建快速过滤表
+	var apList []models.Airport
+	models.DB.Where("selected_nodes != ?", "").Find(&apList)
+	apMap := make(map[string]map[string]bool)
+	for _, ap := range apList {
+		set := make(map[string]bool)
+		for _, s := range strings.Split(ap.SelectedNodes, ",") {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				set[s] = true
+			}
+		}
+		apMap[ap.Name] = set
+	}
+
 	// 追加各分组当前节点
 	for _, g := range withRefs.GroupRefs {
+		groupFilter, hasFilter := apMap[g.Name]
 		for _, n := range g.Nodes {
-			if n.Name == "" || seen[n.Name] {
+			if n.Name == "" {
+				continue
+			}
+			// 如果该分组对应的机场有勾选设置，且该节点不在勾选中，则跳过
+			if hasFilter && !groupFilter[n.Name] {
+				continue
+			}
+			if seen[n.Name] {
 				continue
 			}
 			seen[n.Name] = true
@@ -56,18 +80,11 @@ func mergeGroupNodes(sub *models.Subcription) error {
 		}
 	}
 
-	// 订阅名匹配机场且机场勾选了节点时，统一按勾选过滤（覆盖手动 Nodes 与分组节点）
-	var ap models.Airport
-	if err := models.DB.Where("name = ?", sub.Name).First(&ap).Error; err == nil && ap.SelectedNodes != "" {
-		selectedSet := map[string]bool{}
-		for _, s := range strings.Split(ap.SelectedNodes, ",") {
-			if s = strings.TrimSpace(s); s != "" {
-				selectedSet[s] = true
-			}
-		}
+	// 兜底兼容：订阅名匹配某个配置了勾选节点的机场时，统一按勾选再过滤一次（覆盖手动 Nodes）
+	if subFilter, hasFilter := apMap[sub.Name]; hasFilter {
 		filtered := merged[:0]
 		for _, n := range merged {
-			if selectedSet[n.Name] {
+			if subFilter[n.Name] {
 				filtered = append(filtered, n)
 			}
 		}
