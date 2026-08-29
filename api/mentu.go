@@ -137,7 +137,7 @@ func GetMenus(c *gin.Context) {
 					Component: "test/egress",
 					Name:      "EgressTest",
 					Meta: Meta{
-						Title:     "本机分流检测",
+						Title:     "分流检测",
 						Icon:      "connection",
 						Hidden:    false,
 						Roles:     []string{"ADMIN"},
