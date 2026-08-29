@@ -3,6 +3,8 @@
     :model-value="visible"
     title="测试状态"
     width="400px"
+    append-to-body
+    destroy-on-close
     :close-on-click-modal="false"
     @update:model-value="(v: boolean) => emit('update:visible', v)"
   >
