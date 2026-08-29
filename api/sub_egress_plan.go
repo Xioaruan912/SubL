@@ -178,7 +178,10 @@ func choosePlanNode(nodes []models.Node, expected string, stats map[int]models.N
 	filtered := make([]planNode, 0, len(nodes))
 	for _, n := range nodes {
 		host, _ := node.ExtractServerHost(n.Link)
-		cc := strings.ToUpper(node.LookupCountry(host))
+		cc := countryFromText(n.Name)
+		if cc == "" {
+			cc = strings.ToUpper(node.LookupCountry(host))
+		}
 		st := stats[n.ID]
 		item := planNode{ID: n.ID, Name: n.Name, CountryCode: cc, Score: st.Score, AverageRtt: st.AverageRtt, Link: n.Link}
 		all = append(all, item)
@@ -230,9 +233,6 @@ func SubscriptionEgressPlan(c *gin.Context) {
 		if rule, ok := ruleForDomain(rules, target.domain); ok {
 			item.MatchedRule, item.Policy = rule.Raw, rule.Policy
 			item.ExpectedCountry = countryFromText(rule.Policy)
-			if item.ExpectedCountry == "" {
-				item.ExpectedCountry = policyFilterCountry(content, rule.Policy)
-			}
 		}
 		if item.ExpectedCountry == "" && (target.key == "gemini") {
 			item.ExpectedCountry = "JP"
