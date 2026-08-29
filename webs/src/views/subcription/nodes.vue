@@ -430,7 +430,7 @@ onMounted(loadAll)
                   <div class="node-card-actions flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                     <el-button link type="primary" size="small" @click="openQuality(n)">质量</el-button>
                     <el-button link type="primary" size="small" @click="openUnlock(n)">解锁</el-button>
-                    <el-button link type="success" size="small" @click="openTcp(n)">TCP</el-button>
+                    <el-button link type="success" size="small" @click="openTcp(n)">链路TCP</el-button>
                     <el-button link type="primary" size="small" @click="handleEditNode(n)">编辑</el-button>
                     <el-button link type="primary" size="small" @click="copyInfo(n)">复制</el-button>
                     <el-button link type="danger" size="small" @click="handleDel(n)">删除</el-button>

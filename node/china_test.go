@@ -1,6 +1,18 @@
 package node
 
-import "testing"
+import (
+	"context"
+	"net"
+	"testing"
+	"time"
+)
+
+type blockingContextDialer struct{}
+
+func (blockingContextDialer) DialContext(ctx context.Context, _, _ string) (net.Conn, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
 
 func TestChinaTargetsCount(t *testing.T) {
 	if len(chinaTargets) == 0 {
@@ -28,6 +40,18 @@ func TestChinaTargetsCount(t *testing.T) {
 		provs[d.Province] = true
 	}
 	t.Logf("覆盖省份数: %d", len(provs))
+}
+
+func TestTCPPingViaHonorsContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	started := time.Now()
+	if got := tcpPingVia(ctx, blockingContextDialer{}, "127.0.0.1:1", time.Second); got != -1 {
+		t.Fatalf("取消后的结果 = %d，期望 -1", got)
+	}
+	if elapsed := time.Since(started); elapsed > 100*time.Millisecond {
+		t.Fatalf("取消未及时生效，耗时 %v", elapsed)
+	}
 }
 
 func TestFilterChinaTargets(t *testing.T) {

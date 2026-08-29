@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     :model-value="visible"
-    :title="'TCP 测试 · ' + nodeName"
+    :title="'代理链路 TCP · ' + nodeName"
     width="85%"
     top="5vh"
     :close-on-click-modal="false"
@@ -17,6 +17,7 @@
         <el-option label="zstaticcdn 443" value="443" />
         <el-option label="zstaticcdn 80" value="80" />
       </el-select>
+      <span class="method-hint">VPS → 节点 → 国内目标 · 双样本均值</span>
     </div>
 
     <!-- 图例 -->
@@ -327,6 +328,7 @@ watch(() => props.nodeId, () => { if (props.visible) onOpen(); });
 <style scoped>
 .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
 .toolbar .zstatic { width: 160px; }
+.method-hint { color: var(--el-text-color-secondary); font-size: 12px; }
 .legend {
   display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
   margin-bottom: 12px; font-size: 12px; color: var(--el-text-color-secondary);

@@ -73,18 +73,23 @@ func RunChinaPing(ctx context.Context, cfg UnlockTestConfig, provinces, isps []s
 
 	// socks5 代理 dialer
 	socksAddr := "127.0.0.1:" + strconv.Itoa(socksPort)
-	dialer, err := proxy.SOCKS5("tcp", socksAddr, nil, proxy.Direct)
+	baseDialer := &net.Dialer{Timeout: timeout}
+	dialer, err := proxy.SOCKS5("tcp", socksAddr, nil, baseDialer)
 	if err != nil {
 		return nil, fmt.Errorf("创建 socks dialer 失败: %v", err)
 	}
+	contextDialer, ok := dialer.(proxy.ContextDialer)
+	if !ok {
+		return nil, fmt.Errorf("socks dialer 不支持上下文取消")
+	}
 
 	// 过滤目标
-	targets := FilterChinaTargets(provinces, isps)
+	targets := compactChinaTargets(FilterChinaTargets(provinces, isps))
 
 	result := &ChinaPingResult{NodeName: nodeName, Targets: make([]ChinaPingTarget, 0, len(targets))}
 
-	// 并发 TCP ping 中国目标（限并发 12）
-	sem := make(chan struct{}, 12)
+	// 每省/运营商取一个稳定代表点，全局并发并做双样本，兼顾速度与抗抖动。
+	sem := make(chan struct{}, 24)
 	var wg sync.WaitGroup
 	results := make([]ChinaPingTarget, len(targets))
 	for i, t := range targets {
@@ -93,7 +98,7 @@ func RunChinaPing(ctx context.Context, cfg UnlockTestConfig, provinces, isps []s
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			rtt := tcpPingVia(dialer, net.JoinHostPort(t.IP, strconv.Itoa(t.Port)), timeout)
+			rtt := tcpPingStableVia(ctx, contextDialer, net.JoinHostPort(t.IP, strconv.Itoa(t.Port)), timeout)
 			results[i] = ChinaPingTarget{
 				Province: t.Province, City: t.City, ISP: t.ISP,
 				Lat: t.Lat, Lng: t.Lng, IP: t.IP, Port: t.Port, Rtt: rtt,
@@ -115,7 +120,7 @@ func RunChinaPing(ctx context.Context, cfg UnlockTestConfig, provinces, isps []s
 		zstaticPorts = []int{443}
 	}
 	for _, p := range zstaticPorts {
-		rtt := tcpPingVia(dialer, net.JoinHostPort(zstaticcdnHost, strconv.Itoa(p)), timeout)
+		rtt := tcpPingStableVia(ctx, contextDialer, net.JoinHostPort(zstaticcdnHost, strconv.Itoa(p)), timeout)
 		result.ZStatic = append(result.ZStatic, ZStaticResult{Port: p, Rtt: rtt})
 	}
 
@@ -161,12 +166,17 @@ func RunChinaPingStream(ctx context.Context, cfg UnlockTestConfig, provinces, is
 	defer instance.Close()
 
 	socksAddr := "127.0.0.1:" + strconv.Itoa(socksPort)
-	dialer, err := proxy.SOCKS5("tcp", socksAddr, nil, proxy.Direct)
+	baseDialer := &net.Dialer{Timeout: timeout}
+	dialer, err := proxy.SOCKS5("tcp", socksAddr, nil, baseDialer)
 	if err != nil {
 		return nil, fmt.Errorf("创建 socks dialer 失败: %v", err)
 	}
+	contextDialer, ok := dialer.(proxy.ContextDialer)
+	if !ok {
+		return nil, fmt.Errorf("socks dialer 不支持上下文取消")
+	}
 
-	targets := FilterChinaTargets(provinces, isps)
+	targets := compactChinaTargets(FilterChinaTargets(provinces, isps))
 	result := &ChinaPingResult{NodeName: nodeName, Targets: make([]ChinaPingTarget, 0, len(targets))}
 
 	// 按省分组
@@ -179,44 +189,48 @@ func RunChinaPingStream(ctx context.Context, cfg UnlockTestConfig, provinces, is
 		provMap[t.Province] = append(provMap[t.Province], t)
 	}
 
-	// 逐省处理（每省内并发，限并发 12）
-	sem := make(chan struct{}, 12)
+	// 所有省份同时进入全局工作池，完成一个省就推送一个省，避免旧实现逐省串行等待。
+	type provinceResult struct {
+		name    string
+		targets []ChinaPingTarget
+	}
+	done := make(chan provinceResult, len(provOrder))
+	sem := make(chan struct{}, 24)
 	for _, prov := range provOrder {
-		// 客户端断开则提前返回，释放锁
+		go func(prov string, provTargets []ChinaTarget) {
+			results := make([]ChinaPingTarget, len(provTargets))
+			var wg sync.WaitGroup
+			for i, t := range provTargets {
+				wg.Add(1)
+				go func(i int, t ChinaTarget) {
+					defer wg.Done()
+					select {
+					case sem <- struct{}{}:
+					case <-ctx.Done():
+						return
+					}
+					defer func() { <-sem }()
+					rtt := tcpPingStableVia(ctx, contextDialer, net.JoinHostPort(t.IP, strconv.Itoa(t.Port)), timeout)
+					results[i] = ChinaPingTarget{Province: t.Province, City: t.City, ISP: t.ISP, Lat: t.Lat, Lng: t.Lng, IP: t.IP, Port: t.Port, Rtt: rtt}
+				}(i, t)
+			}
+			wg.Wait()
+			select {
+			case done <- provinceResult{prov, results}:
+			case <-ctx.Done():
+			}
+		}(prov, provMap[prov])
+	}
+	for range provOrder {
 		select {
+		case completed := <-done:
+			if onProvince != nil {
+				onProvince(completed.name, completed.targets)
+			}
+			result.Targets = append(result.Targets, completed.targets...)
 		case <-ctx.Done():
 			return result, nil
-		default:
 		}
-		provTargets := provMap[prov]
-		results := make([]ChinaPingTarget, len(provTargets))
-		var wg sync.WaitGroup
-		for i, t := range provTargets {
-			wg.Add(1)
-			go func(i int, t ChinaTarget) {
-				defer wg.Done()
-				sem <- struct{}{}
-				defer func() { <-sem }()
-				rtt := tcpPingVia(dialer, net.JoinHostPort(t.IP, strconv.Itoa(t.Port)), timeout)
-				results[i] = ChinaPingTarget{
-					Province: t.Province, City: t.City, ISP: t.ISP,
-					Lat: t.Lat, Lng: t.Lng, IP: t.IP, Port: t.Port, Rtt: rtt,
-				}
-			}(i, t)
-		}
-		// 等待本省全部目标测完；ctx 取消（停止/右上角停止）时立即返回释放锁
-		waitCh := make(chan struct{})
-		go func() { wg.Wait(); close(waitCh) }()
-		select {
-		case <-waitCh:
-		case <-ctx.Done():
-			return result, nil
-		}
-		// 立即回调推送该省结果
-		if onProvince != nil {
-			onProvince(prov, results)
-		}
-		result.Targets = append(result.Targets, results...)
 	}
 
 	// zstaticcdn 延迟
@@ -224,34 +238,57 @@ func RunChinaPingStream(ctx context.Context, cfg UnlockTestConfig, provinces, is
 		zstaticPorts = []int{443}
 	}
 	for _, p := range zstaticPorts {
-		rtt := tcpPingVia(dialer, net.JoinHostPort(zstaticcdnHost, strconv.Itoa(p)), timeout)
+		rtt := tcpPingStableVia(ctx, contextDialer, net.JoinHostPort(zstaticcdnHost, strconv.Itoa(p)), timeout)
 		result.ZStatic = append(result.ZStatic, ZStaticResult{Port: p, Rtt: rtt})
 	}
 
 	return result, nil
 }
 
-// tcpPingVia 通过 socks dialer 做 TCP connect 计时，返回毫秒；失败/超时返回 -1。
-func tcpPingVia(dialer proxy.Dialer, addr string, timeout time.Duration) int {
-	done := make(chan int, 1)
-	go func() {
-		start := time.Now()
-		conn, err := dialer.Dial("tcp", addr)
-		if err != nil {
-			done <- -1
-			return
-		}
-		conn.Close()
-		ms := time.Since(start).Milliseconds()
-		if ms < 1 {
-			ms = 1
-		}
-		done <- int(ms)
-	}()
-	select {
-	case rtt := <-done:
-		return rtt
-	case <-time.After(timeout):
-		return -1 // 超时视为不可达
+// tcpPingVia 使用真正的 DialContext，停止测试时不会遗留后台拨号 goroutine。
+func tcpPingVia(ctx context.Context, dialer proxy.ContextDialer, addr string, timeout time.Duration) int {
+	dialCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	start := time.Now()
+	conn, err := dialer.DialContext(dialCtx, "tcp", addr)
+	if err != nil {
+		return -1
 	}
+	conn.Close()
+	return max(1, int(time.Since(start).Milliseconds()))
+}
+
+// tcpPingStableVia 取两次成功握手的平均值；一次偶发失败不会把可用节点误判为不可达。
+func tcpPingStableVia(ctx context.Context, dialer proxy.ContextDialer, addr string, timeout time.Duration) int {
+	values := make([]int, 0, 2)
+	for i := 0; i < 2; i++ {
+		if rtt := tcpPingVia(ctx, dialer, addr, timeout); rtt >= 0 {
+			values = append(values, rtt)
+		}
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	if len(values) == 0 {
+		return -1
+	}
+	if len(values) == 1 {
+		return values[0]
+	}
+	return (values[0] + values[1]) / 2
+}
+
+// compactChinaTargets 保留每省每运营商一个代表端点，避免同一网络重复探测大量城市。
+func compactChinaTargets(targets []ChinaTarget) []ChinaTarget {
+	seen := make(map[string]struct{}, len(targets))
+	result := make([]ChinaTarget, 0, len(targets))
+	for _, target := range targets {
+		key := target.Province + "|" + target.ISP
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, target)
+	}
+	return result
 }

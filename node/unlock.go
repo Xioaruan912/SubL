@@ -39,10 +39,10 @@ type UnlockCheckResult struct {
 
 // UnlockResult 节点解锁测试总结果
 type UnlockResult struct {
-	NodeName string               `json:"nodeName"`
-	Ok       bool                 `json:"ok"`
-	Results  []UnlockCheckResult  `json:"results"`
-	Error    string               `json:"error,omitempty"`
+	NodeName string              `json:"nodeName"`
+	Ok       bool                `json:"ok"`
+	Results  []UnlockCheckResult `json:"results"`
+	Error    string              `json:"error,omitempty"`
 }
 
 // 常见解锁检测目标（走节点访问，每个服务定制判定逻辑）
@@ -140,8 +140,13 @@ func RunUnlockTest(ctx context.Context, cfg UnlockTestConfig) (*UnlockResult, er
 		DialContext: (&net.Dialer{
 			Timeout: timeout,
 		}).DialContext,
-		TLSHandshakeTimeout: timeout,
+		TLSHandshakeTimeout:   timeout,
+		ResponseHeaderTimeout: timeout,
+		MaxIdleConns:          16,
+		MaxIdleConnsPerHost:   4,
+		ForceAttemptHTTP2:     true,
 	}
+	defer transport.CloseIdleConnections()
 	client := &http.Client{
 		Transport: transport,
 		Timeout:   timeout,
@@ -150,7 +155,7 @@ func RunUnlockTest(ctx context.Context, cfg UnlockTestConfig) (*UnlockResult, er
 	// 是否过滤到指定服务（如仅测 Gemini）
 	targets := unlockServices
 	if cfg.ServiceFilter != "" {
-		filtered := targets[:0]
+		filtered := make([]UnlockService, 0, 1)
 		for _, s := range targets {
 			if s.Key == cfg.ServiceFilter {
 				filtered = append(filtered, s)
@@ -159,25 +164,38 @@ func RunUnlockTest(ctx context.Context, cfg UnlockTestConfig) (*UnlockResult, er
 		targets = filtered
 	}
 
-	result := &UnlockResult{NodeName: nodeName, Results: make([]UnlockCheckResult, 0, len(targets))}
-	for _, svc := range targets {
-		// 客户端断开则提前返回，释放锁
-		select {
-		case <-ctx.Done():
-			return result, nil
-		default:
-		}
-		start := time.Now()
-		ok, note := svc.Check(ctx, client)
-		rtt := int(time.Since(start).Milliseconds())
-		if rtt < 1 {
-			rtt = 1
-		}
-		result.Results = append(result.Results, UnlockCheckResult{
-			Key: svc.Key, Name: svc.Name, Group: svc.Group,
-			Ok: ok, Rtt: rtt, Note: note,
-		})
-		if ok {
+	// 服务检测互不依赖。受控并发能把最坏耗时从 N×timeout 降到约 ceil(N/4)×timeout，
+	// 同时避免一次性向较弱节点发起过多连接。
+	result := &UnlockResult{NodeName: nodeName, Results: make([]UnlockCheckResult, len(targets))}
+	sem := make(chan struct{}, 4)
+	var wg sync.WaitGroup
+	for i, svc := range targets {
+		wg.Add(1)
+		go func(i int, svc UnlockService) {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
+			defer func() { <-sem }()
+			checkCtx, checkCancel := context.WithTimeout(ctx, timeout)
+			defer checkCancel()
+			start := time.Now()
+			ok, note := svc.Check(checkCtx, client)
+			rtt := max(1, int(time.Since(start).Milliseconds()))
+			result.Results[i] = UnlockCheckResult{Key: svc.Key, Name: svc.Name, Group: svc.Group, Ok: ok, Rtt: rtt, Note: note}
+		}(i, svc)
+	}
+	waitCh := make(chan struct{})
+	go func() { wg.Wait(); close(waitCh) }()
+	select {
+	case <-waitCh:
+	case <-ctx.Done():
+		<-waitCh
+	}
+	for _, check := range result.Results {
+		if check.Ok {
 			result.Ok = true
 		}
 	}

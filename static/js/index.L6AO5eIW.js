@@ -1,0 +1,1 @@
+import{j as a,aB as e,aC as s,l as r,m as t}from"./index.CFUqJOBi.js";const p=a({__name:"index",setup(a){const p=e(),n=s(),{params:m,query:o}=p,{path:u}=m;return n.replace({path:"/"+u,query:o}),(a,e)=>(r(),t("div"))}});export{p as default};

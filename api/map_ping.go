@@ -1,13 +1,12 @@
 package api
 
 import (
-	"context"
+	"ppeelink/models"
+	"ppeelink/node"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"ppeelink/models"
-	"ppeelink/node"
 
 	"github.com/gin-gonic/gin"
 )
@@ -230,9 +229,10 @@ func NodeUnlock(c *gin.Context) {
 		return
 	}
 
-	// 缓存（60s）
+	// 缓存（60s）；单项测试与完整测试必须隔离，避免互相污染结果。
+	cacheKey := link + "|" + service
 	uCache.mu.Lock()
-	if e, ok := uCache.entries[link]; ok && time.Now().Before(e.expires) {
+	if e, ok := uCache.entries[cacheKey]; ok && time.Now().Before(e.expires) {
 		uCache.mu.Unlock()
 		c.JSON(200, gin.H{"code": "00000", "data": e.result, "msg": "解锁测试（缓存）"})
 		return
@@ -240,7 +240,7 @@ func NodeUnlock(c *gin.Context) {
 	uCache.mu.Unlock()
 
 	// 开始测试会话（可取消 ctx + 记录节点状态）
-	ctx, cancel, ok := node.BeginTest(nodeName, nodeID, "unlock", context.Background())
+	ctx, cancel, ok := node.BeginTest(nodeName, nodeID, "unlock", c.Request.Context())
 	if !ok {
 		cur := node.GetTestStatus()
 		if cur != nil {
@@ -253,14 +253,14 @@ func NodeUnlock(c *gin.Context) {
 	defer node.EndTest()
 	_ = cancel
 
-	result, err := node.RunUnlockTest(ctx, node.UnlockTestConfig{Link: link, Timeout: 8 * time.Second, ServiceFilter: service})
+	result, err := node.RunUnlockTest(ctx, node.UnlockTestConfig{Link: link, Timeout: 6 * time.Second, ServiceFilter: service})
 	if err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "解锁测试失败: " + err.Error()})
 		return
 	}
 
 	uCache.mu.Lock()
-	uCache.entries[link] = &unlockCacheEntry{result: result, expires: time.Now().Add(60 * time.Second)}
+	uCache.entries[cacheKey] = &unlockCacheEntry{result: result, expires: time.Now().Add(60 * time.Second)}
 	uCache.mu.Unlock()
 
 	c.JSON(200, gin.H{"code": "00000", "data": result, "msg": "解锁测试完成"})
@@ -346,7 +346,7 @@ func NodeChinaPing(c *gin.Context) {
 	}
 	cCache.mu.Unlock()
 
-	ctx, cancel, ok := node.BeginTest(nodeName, nodeID, "tcp", context.Background())
+	ctx, cancel, ok := node.BeginTest(nodeName, nodeID, "tcp", c.Request.Context())
 	if !ok {
 		cur := node.GetTestStatus()
 		if cur != nil {
@@ -360,7 +360,7 @@ func NodeChinaPing(c *gin.Context) {
 	_ = cancel
 	_ = ctx
 
-	result, err := node.RunChinaPing(ctx, node.UnlockTestConfig{Link: link, Timeout: 5 * time.Second}, provinces, isps, zstaticPorts)
+	result, err := node.RunChinaPing(ctx, node.UnlockTestConfig{Link: link, Timeout: 3 * time.Second}, provinces, isps, zstaticPorts)
 	if err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "中国延迟测试失败: " + err.Error()})
 		return
@@ -429,7 +429,7 @@ func NodeChinaPingStream(c *gin.Context) {
 		}
 	}
 
-	ctx, cancel, ok := node.BeginTest(nodeName, nodeID, "tcp", context.Background())
+	ctx, cancel, ok := node.BeginTest(nodeName, nodeID, "tcp", c.Request.Context())
 	if !ok {
 		cur := node.GetTestStatus()
 		if cur != nil {
@@ -454,7 +454,7 @@ func NodeChinaPingStream(c *gin.Context) {
 		c.Writer.Flush()
 	}
 
-	result, err := node.RunChinaPingStream(ctx, node.UnlockTestConfig{Link: link, Timeout: 5 * time.Second}, provinces, isps, zstaticPorts, onProvince)
+	result, err := node.RunChinaPingStream(ctx, node.UnlockTestConfig{Link: link, Timeout: 3 * time.Second}, provinces, isps, zstaticPorts, onProvince)
 	if err != nil {
 		c.SSEvent("error", gin.H{"msg": err.Error()})
 		c.Writer.Flush()
