@@ -152,7 +152,17 @@ func policyFilterCountry(content, policy string) string {
 			continue
 		}
 		if strings.EqualFold(fmt.Sprint(group["name"]), policy) {
-			return countryFromText(fmt.Sprint(group["filter"]))
+			filter := strings.ToUpper(fmt.Sprint(group["filter"]))
+			codes := []string{}
+			for _, code := range []string{"JP", "US", "SG", "HK", "TW", "GB"} {
+				if strings.Contains(filter, code) {
+					codes = append(codes, code)
+				}
+			}
+			if len(codes) == 1 {
+				return codes[0]
+			}
+			return ""
 		}
 	}
 	return ""
@@ -233,12 +243,9 @@ func SubscriptionEgressPlan(c *gin.Context) {
 		if rule, ok := ruleForDomain(rules, target.domain); ok {
 			item.MatchedRule, item.Policy = rule.Raw, rule.Policy
 			item.ExpectedCountry = countryFromText(rule.Policy)
-		}
-		if item.ExpectedCountry == "" && (target.key == "gemini") {
-			item.ExpectedCountry = "JP"
-		}
-		if item.ExpectedCountry == "" && (target.key == "chatgpt" || target.key == "openai") {
-			item.ExpectedCountry = "US"
+			if item.ExpectedCountry == "" {
+				item.ExpectedCountry = policyFilterCountry(content, rule.Policy)
+			}
 		}
 		if len(rules) == 0 {
 			item.MatchedRule = "未读取模板，未应用模板规则"
