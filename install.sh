@@ -13,9 +13,9 @@ if [ "$(id -u)" != "0" ]; then
 fi
 
 # 检查必要工具
-for cmd in git go curl; do
+for cmd in git go curl node corepack; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
-        echo "缺少依赖: $cmd，请先安装 (Debian/Ubuntu: apt install -y git golang curl)"
+        echo "缺少依赖: $cmd。请先安装 Git、Go 1.25+、Node.js 20+（含 corepack）与 curl。"
         exit 1
     fi
 done
@@ -30,9 +30,17 @@ echo "==> 克隆源码 ${REPO} ..."
 git clone --depth 1 "$REPO_URL" "$TMP_DIR/ppeelink"
 cd "$TMP_DIR/ppeelink"
 
-# 编译（带 with_utls with_quic 标签，支持 reality 与 hysteria2 解锁测试）
-echo "==> 编译二进制（with_utls with_quic）..."
-go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink main.go
+# 构建前端（Go 二进制会嵌入 webs/dist）
+echo "==> 构建前端..."
+corepack enable >/dev/null 2>&1 || true
+cd webs
+pnpm install --frozen-lockfile
+pnpm build
+cd ..
+
+# 编译后端（带 with_utls / with_quic 标签）
+echo "==> 编译后端（with_utls with_quic）..."
+go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink .
 
 # 安装二进制
 chmod +x ppeelink

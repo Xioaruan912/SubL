@@ -207,6 +207,18 @@ func GetMenus(c *gin.Context) {
 						KeepAlive: true,
 					},
 				},
+				{
+					Path:      "rules",
+					Component: "template/rules-stable",
+					Name:      "RuleCenter",
+					Meta: Meta{
+						Title:     "rulecenter",
+						Icon:      "table",
+						Hidden:    false,
+						Roles:     []string{"ADMIN"},
+						KeepAlive: true,
+					},
+				},
 			},
 		},
 	}

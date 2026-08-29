@@ -1,12 +1,33 @@
 .DS_Store
 *.DS_Store
-db
-logs
-webs
-README.md
-README.en-US.md
-*.sh
-sublink_amd64 
-sublink_arm64
-sublink.exe
-install.sh
+.git
+.github
+
+# Runtime data / secrets
+db/
+logs/
+downloads/
+AGENTS.md
+AGENTS.txt
+.prod-ssh-pass
+.env
+.env.*
+
+# Local/build artifacts
+ppeelink
+ppeelink_*
+sublink_*
+*.exe
+webs/node_modules/
+webs/dist/
+coverage/
+*.log
+
+# Internal notes / demos
+GPTTODO.md
+new_todo.md
+DEVNOTES.md
+rule-center-demo.html
+webs/src/views/template/rules-demo.vue
+webs/src/views/template/rules-safe-test.txt
+webs/src/views/template/rules.vue

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"log"
 	"ppeelink/api"
 	"ppeelink/models"
+	"ppeelink/rulecenter"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -24,6 +26,18 @@ func StartCronTasks() {
 		log.Println("[Cron] 添加定时任务失败:", err)
 		return
 	}
+	_, err = c.AddFunc("0 30 3 * * *", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		if err := rulecenter.SyncAll(ctx); err != nil {
+			log.Println("[Cron] 规则中心同步失败:", err)
+		}
+	})
+	if err != nil {
+		log.Println("[Cron] 添加规则中心同步任务失败:", err)
+		return
+	}
+
 	_, err = c.AddFunc("0 */10 * * * *", func() {
 		if _, err := api.CollectNodeQuality(); err != nil {
 			log.Println("[Cron] 节点质量检测失败:", err)
@@ -35,5 +49,12 @@ func StartCronTasks() {
 	}
 
 	c.Start()
-	log.Println("[Cron] 机场每日同步与节点每10分钟质量检测已启动")
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		if err := rulecenter.SyncAll(ctx); err != nil {
+			log.Println("[RuleCenter] 启动同步失败，保留现有缓存:", err)
+		}
+	}()
+	log.Println("[Cron] 机场每日同步、规则中心每日同步与节点每10分钟质量检测已启动")
 }

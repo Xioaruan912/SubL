@@ -152,6 +152,7 @@
                   <el-button link type="danger" @click="removeRP(i)"><i-ep-delete /></el-button>
                 </div>
                 <el-button type="primary" plain size="small" @click="addRP">+ 添加规则集</el-button>
+                <el-button type="success" plain size="small" @click="router.push('/template/rules')">从规则中心添加</el-button>
               </div>
             </el-form-item>
 
@@ -326,6 +327,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed } from "vue";
+import { useRouter } from "vue-router";
 import { BuildClashTemplate, GetDefaultTemplate } from "@/api/template/build";
 import { getTemp } from "@/api/template/temp";
 
@@ -357,6 +359,7 @@ const templateSource = ref("default");
 const templateFiles = ref<any[]>([]);
 const editingOldname = ref("");
 const target = ref("clash"); // clash / loon
+const router = useRouter();
 
 // Loon 表单默认值（基础配置）
 const defaultGeneral = () => ({

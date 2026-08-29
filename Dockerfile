@@ -1,21 +1,26 @@
-# Build stage
-FROM golang:1.22.2-alpine AS builder
+FROM node:22-alpine AS frontend
+WORKDIR /app/webs
+RUN corepack enable
+COPY webs/package.json webs/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY webs/ ./
+RUN pnpm build
+
+FROM golang:1.25-alpine AS builder
 WORKDIR /app
-COPY . .
+RUN apk add --no-cache git ca-certificates
+COPY go.mod go.sum ./
 RUN go mod download
-RUN go build -o ppeelink
+COPY . .
+COPY --from=frontend /app/webs/dist ./webs/dist
+RUN go build -tags "with_utls with_quic" -ldflags="-w -s" -o /out/ppeelink .
 
-# Final stage
-FROM alpine:latest
+FROM alpine:3.22
 WORKDIR /app
-
-# 设置时区为 Asia/Shanghai
 ENV TZ=Asia/Shanghai
-
-# 部分环境需要手动创建目录
-RUN mkdir -p /app/db /app/logs /app/template && chmod 777 /app/db /app/logs /app/template
-
-COPY --from=builder /app/ppeelink /app/ppeelink
+RUN apk add --no-cache ca-certificates tzdata \
+    && mkdir -p /app/db /app/logs /app/template
+COPY --from=builder /out/ppeelink /app/ppeelink
 EXPOSE 8000
-CMD ["/app/ppeelink"]
-
+VOLUME ["/app/db", "/app/template", "/app/logs"]
+ENTRYPOINT ["/app/ppeelink"]

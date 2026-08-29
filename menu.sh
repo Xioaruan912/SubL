@@ -6,9 +6,9 @@ REPO_URL="https://github.com/${REPO}.git"
 INSTALL_DIR="/usr/local/bin/ppeelink"
 
 function check_tools {
-    for cmd in git go; do
+    for cmd in git go node corepack; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
-            echo "缺少依赖: $cmd，请先安装 (apt install -y git golang)"
+            echo "缺少依赖: $cmd。请先安装 Git、Go 1.25+、Node.js 20+（含 corepack）。"
             return 1
         fi
     done
@@ -21,8 +21,14 @@ function Up {
     TMP_DIR=$(mktemp -d)
     git clone --depth 1 "$REPO_URL" "$TMP_DIR/ppeelink" || { echo "克隆失败"; rm -rf "$TMP_DIR"; return 1; }
     cd "$TMP_DIR/ppeelink"
-    echo "==> 编译二进制（with_utls with_quic）..."
-    go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink main.go || { echo "编译失败"; rm -rf "$TMP_DIR"; return 1; }
+    echo "==> 构建前端..."
+    corepack enable >/dev/null 2>&1 || true
+    cd webs
+    pnpm install --frozen-lockfile || { echo "前端依赖安装失败"; rm -rf "$TMP_DIR"; return 1; }
+    pnpm build || { echo "前端构建失败"; rm -rf "$TMP_DIR"; return 1; }
+    cd ..
+    echo "==> 编译后端（with_utls with_quic）..."
+    go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink . || { echo "编译失败"; rm -rf "$TMP_DIR"; return 1; }
     # 停止服务后替换
     if systemctl is-active --quiet ppeelink; then
         systemctl stop ppeelink

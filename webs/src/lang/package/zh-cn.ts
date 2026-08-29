@@ -11,6 +11,7 @@ export default {
     templatelist:"模板列表",
     template:"模板",
     templatebuilder:"操作模板",
+    rulecenter:"规则中心",
     unlocktest:"解锁测试",
     test:"测试",
     tcptest:"TCP测试",

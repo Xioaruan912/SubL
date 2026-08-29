@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-    <img src="https://img.shields.io/badge/Go-1.22-green.svg"/>
+    <img src="https://img.shields.io/badge/Go-1.25-green.svg"/>
     <img src="https://img.shields.io/badge/Vue-3.4-brightgreen.svg"/>
     <img src="https://img.shields.io/badge/Element Plus-2.6.1-blue.svg"/>
     <img src="https://img.shields.io/badge/ECharts-5.5-purple.svg"/>
@@ -26,6 +26,7 @@
 - 🔓 **解锁测试**：通过 **sing-box** 真实走节点访问 AI（OpenAI/ChatGPT、Claude、Gemini）、影视（Netflix、YouTube、Disney+）、论坛（Google、GitHub、Telegram）等常见服务，检测是否解锁。
 - 🎯 **Xboard 风格 filter 正则分组**：Clash 模板中支持 `filter: "(?i)US|USA|..."` 正则，按节点名自动匹配填充分组。
 - 🎨 **OpenList 风格 UI**：主色 Ant Design 蓝、浅色侧边栏、大圆角卡片，整体视觉更现代。
+- 📚 **规则中心**：同步 ShuntRules 与 ios_rule_script，支持 Clash/Surge/Loon 浏览、规则预览、按需缓存，以及 Clash Rule Provider 导入与模板策略组代理选择。
 
 ## [项目特色]
 
@@ -51,30 +52,30 @@
 curl -s -H "Cache-Control: no-cache" -H "Pragma: no-cache" https://raw.githubusercontent.com/Xioaruan912/SubL/main/install.sh | sudo bash
 ```
 
-需要系统已安装 `git`、`go`（≥1.22）、`curl`。脚本会自动：
+需要系统已安装 `git`、`go`（≥1.25）、`Node.js`（≥20，含 corepack）与 `curl`。脚本会自动：
 
-1. 克隆源码 → `go build -tags "with_utls with_quic"`
-2. 安装二进制到 `/usr/local/bin/ppeelink`
-3. 注册 systemd 服务并开机自启
-4. 安装 `ppeelink` 菜单命令
+1. 克隆源码并使用 `pnpm-lock.yaml` 安装前端依赖
+2. 执行 `pnpm build` 生成 `webs/dist`
+3. 使用 `go build -tags "with_utls with_quic"` 编译并嵌入前端
+4. 安装二进制到 `/usr/local/bin/ppeelink`
+5. 注册 systemd 服务并安装 `ppeelink` 管理菜单
 
 安装后输入 `ppeelink` 呼出管理菜单。
 
 ### Docker 方式
 
-在自己需要的位置创建一个目录，例如 `mkdir ppeelink`，然后 `cd` 进入该目录，数据会自动挂载：
+仓库自带多阶段 `Dockerfile`，会先构建 Vue 前端，再编译 Go 后端：
 
 ```bash
+docker build -t ppeelink .
 docker run --name ppeelink -p 8000:8000 \
--v $PWD/db:/app/db \
--v $PWD/template:/app/template \
--v $PWD/logs:/app/logs \
--d jaaksi/sublinkx
+  -v $PWD/db:/app/db \
+  -v $PWD/template:/app/template \
+  -v $PWD/logs:/app/logs \
+  -d ppeelink
 ```
 
-需要备份的就是 `db` 和 `template` 目录。
-
-> 注意：Docker 镜像为上游构建版本（`jaaksi/sublinkx`），如需解锁测试等二开功能，建议使用 Linux 源码编译方式。
+建议备份 `db/` 与 `template/`。
 
 ## [目录结构]
 
@@ -89,16 +90,24 @@ webs/         Vue3 前端
 
 ## [开发与构建]
 
-```bash
-# 后端（带解锁测试所需标签）
-go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink_amd64 main.go
+环境要求：Go 1.25+、Node.js 20+、corepack/pnpm。
 
-# 前端
+```bash
+# 安装并构建前端
 cd webs
-npx vite build --mode production
-# 构建产物需同步到 static/ 目录（go:embed 使用）
-cp -r webs/dist/* ../static/
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+cd ..
+
+# 测试后端
+go test ./...
+
+# 构建包含前端资源的后端二进制
+go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink .
 ```
+
+也可以直接执行仓库根目录的 `./build.sh` 生成 Linux amd64/arm64 二进制。`webs/dist/` 与二进制均为构建产物，不提交到 Git。
 
 ## License
 

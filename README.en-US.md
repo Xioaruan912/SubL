@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-    <img src="https://img.shields.io/badge/Go-1.22-green.svg"/>
+    <img src="https://img.shields.io/badge/Go-1.25-green.svg"/>
     <img src="https://img.shields.io/badge/Vue-3.4-brightgreen.svg"/>
     <img src="https://img.shields.io/badge/Element Plus-2.6.1-blue.svg"/>
     <img src="https://img.shields.io/badge/ECharts-5.5-purple.svg"/>
@@ -26,6 +26,7 @@ Default account `admin` password `123456` (please change it).
 - 🔓 **Unlock Test**: via **sing-box**, really route through the node to test AI (OpenAI/ChatGPT, Claude, Gemini), video (Netflix, YouTube, Disney+), forum (Google, GitHub, Telegram) services.
 - 🎯 **Xboard-style filter regex grouping**: Clash templates support `filter: "(?i)US|USA|..."` to auto-match nodes by name.
 - 🎨 **OpenList-style UI**: Ant Design blue primary color, light sidebar, rounded cards.
+- 📚 **Rule Center**: sync ShuntRules and ios_rule_script, browse Clash/Surge/Loon rules, preview and cache payloads on demand, and import Clash Rule Providers with a proxy-group selector from the target template.
 
 ## [Project Features]
 
@@ -51,30 +52,30 @@ Default account `admin` password `123456` (please change it).
 curl -s -H "Cache-Control: no-cache" -H "Pragma: no-cache" https://raw.githubusercontent.com/Xioaruan912/SubL/main/install.sh | sudo bash
 ```
 
-Requires `git`, `go` (≥1.22), `curl`. The script will:
+Requires `git`, `go` (≥1.25), `Node.js` (≥20 with corepack), and `curl`. The script will:
 
-1. Clone source → `go build -tags "with_utls with_quic"`
-2. Install binary to `/usr/local/bin/ppeelink`
-3. Register systemd service and enable on boot
-4. Install the `ppeelink` menu command
+1. Clone the source and install frontend dependencies from `pnpm-lock.yaml`
+2. Run `pnpm build` to generate `webs/dist`
+3. Compile Go with `with_utls` and `with_quic`, embedding the frontend
+4. Install the binary to `/usr/local/bin/ppeelink`
+5. Register systemd and install the `ppeelink` management command
 
 Run `ppeelink` to open the management menu after install.
 
 ### Docker method
 
-Create a directory where you want it (e.g. `mkdir ppeelink`), then `cd` into it. Data is mounted automatically:
+The repository includes a multi-stage `Dockerfile` that builds the Vue frontend first and then compiles the Go backend:
 
 ```bash
+docker build -t ppeelink .
 docker run --name ppeelink -p 8000:8000 \
--v $PWD/db:/app/db \
--v $PWD/template:/app/template \
--v $PWD/logs:/app/logs \
--d jaaksi/sublinkx
+  -v $PWD/db:/app/db \
+  -v $PWD/template:/app/template \
+  -v $PWD/logs:/app/logs \
+  -d ppeelink
 ```
 
-All you need to back up is `db` and `template`.
-
-> Note: the Docker image is the upstream build (`jaaksi/sublinkx`). For fork features like unlock test, use the Linux source-build method.
+Back up `db/` and `template/`.
 
 ## [Directory Structure]
 
@@ -89,16 +90,20 @@ webs/         Vue3 frontend
 
 ## [Development & Build]
 
-```bash
-# Backend (with unlock-test required tags)
-go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink_amd64 main.go
+Requirements: Go 1.25+, Node.js 20+, corepack/pnpm.
 
-# Frontend
+```bash
 cd webs
-npx vite build --mode production
-# Sync build output to static/ (used by go:embed)
-cp -r webs/dist/* ../static/
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+cd ..
+
+go test ./...
+go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink .
 ```
+
+You can also run `./build.sh` to build Linux amd64/arm64 binaries. `webs/dist/` and compiled binaries are build artifacts and are not committed to Git.
 
 ## License
 

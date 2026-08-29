@@ -31,7 +31,7 @@ func InitSqlite() {
 		return
 	}
 	err = db.AutoMigrate(&User{}, &Subcription{}, &SubLogs{}, &GroupNode{}, &Node{}, &ClientVersion{}, &Airport{},
-		&NodeQualitySample{}, &NodeHealthEvent{}, &AlertSetting{}, &UnlockObservation{}, &TemplateVersion{})
+		&NodeQualitySample{}, &NodeHealthEvent{}, &AlertSetting{}, &UnlockObservation{}, &TemplateVersion{}, &RuleSource{}, &RuleCatalog{})
 	if err != nil {
 		log.Println("数据表迁移失败")
 	}

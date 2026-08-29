@@ -1,9 +1,37 @@
 .DS_Store
 *.DS_Store
-db
-logs
-sublink_amd64 
-sublink_arm64
-sublink.exe
+
+# Runtime data / secrets
+db/
+logs/
+downloads/
+AGENTS.txt
+.prod-ssh-pass
+.github-token
+.env
+.env.*
+!.env.example
+
+# Local development / AI notes
+AGENTS.md
+GPTTODO.md
+new_todo.md
+DEVNOTES.md
+rule-center-demo.html
+webs/src/views/template/rules-demo.vue
+webs/src/views/template/rules-safe-test.txt
+webs/src/views/template/rules.vue
+
+# Build outputs
+ppeelink
+ppeelink_*
+sublink_*
+*.exe
+webs/dist/*
+!webs/dist/placeholder.txt
+webs/node_modules/
+
+# Tooling
 pnpm-workspace.yaml
-downloads
+coverage/
+*.log

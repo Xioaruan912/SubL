@@ -17,10 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-//go:embed static/js/*
-//go:embed static/css/*
-//go:embed static/img/*
-//go:embed static/*
+//go:embed webs/dist/*
 var embeddedFiles embed.FS
 
 //go:embed template
@@ -127,7 +124,7 @@ func Run(port int) {
 	// 安装中间件
 	r.Use(middlewares.AuthorToken) // jwt验证token
 	// 设置静态资源路径（自定义 handler，支持 gzip + 正确 Content-Length）
-	staticFiles, err := fs.Sub(embeddedFiles, "static")
+	staticFiles, err := fs.Sub(embeddedFiles, "webs/dist")
 	if err != nil {
 		log.Println(err)
 	}
@@ -153,10 +150,11 @@ func Run(port int) {
 	routers.Version(r, version)
 	routers.Downloads(r)
 	routers.AirportRoutes(r) // 注册机场管理路由
+	routers.Rules(r)         // 规则中心
 	// 客户端下载目录 + 定时检查更新（启动即查 + 每 24h）
 	os.MkdirAll("downloads", 0o755)
 	client.Start()
-	
+
 	// 启动后台定时测活任务 (Cron)
 	StartCronTasks()
 

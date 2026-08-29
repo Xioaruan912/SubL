@@ -14,6 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"ppeelink/models"
 	"ppeelink/node"
+	"ppeelink/rulecenter"
 )
 
 type splitRule struct{ Kind, Domain, Policy, Raw string }
@@ -142,6 +143,32 @@ func ruleForDomain(rules []splitRule, domain string) (splitRule, bool) {
 	return splitRule{}, false
 }
 
+func ruleForDomainResolved(ctx context.Context, rules []splitRule, content, domain string) (splitRule, bool, string) {
+	key := strings.ToLower(strings.TrimPrefix(domain, "www."))
+	warning := ""
+	for _, r := range rules {
+		d := strings.TrimPrefix(strings.ToLower(r.Domain), ".")
+		switch r.Kind {
+		case "DOMAIN":
+			if strings.EqualFold(d, key) { return r, true, "" }
+		case "DOMAIN-SUFFIX":
+			if key == d || strings.HasSuffix(key, "."+d) { return r, true, "" }
+		case "DOMAIN-KEYWORD":
+			if d != "" && strings.Contains(key, d) { return r, true, "" }
+		case "RULE-SET":
+			providerRules, _, err := rulecenter.ResolveProviderRules(ctx, content, r.Domain)
+			if err != nil {
+				if warning == "" { warning = "rule-provider " + r.Domain + " 解析失败: " + err.Error() }
+				continue
+			}
+			if rulecenter.MatchDomain(providerRules, key) { return r, true, warning }
+		case "MATCH":
+			return r, true, warning
+		}
+	}
+	return splitRule{}, false, warning
+}
+
 func policyFilterCountry(content, policy string) string {
 	var root map[string]interface{}
 	if yaml.Unmarshal([]byte(content), &root) != nil {
@@ -242,12 +269,14 @@ func SubscriptionEgressPlan(c *gin.Context) {
 	chosen := make(map[int][]string)
 	for _, target := range planTargets {
 		item := egressPlanItem{Key: target.key, Name: target.name, Domain: target.domain, Group: target.group}
-		if rule, ok := ruleForDomain(rules, target.domain); ok {
+		if rule, ok, resolveWarning := ruleForDomainResolved(c.Request.Context(), rules, content, target.domain); ok {
 			item.MatchedRule, item.Policy = rule.Raw, rule.Policy
 			item.ExpectedCountry = countryFromText(rule.Policy)
 			if item.ExpectedCountry == "" {
 				item.ExpectedCountry = policyFilterCountry(content, rule.Policy)
 			}
+		} else if resolveWarning != "" {
+			response.Warnings = append(response.Warnings, target.name+": "+resolveWarning)
 		}
 		if len(rules) == 0 {
 			item.MatchedRule = "未读取模板，未应用模板规则"

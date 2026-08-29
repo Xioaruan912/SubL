@@ -11,6 +11,7 @@ export default {
     templatelist:"Template List",
     template:"Template",
     templatebuilder:"Template Builder",
+    rulecenter:"Rule Center",
     unlocktest:"Unlock Test",
     test:"Test",
     tcptest:"TCP Test",
