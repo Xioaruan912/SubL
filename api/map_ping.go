@@ -275,6 +275,34 @@ func NodeUnlock(c *gin.Context) {
 	c.JSON(200, gin.H{"code": "00000", "data": result, "msg": "解锁测试完成"})
 }
 
+// NodeEgress tests multiple destination exits through one explicitly selected
+// node from a subscription. POST /api/v1/nodes/egress body: id
+func NodeEgress(c *gin.Context) {
+	id, err := strconv.Atoi(c.PostForm("id"))
+	if err != nil || id <= 0 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "节点 id 格式错误"})
+		return
+	}
+	var selected models.Node
+	selected.ID = id
+	if err := selected.Find(); err != nil {
+		c.JSON(404, gin.H{"code": "40400", "msg": "节点不存在"})
+		return
+	}
+	ctx, _, ok := node.BeginTest(selected.Name, selected.ID, "egress", c.Request.Context())
+	if !ok {
+		c.JSON(429, gin.H{"code": "42900", "msg": "已有测试进行中，请稍候"})
+		return
+	}
+	defer node.EndTest()
+	result, err := node.RunEgressTest(ctx, selected.Link, 7*time.Second)
+	if err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "分流检测失败: " + err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": result, "msg": "分流检测完成"})
+}
+
 // chinaCache 中国延迟缓存
 type chinaCache struct {
 	mu      sync.Mutex

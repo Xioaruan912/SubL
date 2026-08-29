@@ -133,6 +133,18 @@ func GetMenus(c *gin.Context) {
 			},
 			Children: []Child{
 				{
+					Path:      "egress",
+					Component: "test/egress",
+					Name:      "EgressTest",
+					Meta: Meta{
+						Title:     "本机分流检测",
+						Icon:      "connection",
+						Hidden:    false,
+						Roles:     []string{"ADMIN"},
+						KeepAlive: true,
+					},
+				},
+				{
 					Path:      "unlock",
 					Component: "subcription/unlock",
 					Name:      "Unlock",

@@ -23,6 +23,7 @@ func Nodes(r *gin.Engine) {
 		NodesGroup.GET("/map", api.NodeMap)
 		NodesGroup.GET("/ping", api.NodePing)
 		NodesGroup.POST("/unlock", api.NodeUnlock)
+		NodesGroup.POST("/egress", api.NodeEgress)
 		NodesGroup.POST("/chinaping", api.NodeChinaPing)
 		NodesGroup.POST("/chinaping/stream", api.NodeChinaPingStream)
 		NodesGroup.GET("/test/status", api.TestStatus)

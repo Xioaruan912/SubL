@@ -1,0 +1,1 @@
+import{bF as t}from"./index.EbasmX68.js";function e(){return t({url:"/api/v1/total/sub",method:"get"})}function n(){return t({url:"/api/v1/nodes/map",method:"get"})}function o(){return t({url:"/api/v1/nodes/ping",method:"get"})}export{o as a,n as b,e as g};

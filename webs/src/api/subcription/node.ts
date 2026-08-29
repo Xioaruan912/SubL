@@ -44,6 +44,7 @@ export function UnlockTest(data: any){
     },
   });
 }
+export function EgressTest(data: any){ return request({ url: "/api/v1/nodes/egress", method: "post", data, headers: { "Content-Type": "multipart/form-data" } }); }
 
 // 中国各地延迟测试
 export function ChinaPingTest(data: any){
