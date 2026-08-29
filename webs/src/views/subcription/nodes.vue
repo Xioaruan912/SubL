@@ -226,18 +226,20 @@ const handleEditNode = (row: any) => {
 }
 const SubmitNodeForm = async () => {
   const isAdd = dialogMode.value === 'add'
+  const chosenGroups = RadioGroup.value === '1' ? SelectionNodeGroups.value : NodeGroupInput.value.split(',').map(s => s.trim()).filter(Boolean)
+  if (!chosenGroups.length) { ElMessage.warning('节点必须至少选择一个分组'); return }
   const links = NodeForm.value.Link.trim().split(/[\n,]/).map(i => i.trim()).filter(i => i)
   if (isAdd && links.length === 0) { ElMessage.warning('节点链接不能为空'); return }
   try {
     if (isAdd) {
       for (const link of links) {
-        await AddNodes({ link, group: RadioGroup.value === '1' ? SelectionNodeGroups.value.join(',') : NodeGroupInput.value })
+        await AddNodes({ link, group: chosenGroups.join(',') })
       }
       ElMessage.success('节点添加成功')
     } else {
       await UpdateNode({
         id: NodeForm.value.ID, name: NodeForm.value.Name, link: NodeForm.value.Link,
-        group: RadioGroup.value === '1' ? SelectionNodeGroups.value.join(',') : NodeGroupInput.value,
+        group: chosenGroups.join(','),
       })
       ElMessage.success('节点更新成功')
     }
@@ -424,7 +426,7 @@ onMounted(loadAll)
                     <span>可用 {{ n.availability ?? 0 }}%</span>
                     <span>抖动 {{ n.jitter ?? 0 }}ms</span>
                   </div>
-                  <div class="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                  <div class="node-card-actions flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                     <el-button link type="primary" size="small" @click="openQuality(n)">质量</el-button>
                     <el-button link type="primary" size="small" @click="openUnlock(n)">解锁</el-button>
                     <el-button link type="success" size="small" @click="openTcp(n)">TCP</el-button>
@@ -635,6 +637,8 @@ onMounted(loadAll)
 .group-filter-active { color:var(--ui-accent-strong); background:var(--ui-accent-soft); font-weight:700; box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ui-accent) 18%,transparent); }
 .group-filter-idle { color:var(--ui-text-secondary); transition:background 140ms ease,color 140ms ease,transform 140ms ease; }
 .group-filter-idle:hover { color:var(--ui-text); background:var(--ui-hover); transform:translateX(2px); }
+.node-card-actions { flex-wrap: wrap; row-gap: 2px; margin-top: 8px; min-width: 0; }
+.node-card-actions .el-button { margin-left: 0 !important; padding: 3px 5px; }
 .quality-strip { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:var(--el-text-color-secondary); font-size:11px; }
 .quality-score { padding:2px 7px; border-radius:999px; font-weight:700; }
 .quality-score.good { color:#16803c; background:#dcfce7; }

@@ -20,7 +20,7 @@ interface Sub {
   GroupRefs?: GroupRef[]
   SubLogs: SubLogs[]
 }
-interface Node { ID: number; Name: string; Link: string }
+interface Node { ID: number; Name: string; Link: string; GroupNodes?: { Name: string }[] }
 interface GroupRef { ID: number; Name: string; NodeCount: number }
 interface Config { clash: string; surge: string; loon: string; udp: boolean; cert: boolean }
 interface SubLogs { IP: string; Count: number; Addr: string; Date: string }
@@ -48,6 +48,19 @@ const NodesList = ref<Node[]>([])
 const value1 = ref<string[]>([])
 const allGroups = ref<GroupRef[]>([])
 const selectedGroups = ref<number[]>([])
+const openedNodeGroups = ref<string[]>([])
+const groupedNodes = computed(() => {
+  const by = new Map<string, Node[]>()
+  for (const n of NodesList.value) {
+    const names = (n.GroupNodes || []).map(g => g.Name).filter(Boolean)
+    for (const name of (names.length ? names : ['未分组'])) {
+      if (!by.has(name)) by.set(name, [])
+      by.get(name)!.push(n)
+    }
+  }
+  return [...by.entries()].map(([name, nodes]) => ({ name, nodes }))
+    .sort((a, b) => a.name === '未分组' ? 1 : b.name === '未分组' ? -1 : a.name.localeCompare(b.name, 'zh-CN'))
+})
 const udpOn = ref(false)
 const certOn = ref(false)
 const qrcode = ref('')
@@ -208,6 +221,11 @@ const removeNode = (name: string) => {
 const selectAllNodes = () => {
   const s = new Set(value1.value)
   for (const n of NodesList.value) s.add(n.Name)
+  value1.value = [...s]
+}
+const selectGroupNodes = (nodes: Node[]) => {
+  const s = new Set(value1.value)
+  nodes.forEach(n => s.add(n.Name))
   value1.value = [...s]
 }
 
@@ -517,12 +535,22 @@ const saveExpire = async () => {
             <el-col :span="12">
               <el-form-item label="选择具体节点">
                 <div class="node-pick-tools">
-                  <el-select v-model="value1" multiple filterable collapse-tags collapse-tags-tooltip placeholder="搜索并选择节点…" class="full">
-                    <el-option v-for="item in NodesList" :key="item.Name" :label="item.Name" :value="item.Name" />
-                  </el-select>
-                  <el-button link type="primary" size="small" @click="selectAllNodes">全选</el-button>
+                  <el-button link type="primary" size="small" @click="selectAllNodes">全选节点</el-button>
                   <el-button link type="danger" size="small" @click="clearAllNodes" :disabled="!value1.length">清空已选</el-button>
                 </div>
+                <el-collapse v-model="openedNodeGroups" class="node-group-picker">
+                  <el-collapse-item v-for="group in groupedNodes" :key="group.name" :name="group.name">
+                    <template #title>
+                      <span class="picker-group-title">{{ group.name }}</span><span class="picker-group-count">{{ group.nodes.length }} 个节点</span>
+                    </template>
+                    <div class="picker-node-list">
+                      <el-checkbox v-for="item in group.nodes" :key="item.Name" :model-value="value1.includes(item.Name)" @change="(checked: any) => checked ? value1.push(item.Name) : removeNode(item.Name)">
+                        {{ item.Name }}
+                      </el-checkbox>
+                    </div>
+                    <el-button link type="primary" size="small" @click="selectGroupNodes(group.nodes)">选择本组全部</el-button>
+                  </el-collapse-item>
+                </el-collapse>
               </el-form-item>
               <div class="field-label">已选节点（可拖拽排序）</div>
               <VueDraggable v-model="value1" :animation="150" ghost-class="ghost" class="order-list">
@@ -700,6 +728,13 @@ html.dark .order-badge { background: var(--el-color-primary-light-3); color: #ff
 .group-checkbox:hover { background: var(--el-fill-color-light); }
 .node-pick-tools { display: flex; align-items: center; gap: 8px; width: 100%; }
 .node-pick-tools .el-select { flex: 1; }
+.node-group-picker { width: 100%; margin-top: 8px; border: 1px solid var(--el-border-color-lighter); border-radius: 8px; overflow: hidden; }
+.node-group-picker :deep(.el-collapse-item__header) { padding: 0 10px; height: 38px; line-height: 38px; }
+.picker-group-title { font-weight: 600; }
+.picker-group-count { margin-left: 8px; color: var(--el-text-color-secondary); font-size: 12px; }
+.picker-node-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 8px; margin-bottom: 8px; }
+.picker-node-list .el-checkbox { min-width: 0; margin-right: 0; overflow: hidden; }
+.picker-node-list :deep(.el-checkbox__label) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .country-node-groups { display: flex; flex-direction: column; gap: 16px; max-height: 400px; overflow-y: auto; padding-right: 4px; }
 .country-group-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--el-text-color-primary); }
 .country-group-count { color: var(--el-text-color-secondary); font-size: 12px; font-weight: normal; }

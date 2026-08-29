@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net/url"
-	"strconv"
-	"strings"
 	"ppeelink/models"
 	"ppeelink/node"
+	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -88,7 +88,11 @@ func NodeUpdadte(c *gin.Context) {
 	NewName := c.PostForm("name")
 	Newlink := c.PostForm("link")
 	id := c.PostForm("id")
-	group := c.PostForm("group")        // 分组
+	group := c.PostForm("group") // 分组
+	if strings.TrimSpace(group) == "" {
+		c.JSON(400, gin.H{"msg": "节点必须至少选择一个分组"})
+		return
+	}
 	groups := strings.Split(group, ",") // 分组列表
 	index, err := strconv.Atoi(id)
 	if err != nil {
@@ -112,8 +116,11 @@ func NodeUpdadte(c *gin.Context) {
 		Link: Newlink,
 	}
 	var gns []models.GroupNode
-	if groups != nil || len(groups) > 0 {
+	if len(groups) > 0 {
 		for _, g := range groups {
+			if strings.TrimSpace(g) == "" {
+				continue
+			}
 			TempGn := models.GroupNode{
 				Name: strings.TrimSpace(g), // 去除分组名称两端空格
 			}
@@ -237,6 +244,10 @@ func GroupNodeSet(c *gin.Context) {
 	var FirstGroup models.GroupNode
 	name := c.PostForm("name")
 	group := c.PostForm("group")
+	if strings.TrimSpace(group) == "" {
+		c.JSON(400, gin.H{"msg": "节点必须至少选择一个分组"})
+		return
+	}
 
 	// 将group分割成多个分组
 	groups := strings.Split(group, ",")
@@ -349,7 +360,7 @@ func NodeAdd(c *gin.Context) {
 	// 关联分组开始
 	if strings.TrimSpace(group) != "" { // 去除空格后判断分组是否为空
 		groups := strings.Split(group, ",") // 允许多个分组用逗号分隔
-		if groups != nil || len(groups) > 0 {
+		if len(groups) > 0 {
 			for _, g := range groups {
 				gn := &models.GroupNode{Name: g}
 				err = gn.Add()
