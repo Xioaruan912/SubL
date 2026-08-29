@@ -14,8 +14,10 @@
           filterable
           placeholder="选择要测试的节点"
           class="node-select"
+          :loading="nodesLoading"
+          :disabled="nodesLoading"
         >
-          <el-option v-for="n in nodes" :key="n.ID" :label="n.Name" :value="n.ID" />
+          <el-option v-for="n in nodes" :key="n.ID" :label="n.Name" :value="n.ID"><span>{{ n.Name }}</span><small>{{ n.rtt }}ms</small></el-option>
         </el-select>
 
         <el-select
@@ -100,7 +102,7 @@ import * as echarts from "echarts/core";
 import { TooltipComponent, GeoComponent, VisualMapComponent } from "echarts/components";
 import { MapChart } from "echarts/charts";
 import { CanvasRenderer } from "echarts/renderers";
-import { getNodes } from "@/api/subcription/node";
+import { getNodeOverview } from "@/api/subcription/node";
 
 defineOptions({
   name: "TcpTest",
@@ -112,6 +114,7 @@ interface NodeItem {
   ID: number;
   Name: string;
   Link: string;
+  rtt: number;
 }
 interface ChinaTarget {
   province: string;
@@ -127,6 +130,7 @@ interface ChinaTarget {
 const nodes = ref<NodeItem[]>([]);
 const selectedNodeId = ref<number | undefined>();
 const loading = ref(false);
+const nodesLoading = ref(true);
 const abortCtrl = ref<AbortController | null>(null);
 
 const targets = ref<ChinaTarget[]>([]);
@@ -391,11 +395,13 @@ const abortTest = () => {
 };
 
 onMounted(async () => {
+  nodesLoading.value = true;
   try {
-    const { data } = await getNodes();
-    nodes.value = data || [];
+    const { data } = await getNodeOverview();
+    nodes.value = (data || []).filter((n: NodeItem) => n.rtt >= 0).sort((a: NodeItem, b: NodeItem) => a.rtt - b.rtt);
   } catch {
     nodes.value = [];
+  } finally { nodesLoading.value = false;
   }
   // 确保 DOM 渲染完成后再初始化地图（容器始终存在）
   await nextTick();

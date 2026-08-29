@@ -13,13 +13,17 @@
           filterable
           placeholder="选择要测试的节点"
           class="node-select"
+          :loading="nodesLoading"
+          :disabled="nodesLoading"
         >
           <el-option
             v-for="n in nodes"
             :key="n.ID"
             :label="n.Name"
             :value="n.ID"
-          />
+          >
+            <span>{{ n.Name }}</span><small>{{ n.rtt }}ms</small>
+          </el-option>
         </el-select>
         <el-button type="primary" :loading="loading" @click="startTest">
           开始测试
@@ -55,7 +59,7 @@
           </div>
         </template>
 
-        <el-empty v-else-if="!loading" description="选择节点后点击「开始测试」" />
+        <el-empty v-else-if="!loading" :description="nodesLoading ? '正在检测可访问节点…' : '选择节点后点击「开始测试」'" />
       </div>
     </el-card>
   </div>
@@ -63,7 +67,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { getNodes, UnlockTest } from "@/api/subcription/node";
+import { getNodeOverview, UnlockTest } from "@/api/subcription/node";
 
 defineOptions({
   name: "Unlock",
@@ -73,6 +77,7 @@ interface NodeItem {
   ID: number;
   Name: string;
   Link: string;
+  rtt: number;
 }
 interface UnlockCheckResult {
   key: string;
@@ -92,6 +97,7 @@ interface UnlockResult {
 const nodes = ref<NodeItem[]>([]);
 const selectedNodeId = ref<number | undefined>();
 const loading = ref(false);
+const nodesLoading = ref(true);
 const result = ref<UnlockResult | null>(null);
 
 const groups = [
@@ -127,11 +133,13 @@ const startTest = async () => {
 };
 
 onMounted(async () => {
+  nodesLoading.value = true;
   try {
-    const { data } = await getNodes();
-    nodes.value = data || [];
+    const { data } = await getNodeOverview();
+    nodes.value = (data || []).filter((n: NodeItem) => n.rtt >= 0).sort((a: NodeItem, b: NodeItem) => a.rtt - b.rtt);
   } catch {
     nodes.value = [];
+  } finally { nodesLoading.value = false;
   }
 });
 </script>

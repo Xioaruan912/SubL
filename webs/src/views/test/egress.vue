@@ -149,7 +149,7 @@ onMounted(async () => {
     <section v-if="plan" class="plan-card">
       <header><div><b>模板分流验证</b><small>{{ plan.template || '未读取到本地模板' }} · 已按规则选择质量最优节点</small></div><el-tag type="success" effect="plain">{{ plan.items?.length || 0 }} 个目标</el-tag></header>
       <el-table :data="plan.items" size="small">
-        <el-table-column prop="name" label="网站" width="120" />
+        <el-table-column label="网站" width="140"><template #default="{ row }"><span class="target-title"><img class="site-icon" :src="faviconUrl(row.domain)" @error="iconFallback($event, (targets.find(t => t.domain === row.domain) || { icon: '•' }).icon)">{{ row.name }}</span></template></el-table-column>
         <el-table-column label="命中规则" min-width="220"><template #default="{ row }"><span class="rule-text">{{ row.matchedRule || '默认策略' }}</span></template></el-table-column>
         <el-table-column label="期望地区" width="100"><template #default="{ row }">{{ row.expectedCountry || '不限' }}</template></el-table-column>
         <el-table-column label="实际节点" min-width="180"><template #default="{ row }">{{ row.selectedNode?.name || '无可用节点' }}<small v-if="row.selectedNode"> · {{ row.selectedNode.countryCode || '未知' }} · 质量 {{ row.selectedNode.score || 0 }}</small></template></el-table-column>

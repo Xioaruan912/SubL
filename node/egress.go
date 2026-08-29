@@ -87,6 +87,18 @@ func traceThroughProxy(ctx context.Context, client *http.Client, target EgressTa
 	}
 	if entries["ip"] == "" {
 		if target.IPOptional && response.StatusCode >= 200 && response.StatusCode < 400 {
+			// Gemini may return an HTTP success page that explicitly denies the
+			// region. Treat that as blocked instead of calling it reachable.
+			if target.Key == "gemini" {
+				lower := strings.ToLower(string(body))
+				for _, marker := range []string{"not available in your country", "unavailable in your country", "can't access gemini", "cannot access gemini", "service is not available"} {
+					if strings.Contains(lower, marker) {
+						result.Status = "blocked"
+						result.Note = "目标返回地区限制页面"
+						return result
+					}
+				}
+			}
 			result.Status = "reachable"
 			result.Note = "站点可达，目标未提供出口 IP"
 			return result
