@@ -115,7 +115,11 @@ const runPlan = async () => {
   planLoading.value = true
   try { const { data } = await subscriptionEgressPlan(selectedSubscription.value); plan.value = data; if (data?.items) results.value = data.items.map((item:any) => { const target = targets.find(t => t.domain === item.domain) || { icon:'•' }; const check = item.result || {}; return { ...target, name:item.name, domain:item.domain, group:item.group, status: check.status === 'available' || check.status === 'reachable' ? 'done' : check.status ? 'error' : 'pending', ip:check.ip || '', countryCode:check.countryCode || '', rtt:check.rtt ?? -1, note:check.note || (item.fallback ? `未找到 ${item.expectedCountry}，已使用质量最优节点` : '') } }) ; lastTestedAt.value = new Date() } finally { planLoading.value = false }
 }
-const faviconUrl = (domain:string) => `https://${domain}/favicon.ico`
+const faviconUrl = (domain:string) => {
+  // npm registry 没有稳定的 favicon，使用 npm 官方站点图标。
+  const iconDomain = domain === 'registry.npmjs.org' ? 'www.npmjs.com' : domain
+  return `https://${iconDomain}/favicon.ico`
+}
 const iconFallback = (event: Event, icon: string) => { const image = event.target as HTMLImageElement; image.style.display = 'none'; const next = image.nextElementSibling as HTMLElement | null; if (next) { next.textContent = icon; next.style.display = 'grid' } }
 
 const statusType = (item: any) => item.status === 'done' ? 'success' : item.status === 'error' ? 'danger' : 'info'
