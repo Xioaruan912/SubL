@@ -1,7 +1,7 @@
 # sublinkX 开发待办 (new_todo)
 
 ## 已完成 ✅
-- [x] EasyCLIProxyAPI 风格前端重构（2026-08-29，本地完成，未部署 VPS）
+- [x] EasyCLIProxyAPI 风格前端重构（2026-08-29，本地完成并部署 VPS）
   - 阅读 `router-for-me/EasyCLIProxyAPI` 完整 React/CSS WebUI 源码并迁移其交互原则
   - 全局色彩改为石墨灰 + 青绿色，补齐明暗主题语义变量和旧主题色自动迁移
   - 侧栏升级为 264px 固定工作台：品牌说明、46px 药丸导航、底部明暗分段器与运行状态
@@ -25,6 +25,9 @@
 - [x] HostDZire 生产部署（2026-08-28 23:49 CST）
   - 实际服务为 `ppeelink.service`，工作目录 `/usr/local/bin/ppeelink`，监听 8001
   - 备份：`/root/backup/ppeelink_20260828_234955`
+- [x] HostDZire 前端重构版发布（2026-08-29 08:49 CST）
+  - 备份：`/root/backup/ppeelink_20260829_084938`
+  - 发布二进制 SHA256：`78721daee6397e20050bccf04b39542378ca2e7a3a5a0c4b4afaf8e1d6ef4b72`
   - 新二进制 SHA-256：`edbb279f0456205746910c30bc682d411d1af72a75cff3ec6af7887ef7ea4006`
   - 业务数据前后数量一致，数据库完整性检查 `ok`
   - 后端首页、Nginx、静态资源及受保护 API 回归均为 HTTP 200
