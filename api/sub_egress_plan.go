@@ -18,10 +18,12 @@ import (
 
 type splitRule struct{ Kind, Domain, Policy, Raw string }
 type planNode struct {
-	ID                int    `json:"id"`
-	Name, CountryCode string `json:"name"`
-	Score, AverageRtt int    `json:"score"`
-	Link              string `json:"-"`
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	CountryCode string `json:"countryCode"`
+	Score       int    `json:"score"`
+	AverageRtt  int    `json:"averageRtt"`
+	Link        string `json:"-"`
 }
 type egressPlanItem struct {
 	Key             string                  `json:"key"`
