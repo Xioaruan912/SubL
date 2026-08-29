@@ -313,6 +313,14 @@ func GroupNodeUnbind(c *gin.Context) {
 		return
 	}
 	n := models.Node{Name: name}
+	if err := models.DB.Preload("GroupNodes").Where("name = ?", name).First(&n).Error; err != nil {
+		c.JSON(400, gin.H{"msg": "节点不存在"})
+		return
+	}
+	if len(n.GroupNodes) <= 1 {
+		c.JSON(400, gin.H{"msg": "节点至少需要保留一个分组，不能解除最后一个分组"})
+		return
+	}
 	if err := n.UnbindGroup(group); err != nil {
 		c.JSON(400, gin.H{"msg": "解除绑定失败: " + err.Error()})
 		return
@@ -432,6 +440,18 @@ func NodesGroup(c *gin.Context) {
 	}
 	x, _ := strconv.Atoi(id)
 	gn.ID = x
+	if err := models.DB.Preload("Nodes").First(&gn, x).Error; err != nil {
+		c.JSON(400, gin.H{"msg": "分组不存在"})
+		return
+	}
+	for _, n := range gn.Nodes {
+		var count int64
+		models.DB.Table("group_node_nodes").Where("node_id = ?", n.ID).Count(&count)
+		if count <= 1 {
+			c.JSON(400, gin.H{"msg": "该分组包含仅属于此分组的节点，请先为节点绑定其他分组"})
+			return
+		}
+	}
 	err := gn.Del()
 	if err != nil {
 		c.JSON(400, gin.H{

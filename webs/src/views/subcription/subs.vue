@@ -58,7 +58,7 @@ const groupedNodes = computed(() => {
       by.get(name)!.push(n)
     }
   }
-  return [...by.entries()].map(([name, nodes]) => ({ name, nodes }))
+    return [...by.entries()].filter(([name]) => name !== '未分组').map(([name, nodes]) => ({ name, nodes }))
     .sort((a, b) => a.name === '未分组' ? 1 : b.name === '未分组' ? -1 : a.name.localeCompare(b.name, 'zh-CN'))
 })
 const udpOn = ref(false)

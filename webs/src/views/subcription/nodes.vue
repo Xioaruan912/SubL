@@ -210,6 +210,7 @@ const handleAddNode = () => {
   dialogMode.value = 'add'
   Nodedialog.value = true
   NodeForm.value = { ID: 0, Title: '添加节点', Name: '', Link: '', GroupName: [] }
+  RadioGroup.value = allGroupNames.value.length ? '1' : '2'
   SelectionNodeGroups.value = []
   NodeGroupInput.value = ''
 }
@@ -512,7 +513,7 @@ onMounted(loadAll)
           <el-radio-button value="2">创建新分组</el-radio-button>
         </el-radio-group>
         <div v-if="RadioGroup === '1' && allGroupNames.length" class="group-field">
-          <el-select v-model="SelectionNodeGroups" multiple placeholder="选择分组" class="full">
+          <el-select v-model="SelectionNodeGroups" multiple placeholder="选择分组（至少一个）" class="full">
             <el-option v-for="g in allGroupNames" :key="g" :label="g" :value="g" />
           </el-select>
         </div>
