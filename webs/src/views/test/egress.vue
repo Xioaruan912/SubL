@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { countryFlag } from '@/utils/flag'
-import { getSubs, getSubPreviewNodes } from '@/api/subcription/subs'
+import { getSubs, getSubPreviewNodes, subscriptionEgressPlan } from '@/api/subcription/subs'
 import { EgressTest, getNodeOverview } from '@/api/subcription/node'
 
 defineOptions({ name: 'EgressTest' })
@@ -38,6 +38,8 @@ const selectedSubscription = ref<number | null>(null)
 const subscriptionNodes = ref<any[]>([])
 const selectedNode = ref<number | null>(null)
 const nodesLoading = ref(false)
+const planLoading = ref(false)
+const plan = ref<any | null>(null)
 
 const loadSubscriptionNodes = async () => {
   subscriptionNodes.value = []; selectedNode.value = null
@@ -108,6 +110,13 @@ const runSelected = async () => {
 }
 
 const runCurrent = () => mode.value === 'subscription' ? runSelected() : runLocal()
+const runPlan = async () => {
+  if (!selectedSubscription.value) { ElMessage.warning('请先选择订阅'); return }
+  planLoading.value = true
+  try { const { data } = await subscriptionEgressPlan(selectedSubscription.value); plan.value = data; if (data?.items) results.value = data.items.map((item:any) => { const target = targets.find(t => t.domain === item.domain) || { icon:'•' }; const check = item.result || {}; return { ...target, name:item.name, domain:item.domain, group:item.group, status: check.status === 'available' || check.status === 'reachable' ? 'done' : check.status ? 'error' : 'pending', ip:check.ip || '', countryCode:check.countryCode || '', rtt:check.rtt ?? -1, note:check.note || (item.fallback ? `未找到 ${item.expectedCountry}，已使用质量最优节点` : '') } }) ; lastTestedAt.value = new Date() } finally { planLoading.value = false }
+}
+const faviconUrl = (domain:string) => `https://${domain}/favicon.ico`
+const iconFallback = (event: Event, icon: string) => { const image = event.target as HTMLImageElement; image.style.display = 'none'; const next = image.nextElementSibling as HTMLElement | null; if (next) { next.textContent = icon; next.style.display = 'grid' } }
 
 const statusType = (item: any) => item.status === 'done' ? 'success' : item.status === 'error' ? 'danger' : 'info'
 const statusText = (item: any) => item.status === 'done' ? '已获取' : item.status === 'testing' ? '检测中' : item.status === 'error' ? item.note : '等待'
@@ -132,8 +141,21 @@ onMounted(async () => {
         <span class="arrow">→</span>
         <el-select v-model="selectedNode" placeholder="选择具体节点" filterable :loading="nodesLoading"><el-option v-for="item in subscriptionNodes" :key="item.ID" :label="item.Name" :value="item.ID"><span>{{ item.Name }}</span><small>质量 {{ item.quality?.score || 0 }} · {{ item.quality?.averageRtt >= 0 ? item.quality.averageRtt + 'ms' : '无样本' }}</small></el-option></el-select>
         <el-tag v-if="subscriptionNodes.length" type="success" effect="plain">默认质量最优</el-tag>
+        <el-button type="success" plain :loading="planLoading" @click="runPlan">按模板规则验证</el-button>
       </div>
       <el-alert v-else type="info" :closable="false" title="本机模式由浏览器直连目标网站；它反映当前设备的代理分流，不经过 SubLinkX 节点。" />
+    </section>
+
+    <section v-if="plan" class="plan-card">
+      <header><div><b>模板分流验证</b><small>{{ plan.template || '未读取到本地模板' }} · 已按规则选择质量最优节点</small></div><el-tag type="success" effect="plain">{{ plan.items?.length || 0 }} 个目标</el-tag></header>
+      <el-table :data="plan.items" size="small">
+        <el-table-column prop="name" label="网站" width="120" />
+        <el-table-column label="命中规则" min-width="220"><template #default="{ row }"><span class="rule-text">{{ row.matchedRule || '默认策略' }}</span></template></el-table-column>
+        <el-table-column label="期望地区" width="100"><template #default="{ row }">{{ row.expectedCountry || '不限' }}</template></el-table-column>
+        <el-table-column label="实际节点" min-width="180"><template #default="{ row }">{{ row.selectedNode?.name || '无可用节点' }}<small v-if="row.selectedNode"> · {{ row.selectedNode.countryCode || '未知' }} · 质量 {{ row.selectedNode.score || 0 }}</small></template></el-table-column>
+        <el-table-column label="结果" width="110"><template #default="{ row }"><el-tag :type="row.result?.status === 'available' || row.result?.status === 'reachable' ? 'success' : 'danger'" size="small">{{ row.result?.status === 'available' || row.result?.status === 'reachable' ? '分流成功' : '失败' }}</el-tag></template></el-table-column>
+      </el-table>
+      <el-alert v-if="plan.warnings?.length" class="plan-warning" type="warning" :closable="false" :title="plan.warnings.join('；')" />
     </section>
 
     <section class="summary-card">
@@ -147,7 +169,7 @@ onMounted(async () => {
     <section class="result-card">
       <header><div><b>网站分流结果</b><small>{{ mode === 'subscription' ? '通过所选节点检测，最多 4 项并发' : '浏览器直连检测，最多 4 项并发' }}</small></div><el-tag type="info" effect="plain">失败不等于网站不可用</el-tag></header>
       <el-table :data="results" row-key="domain" class="result-table">
-        <el-table-column label="目标" min-width="190"><template #default="{ row }"><div class="target-cell"><span class="target-title"><i class="target-icon">{{ row.icon }}</i>{{ row.name }}</span><small>{{ row.domain }}</small></div></template></el-table-column>
+        <el-table-column label="目标" min-width="190"><template #default="{ row }"><div class="target-cell"><span class="target-title"><img class="site-icon" :src="faviconUrl(row.domain)" @error="iconFallback($event, row.icon)"><i class="target-icon" style="display:none">{{ row.icon }}</i>{{ row.name }}</span><small>{{ row.domain }}</small></div></template></el-table-column>
         <el-table-column prop="group" label="类型" width="90"><template #default="{ row }"><el-tag size="small" effect="plain">{{ row.group }}</el-tag></template></el-table-column>
         <el-table-column label="地区" width="100"><template #default="{ row }"><span v-if="row.countryCode">{{ countryFlag(row.countryCode) }} {{ row.countryCode }}</span><span v-else>--</span></template></el-table-column>
         <el-table-column label="出口 IP" min-width="170"><template #default="{ row }"><span class="mono">{{ maskIP(row.ip) }}</span></template></el-table-column>
@@ -161,6 +183,7 @@ onMounted(async () => {
 
 <style scoped>
 .target-title{display:flex;align-items:center;gap:7px}.target-icon{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:var(--el-fill-color-light);font-size:14px;font-style:normal}.status-note{display:block;margin-left:8px;color:var(--el-text-color-secondary);font-size:10px}
+.site-icon{width:24px;height:24px;border-radius:7px;object-fit:contain;background:var(--el-fill-color-light);padding:3px}.plan-card{padding:20px;margin-bottom:16px;border:1px solid var(--el-border-color-lighter);border-radius:16px;background:var(--el-bg-color);box-shadow:var(--el-box-shadow-light)}.plan-card>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.plan-card header div{display:flex;flex-direction:column;gap:3px}.plan-card header small,.plan-card td small{color:var(--el-text-color-secondary);font-size:11px}.rule-text{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}.plan-warning{margin-top:12px}
 .target-title{display:flex;align-items:center;gap:7px}.target-icon{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:var(--el-fill-color-light);font-size:14px;font-style:normal}.status-note{display:block;margin-left:8px;color:var(--el-text-color-secondary);font-size:10px}
 .source-card{padding:16px 20px;margin-bottom:16px;border:1px solid var(--el-border-color-lighter);border-radius:16px;background:var(--el-bg-color);box-shadow:var(--el-box-shadow-light)}.source-selectors{display:grid;grid-template-columns:minmax(220px,1fr) 24px minmax(260px,1.4fr) auto;align-items:center;gap:10px;margin-top:14px}.source-selectors .arrow{text-align:center;color:var(--el-text-color-placeholder)}.source-selectors :deep(.el-select-dropdown__item){display:flex;justify-content:space-between}.source-selectors small{margin-left:14px;color:var(--el-text-color-secondary)}
 .egress-page{width:min(1120px,100%);margin:0 auto;padding:28px}.hero-card,.summary-card,.result-card{border:1px solid var(--el-border-color-lighter);border-radius:16px;background:var(--el-bg-color);box-shadow:var(--el-box-shadow-light)}.hero-card{display:flex;align-items:flex-end;justify-content:space-between;gap:30px;padding:28px;margin-bottom:16px;background:radial-gradient(circle at 90% 0,color-mix(in srgb,var(--el-color-primary) 12%,transparent),transparent 42%),var(--el-bg-color)}.eyebrow{color:var(--el-color-primary);font-family:monospace;font-size:11px;font-weight:800;letter-spacing:.14em}.hero-card h1{margin:8px 0 7px;font-size:30px;letter-spacing:-.03em}.hero-card p{max-width:700px;margin:0;color:var(--el-text-color-secondary);font-size:13px;line-height:1.7}.hero-actions{display:flex;align-items:center;gap:16px;flex-shrink:0}.summary-card,.result-card{padding:20px;margin-bottom:16px}.summary-card>header,.result-card>header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}.summary-card header>div,.result-card header>div{display:flex;flex-direction:column;gap:3px}.summary-card header small,.result-card header small{color:var(--el-text-color-secondary);font-size:11px}.egress-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.egress-grid article{display:flex;align-items:center;gap:11px;padding:13px;border:1px solid var(--el-border-color-lighter);border-radius:11px;background:var(--el-fill-color-extra-light)}.egress-grid .flag{font-size:23px}.egress-grid article div,.target-cell{display:flex;min-width:0;flex-direction:column}.egress-grid strong,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.egress-grid small,.target-cell small{overflow:hidden;color:var(--el-text-color-secondary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.target-cell span{font-weight:650}.privacy-note{margin:14px 0 0;color:var(--el-text-color-secondary);font-size:11px;line-height:1.6}.result-table{width:100%}@media(max-width:720px){.egress-page{padding:14px}.hero-card{align-items:flex-start;flex-direction:column;padding:20px}.hero-actions{width:100%;justify-content:space-between}.result-card{padding:12px}.summary-card>header,.result-card>header{align-items:flex-start;flex-direction:column}}

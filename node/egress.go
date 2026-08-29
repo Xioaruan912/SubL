@@ -103,6 +103,26 @@ func traceThroughProxy(ctx context.Context, client *http.Client, target EgressTa
 // RunEgressTest starts a temporary local SOCKS inbound and routes every trace
 // request through exactly one selected subscription node.
 func RunEgressTest(ctx context.Context, link string, timeout time.Duration) (*EgressResult, error) {
+	return runEgressTest(ctx, link, timeout, egressTargets)
+}
+
+// RunEgressTestKeys runs only the requested targets. It is used by the
+// template-aware split verifier to avoid testing unrelated sites.
+func RunEgressTestKeys(ctx context.Context, link string, timeout time.Duration, keys []string) (*EgressResult, error) {
+	wanted := make(map[string]bool, len(keys))
+	for _, key := range keys {
+		wanted[key] = true
+	}
+	targets := make([]EgressTarget, 0, len(keys))
+	for _, target := range egressTargets {
+		if wanted[target.Key] {
+			targets = append(targets, target)
+		}
+	}
+	return runEgressTest(ctx, link, timeout, targets)
+}
+
+func runEgressTest(ctx context.Context, link string, timeout time.Duration, targets []EgressTarget) (*EgressResult, error) {
 	if timeout <= 0 {
 		timeout = 7 * time.Second
 	}
@@ -131,10 +151,10 @@ func RunEgressTest(ctx context.Context, link string, timeout time.Duration) (*Eg
 	transport := &http.Transport{Proxy: http.ProxyURL(proxyURL), DialContext: (&net.Dialer{Timeout: timeout}).DialContext, TLSHandshakeTimeout: timeout, ResponseHeaderTimeout: timeout, MaxIdleConns: 24, MaxIdleConnsPerHost: 4, ForceAttemptHTTP2: true}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, Timeout: timeout}
-	result := &EgressResult{NodeName: nodeName, Results: make([]EgressCheckResult, len(egressTargets))}
+	result := &EgressResult{NodeName: nodeName, Results: make([]EgressCheckResult, len(targets))}
 	sem := make(chan struct{}, 4)
 	var wg sync.WaitGroup
-	for index, target := range egressTargets {
+	for index, target := range targets {
 		wg.Add(1)
 		go func(index int, target EgressTarget) {
 			defer wg.Done()
