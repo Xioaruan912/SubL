@@ -32,7 +32,7 @@ const results = ref<Result[]>(targets.map(item => ({ ...item, status: 'pending',
 const running = ref(false)
 const lastTestedAt = ref<Date | null>(null)
 const hideIP = ref(false)
-const mode = ref<'subscription' | 'local'>('subscription')
+const mode = ref<'subscription' | 'local' | 'template'>('subscription')
 const subscriptions = ref<any[]>([])
 const selectedSubscription = ref<number | null>(null)
 const subscriptionNodes = ref<any[]>([])
@@ -111,7 +111,7 @@ const runSelected = async () => {
   } finally { running.value = false }
 }
 
-const runCurrent = () => mode.value === 'subscription' ? runSelected() : runLocal()
+const runCurrent = () => mode.value === 'subscription' ? runSelected() : mode.value === 'template' ? runPlan() : runLocal()
 const runPlan = async () => {
   if (!selectedSubscription.value) { ElMessage.warning('请先选择订阅'); return }
   planLoading.value = true
@@ -141,13 +141,13 @@ onMounted(async () => {
     </section>
 
     <section class="source-card">
-      <el-segmented v-model="mode" :options="[{label:'订阅节点检测',value:'subscription'},{label:'本机浏览器检测',value:'local'}]" />
-      <div v-if="mode === 'subscription'" class="source-selectors">
+      <el-segmented v-model="mode" :options="[{label:'订阅节点检测',value:'subscription'},{label:'模板规则验证',value:'template'},{label:'本机浏览器检测',value:'local'}]" />
+      <div v-if="mode === 'subscription' || mode === 'template'" class="source-selectors">
         <el-select v-model="selectedSubscription" placeholder="选择订阅" filterable @change="loadSubscriptionNodes"><el-option v-for="sub in subscriptions" :key="sub.ID" :label="sub.Name" :value="sub.ID"><span>{{ sub.Name }}</span><small>{{ sub.Nodes?.length || 0 }} 个固定节点</small></el-option></el-select>
         <span class="arrow">→</span>
         <el-select v-model="selectedNode" placeholder="选择具体节点" filterable :loading="nodesLoading"><el-option v-for="item in subscriptionNodes" :key="item.ID" :label="item.Name" :value="item.ID"><span>{{ item.Name }}</span><small>质量 {{ item.quality?.score || 0 }} · {{ item.quality?.averageRtt >= 0 ? item.quality.averageRtt + 'ms' : '无样本' }}</small></el-option></el-select>
         <el-tag v-if="subscriptionNodes.length" type="success" effect="plain">默认质量最优</el-tag>
-        <el-button type="success" plain :loading="planLoading" @click="runPlan">按模板规则验证</el-button>
+        <el-button v-if="mode === 'subscription'" type="success" plain :loading="planLoading" @click="runPlan">按模板规则验证</el-button>
       </div>
       <el-alert v-else type="info" :closable="false" title="本机模式由浏览器直连目标网站；它反映当前设备的代理分流，不经过 SubLinkX 节点。" />
     </section>
@@ -173,7 +173,7 @@ onMounted(async () => {
     </section>
 
     <section class="result-card">
-      <header><div><b>网站分流结果</b><small>{{ mode === 'subscription' ? '通过所选节点检测，最多 4 项并发' : '浏览器直连检测，最多 4 项并发' }}</small></div><el-tag type="info" effect="plain">失败不等于网站不可用</el-tag></header>
+      <header><div><b>网站分流结果</b><small>{{ mode === 'template' ? '按订阅模板规则选择节点并验证' : mode === 'subscription' ? '通过所选节点检测，最多 4 项并发' : '浏览器直连检测，最多 4 项并发' }}</small></div><el-tag type="info" effect="plain">失败不等于网站不可用</el-tag></header>
       <el-table :data="results" row-key="domain" class="result-table">
         <el-table-column label="目标" min-width="190"><template #default="{ row }"><div class="target-cell"><span class="target-title"><img class="site-icon" :src="faviconUrl(row.domain)" @error="iconFallback($event, row.icon)"><i class="target-icon" style="display:none">{{ row.icon }}</i>{{ row.name }}</span><small>{{ row.domain }}</small></div></template></el-table-column>
         <el-table-column prop="group" label="类型" width="90"><template #default="{ row }"><el-tag size="small" effect="plain">{{ row.group }}</el-tag></template></el-table-column>
