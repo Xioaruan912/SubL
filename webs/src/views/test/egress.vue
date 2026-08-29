@@ -157,7 +157,7 @@ onMounted(async () => {
         <el-table-column label="命中规则" min-width="220"><template #default="{ row }"><span class="rule-text">{{ row.matchedRule || '默认策略' }}</span></template></el-table-column>
         <el-table-column label="期望地区" width="100"><template #default="{ row }">{{ row.expectedCountry || '不限' }}</template></el-table-column>
         <el-table-column label="实际节点" min-width="180"><template #default="{ row }">{{ row.selectedNode?.name || '无可用节点' }}<small v-if="row.selectedNode"> · {{ row.selectedNode.countryCode || '未知' }} · 质量 {{ row.selectedNode.score || 0 }}</small></template></el-table-column>
-        <el-table-column label="结果" width="110"><template #default="{ row }"><el-tag :type="row.result?.status === 'available' || row.result?.status === 'reachable' ? 'success' : 'danger'" size="small">{{ row.result?.status === 'available' || row.result?.status === 'reachable' ? '分流成功' : '失败' }}</el-tag></template></el-table-column>
+        <el-table-column label="结果" width="110"><template #default="{ row }"><el-tag :type="row.selectedNode && (row.result?.status === 'available' || row.result?.status === 'reachable') ? 'success' : 'danger'" size="small">{{ row.selectedNode && (row.result?.status === 'available' || row.result?.status === 'reachable') ? '分流成功' : '失败' }}</el-tag></template></el-table-column>
       </el-table>
       <el-alert v-if="plan.warnings?.length" class="plan-warning" type="warning" :closable="false" :title="plan.warnings.join('；')" />
     </section>

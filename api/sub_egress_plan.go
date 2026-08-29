@@ -37,10 +37,11 @@ type egressPlanItem struct {
 	Result          *node.EgressCheckResult `json:"result,omitempty"`
 }
 type egressPlanResponse struct {
-	SubscriptionID             int              `json:"subscriptionId"`
-	SubscriptionName, Template string           `json:"subscriptionName" json:"template"`
-	Items                      []egressPlanItem `json:"items"`
-	Warnings                   []string         `json:"warnings"`
+	SubscriptionID   int              `json:"subscriptionId"`
+	SubscriptionName string           `json:"subscriptionName"`
+	Template         string           `json:"template"`
+	Items            []egressPlanItem `json:"items"`
+	Warnings         []string         `json:"warnings"`
 }
 
 var planTargets = []struct{ key, name, domain, group string }{
@@ -103,6 +104,7 @@ func parseSplitRules(content string) []splitRule {
 }
 
 func ruleForDomain(rules []splitRule, domain string) (splitRule, bool) {
+	key := strings.ToLower(domain)
 	for _, r := range rules {
 		d := strings.TrimPrefix(strings.ToLower(r.Domain), ".")
 		switch r.Kind {
@@ -118,6 +120,14 @@ func ruleForDomain(rules []splitRule, domain string) (splitRule, bool) {
 			if strings.Contains(domain, d) {
 				return r, true
 			}
+		case "RULE-SET":
+			// Clash rule providers carry the actual site match in the
+			// provider name (e.g. Google/Gemini/ChatGPT), not in a domain.
+			if (key == "gemini.google.com" && (strings.Contains(d, "gemini") || strings.Contains(d, "google"))) ||
+				(key == "chatgpt.com" && (strings.Contains(d, "chatgpt") || strings.Contains(d, "openai"))) ||
+				(key == "openai.com" && (strings.Contains(d, "openai") || strings.Contains(d, "chatgpt"))) {
+				return r, true
+			}
 		}
 	}
 	for _, r := range rules {
@@ -126,6 +136,24 @@ func ruleForDomain(rules []splitRule, domain string) (splitRule, bool) {
 		}
 	}
 	return splitRule{}, false
+}
+
+func policyFilterCountry(content, policy string) string {
+	var root map[string]interface{}
+	if yaml.Unmarshal([]byte(content), &root) != nil {
+		return ""
+	}
+	groups, _ := root["proxy-groups"].([]interface{})
+	for _, raw := range groups {
+		group, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if strings.EqualFold(fmt.Sprint(group["name"]), policy) {
+			return countryFromText(fmt.Sprint(group["filter"]))
+		}
+	}
+	return ""
 }
 
 func countryFromText(value string) string {
@@ -156,7 +184,7 @@ func choosePlanNode(nodes []models.Node, expected string, stats map[int]models.N
 			filtered = append(filtered, item)
 		}
 	}
-	if len(filtered) == 0 {
+	if expected == "" && len(filtered) == 0 {
 		filtered = all
 	}
 	sort.SliceStable(filtered, func(i, j int) bool {
@@ -188,6 +216,7 @@ func SubscriptionEgressPlan(c *gin.Context) {
 	filename, content, err := templateContent(&sub)
 	if err != nil {
 		response.Warnings = append(response.Warnings, err.Error())
+		response.Template = "未读取到本地模板"
 	} else {
 		response.Template = filename
 	}
@@ -199,12 +228,18 @@ func SubscriptionEgressPlan(c *gin.Context) {
 		if rule, ok := ruleForDomain(rules, target.domain); ok {
 			item.MatchedRule, item.Policy = rule.Raw, rule.Policy
 			item.ExpectedCountry = countryFromText(rule.Policy)
+			if item.ExpectedCountry == "" {
+				item.ExpectedCountry = policyFilterCountry(content, rule.Policy)
+			}
 		}
 		if item.ExpectedCountry == "" && (target.key == "gemini") {
 			item.ExpectedCountry = "JP"
 		}
 		if item.ExpectedCountry == "" && (target.key == "chatgpt" || target.key == "openai") {
 			item.ExpectedCountry = "US"
+		}
+		if len(rules) == 0 {
+			item.MatchedRule = "未读取模板，未应用模板规则"
 		}
 		candidates, count := choosePlanNode(sub.Nodes, item.ExpectedCountry, stats)
 		item.CandidateCount = count
