@@ -104,7 +104,8 @@ func parseSplitRules(content string) []splitRule {
 }
 
 func ruleForDomain(rules []splitRule, domain string) (splitRule, bool) {
-	key := strings.ToLower(domain)
+	key := strings.ToLower(strings.TrimPrefix(domain, "www."))
+	tokens := strings.FieldsFunc(key, func(r rune) bool { return r == '.' || r == '-' || r == '_' })
 	for _, r := range rules {
 		d := strings.TrimPrefix(strings.ToLower(r.Domain), ".")
 		switch r.Kind {
@@ -121,12 +122,13 @@ func ruleForDomain(rules []splitRule, domain string) (splitRule, bool) {
 				return r, true
 			}
 		case "RULE-SET":
-			// Clash rule providers carry the actual site match in the
-			// provider name (e.g. Google/Gemini/ChatGPT), not in a domain.
-			if (key == "gemini.google.com" && (strings.Contains(d, "gemini") || strings.Contains(d, "google"))) ||
-				(key == "chatgpt.com" && (strings.Contains(d, "chatgpt") || strings.Contains(d, "openai"))) ||
-				(key == "openai.com" && (strings.Contains(d, "openai") || strings.Contains(d, "chatgpt"))) {
-				return r, true
+			// Clash rule providers carry matching sites in the provider
+			// itself. When the provider is named after a domain/brand,
+			// associate it generically instead of hard-coding one template.
+			for _, token := range tokens {
+				if len(token) >= 4 && strings.Contains(d, token) {
+					return r, true
+				}
 			}
 		}
 	}
