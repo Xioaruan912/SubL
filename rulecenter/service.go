@@ -27,6 +27,7 @@ const cacheRoot = "db/rules-cache"
 
 var httpClient = &http.Client{Timeout: 12 * time.Second}
 var syncMu sync.Mutex
+var warmRunning sync.Map
 
 var sourceDefs = []models.RuleSource{
 	{Key:"shunt_rules", Name:"ShuntRules", Type:"github-readme", Repo:"luestr/ShuntRules", Branch:"main", BaseURL:"https://rule.kelee.one", Enabled:true},
@@ -70,18 +71,40 @@ func SyncSource(ctx context.Context, key string) error {
 		models.DB.Model(&src).Updates(map[string]any{"last_sync_at": &now, "last_sync_status":"error", "last_sync_error":err.Error()})
 		return err
 	}
-	// Replace only this source's metadata after a successful scan. Keep the old
-	// catalog intact if any write fails midway.
+
+	var previous []models.RuleCatalog
+	if err := models.DB.Where("source_key = ?", key).Find(&previous).Error; err != nil { return err }
+	oldByID := make(map[string]models.RuleCatalog, len(previous))
+	for _, rec := range previous { oldByID[rec.ExternalID] = rec }
+
+	// Catalog refresh is metadata-only and preserves the verified local cache.
+	// RemoteRevision changes mark a cached file stale; unchanged revisions keep
+	// the exact cache file/statistics without rewriting anything.
 	if err := models.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("source_key = ?", key).Delete(&models.RuleCatalog{}).Error; err != nil { return err }
 		for _, item := range items {
 			meta, _ := json.Marshal(item.Metadata)
-			rec := models.RuleCatalog{SourceKey:item.SourceKey, ExternalID:item.ExternalID, Name:item.Name, Category:item.Category, Platform:item.Platform, Format:item.Format, URL:item.URL, LocalPath:item.LocalPath, RuleCount:item.RuleCount, RemoteUpdate:item.UpdatedAt, Checksum:item.Checksum, MetadataJSON:string(meta)}
+			rec := models.RuleCatalog{SourceKey:item.SourceKey, ExternalID:item.ExternalID, Name:item.Name, Category:item.Category, Platform:item.Platform, Format:item.Format, URL:item.URL, RemoteUpdate:item.UpdatedAt, RemoteRevision:item.RemoteRevision, MetadataJSON:string(meta)}
+			if old, ok := oldByID[item.ExternalID]; ok {
+				rec.LocalPath = old.LocalPath
+				rec.RuleCount = old.RuleCount
+				rec.Checksum = old.Checksum
+				rec.MetadataJSON = old.MetadataJSON
+				rec.CacheRevision = old.CacheRevision
+				if old.RemoteRevision != "" && old.RemoteRevision == item.RemoteRevision && old.CacheRevision == item.RemoteRevision && old.URL != "" {
+					rec.URL = old.URL
+				}
+			}
 			if err := tx.Create(&rec).Error; err != nil { return err }
 		}
 		return nil
 	}); err != nil { return err }
-	return models.DB.Model(&src).Updates(map[string]any{"last_sync_at": &now, "last_sync_status":"ok", "last_sync_error":""}).Error
+	if err := models.DB.Model(&src).Updates(map[string]any{"last_sync_at": &now, "last_sync_status":"ok", "last_sync_error":""}).Error; err != nil { return err }
+
+	// Cache refresh is intentionally detached from the request lifecycle. It
+	// only rewrites a rule file when content/revision actually changed.
+	go WarmSourceCache(context.Background(), key)
+	return nil
 }
 
 func get(ctx context.Context, rawURL string, max int64) ([]byte, http.Header, error) {
@@ -187,7 +210,36 @@ func syncShuntRules(ctx context.Context) ([]RuleItem, error) {
 	return items,nil
 }
 
-type ghContent struct { Name string `json:"name"`; Type string `json:"type"` }
+type ghContent struct { Name string `json:"name"`; Type string `json:"type"`; SHA string `json:"sha"` }
+
+func discoverIOSRuleURL(ctx context.Context, rec models.RuleCatalog) (string, error) {
+	apiURL := fmt.Sprintf("https://api.github.com/repos/blackmatrix7/ios_rule_script/contents/rule/%s/%s?ref=master", rec.Platform, url.PathEscape(rec.Name))
+	body, _, err := get(ctx, apiURL, 2<<20)
+	if err != nil { return "", err }
+	var entries []struct {
+		Name        string `json:"name"`
+		Type        string `json:"type"`
+		DownloadURL string `json:"download_url"`
+	}
+	if err := json.Unmarshal(body, &entries); err != nil { return "", err }
+	wantExt := ".list"
+	if strings.EqualFold(rec.Platform, "Clash") { wantExt = ".yaml" }
+	type candidate struct { name, raw string }
+	var candidates []candidate
+	for _, entry := range entries {
+		if entry.Type != "file" || entry.DownloadURL == "" || !strings.HasSuffix(strings.ToLower(entry.Name), wantExt) { continue }
+		candidates = append(candidates, candidate{name: entry.Name, raw: entry.DownloadURL})
+	}
+	if len(candidates) == 0 { return "", errors.New("rule payload file not found") }
+	sort.Slice(candidates, func(i, j int) bool {
+		exactI := strings.EqualFold(candidates[i].name, rec.Name+wantExt)
+		exactJ := strings.EqualFold(candidates[j].name, rec.Name+wantExt)
+		if exactI != exactJ { return exactI }
+		if len(candidates[i].name) != len(candidates[j].name) { return len(candidates[i].name) < len(candidates[j].name) }
+		return candidates[i].name < candidates[j].name
+	})
+	return candidates[0].raw, nil
+}
 
 func syncIOSRuleScript(ctx context.Context) ([]RuleItem, error) {
 	items := []RuleItem{}
@@ -199,12 +251,15 @@ func syncIOSRuleScript(ctx context.Context) ([]RuleItem, error) {
 		if err := json.Unmarshal(body,&entries); err != nil { return nil, err }
 		for _, e := range entries {
 			if e.Type != "dir" || e.Name == "" { continue }
+			// These entries are category containers whose children hold the real
+			// rule payloads. Treating them as leaf rules creates permanent 404s.
+			if e.Name == "Cloud" || e.Name == "Assassin'sCreed" { continue }
 			ext := "list"
 			if platform == "Clash" { ext = "yaml" }
 			filename := e.Name+"."+ext
 			raw := fmt.Sprintf("https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/%s/%s/%s", platform, url.PathEscape(e.Name), url.PathEscape(filename))
 			id := "ios_rule_script:"+platform+":"+e.Name
-			items = append(items, RuleItem{ExternalID:id, SourceKey:"ios_rule_script", Name:e.Name, Category:CategoryFor(e.Name), Platform:platform, Format:ext, URL:raw})
+			items = append(items, RuleItem{ExternalID:id, SourceKey:"ios_rule_script", Name:e.Name, Category:CategoryFor(e.Name), Platform:platform, Format:ext, URL:raw, RemoteRevision:e.SHA})
 		}
 	}
 	return items,nil
@@ -240,31 +295,89 @@ func ListCatalog(source, platform, category, keyword string, page, pageSize int)
 func Sources() ([]SourceStatus,error) {
 	if err:=EnsureSources(); err!=nil{return nil,err}
 	var srcs []models.RuleSource; if err:=models.DB.Order("id asc").Find(&srcs).Error;err!=nil{return nil,err}
-	out:=make([]SourceStatus,0,len(srcs)); for _,s:=range srcs{var count int64;models.DB.Model(&models.RuleCatalog{}).Where("source_key = ?",s.Key).Count(&count);out=append(out,SourceStatus{Key:s.Key,Name:s.Name,Kind:s.Type,Repo:s.Repo,Branch:s.Branch,Enabled:s.Enabled,Status:s.LastSyncStatus,LastSyncAt:s.LastSyncAt,Error:s.LastSyncError,Count:count})};return out,nil
+	out:=make([]SourceStatus,0,len(srcs)); for _,s:=range srcs{var count,cached int64;models.DB.Model(&models.RuleCatalog{}).Where("source_key = ?",s.Key).Count(&count);models.DB.Model(&models.RuleCatalog{}).Where("source_key = ? AND checksum <> ''",s.Key).Count(&cached);out=append(out,SourceStatus{Key:s.Key,Name:s.Name,Kind:s.Type,Repo:s.Repo,Branch:s.Branch,Enabled:s.Enabled,Status:s.LastSyncStatus,LastSyncAt:s.LastSyncAt,Error:s.LastSyncError,Count:count,CachedCount:cached})};return out,nil
+}
+
+func WarmSourceCache(ctx context.Context, sourceKey string) {
+	if _, loaded := warmRunning.LoadOrStore(sourceKey, true); loaded { return }
+	defer warmRunning.Delete(sourceKey)
+	var records []models.RuleCatalog
+	if err := models.DB.Where("source_key = ?", sourceKey).Order("id asc").Find(&records).Error; err != nil { return }
+
+	// Warm the cache deliberately at low priority. A single sequential worker
+	// avoids hammering the shared SQLite database and keeps dashboard/API reads
+	// responsive while background rule refresh is running.
+	for _, rec := range records {
+		select {
+		case <-ctx.Done(): return
+		default:
+		}
+		_, _, _, _ = refreshCatalogRecord(ctx, rec, true)
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func refreshCatalogRecord(ctx context.Context, rec models.RuleCatalog, checkRemote bool) ([]byte, []NormalizedRule, []string, error) {
+	local := rec.LocalPath
+	if local == "" { local = cachePath(rec.SourceKey, rec.Platform, rec.Name, rec.Format) }
+	cached, cachedErr := os.ReadFile(local)
+	cacheOK := cachedErr == nil && len(cached) > 0
+
+	if checkRemote && rec.SourceKey == "ios_rule_script" && rec.RemoteRevision != "" && rec.CacheRevision == rec.RemoteRevision && cacheOK && rec.RuleCount > 0 {
+		rules, warnings, err := ParseRules(cached, rec.Format)
+		return cached, rules, warnings, err
+	}
+	if !checkRemote && cacheOK && rec.RuleCount > 0 {
+		rules, warnings, err := ParseRules(cached, rec.Format)
+		return cached, rules, warnings, err
+	}
+
+	body, _, fetchErr := get(ctx, rec.URL, 16<<20)
+	if fetchErr != nil && rec.SourceKey == "ios_rule_script" {
+		if discovered, discoverErr := discoverIOSRuleURL(ctx, rec); discoverErr == nil && discovered != "" && discovered != rec.URL {
+			if retryBody, _, retryErr := get(ctx, discovered, 16<<20); retryErr == nil {
+				body, fetchErr, rec.URL = retryBody, nil, discovered
+				_ = models.DB.Model(&models.RuleCatalog{}).Where("external_id = ?", rec.ExternalID).Update("url", discovered).Error
+			}
+		}
+	}
+	if fetchErr != nil {
+		if !cacheOK { return nil, nil, nil, fetchErr }
+		rules, warnings, err := ParseRules(cached, rec.Format)
+		return cached, rules, warnings, err
+	}
+	sum := sha256.Sum256(body)
+	checksum := hex.EncodeToString(sum[:])
+	if cacheOK && rec.Checksum != "" && checksum == rec.Checksum {
+		// The remote payload is byte-for-byte identical. Keep the existing file
+		// and, critically, do not issue a no-op SQLite UPDATE.
+		rules, warnings, err := ParseRules(cached, rec.Format)
+		return cached, rules, warnings, err
+	}
+	rules, warnings, err := ParseRules(body, rec.Format)
+	if err != nil { return nil, nil, nil, err }
+	changed := !cacheOK || checksum != rec.Checksum
+	if changed {
+		if err := atomicCacheWrite(local, body); err != nil { return nil, nil, nil, err }
+	}
+	meta := CountTypes(rules)
+	metaJSON, _ := json.Marshal(meta)
+	updates := map[string]any{
+		"local_path": local, "rule_count": len(rules), "checksum": checksum,
+		"metadata_json": string(metaJSON), "cache_revision": rec.RemoteRevision,
+	}
+	_ = models.DB.Model(&models.RuleCatalog{}).Where("external_id = ?", rec.ExternalID).Updates(updates).Error
+	return body, rules, warnings, nil
 }
 
 func LoadItem(ctx context.Context, externalID string) (RuleItem, []NormalizedRule, error) {
 	var rec models.RuleCatalog
 	if err:=models.DB.Where("external_id = ?",externalID).First(&rec).Error;err!=nil{return RuleItem{},nil,err}
-	local:=cachePath(rec.SourceKey,rec.Platform,rec.Name,rec.Format)
-	data, readErr:=os.ReadFile(local)
-	fresh:=false
-	if readErr==nil { if info,statErr:=os.Stat(local);statErr==nil { fresh=time.Since(info.ModTime())<24*time.Hour } }
-	if readErr!=nil || !fresh {
-		body,_,fetchErr:=get(ctx,rec.URL,4<<20)
-		if fetchErr==nil {
-			if err:=atomicCacheWrite(local,body);err!=nil{return RuleItem{},nil,err}
-			data=body
-		} else if readErr!=nil {
-			return RuleItem{},nil,fetchErr
-		}
-	}
-	rules,warnings,err:=ParseRules(data,rec.Format);if err!=nil{return RuleItem{},nil,err}
+	data,rules,warnings,err:=refreshCatalogRecord(ctx,rec,false);if err!=nil{return RuleItem{},nil,err}
 	sum:=sha256.Sum256(data);checksum:=hex.EncodeToString(sum[:])
-	meta:=CountTypes(rules); metaJSON,_:=json.Marshal(meta)
-	_ = models.DB.Model(&rec).Updates(map[string]any{"local_path":local,"rule_count":len(rules),"checksum":checksum,"metadata_json":string(metaJSON)}).Error
+	meta:=CountTypes(rules)
 	sample:=rules;if len(sample)>30{sample=sample[:30]}
-	return RuleItem{ExternalID:rec.ExternalID,SourceKey:rec.SourceKey,Name:rec.Name,Category:rec.Category,Platform:rec.Platform,Format:rec.Format,URL:rec.URL,LocalPath:local,RuleCount:len(rules),UpdatedAt:rec.RemoteUpdate,Checksum:checksum,Metadata:meta,Warnings:warnings,Sample:sample},rules,nil
+	return RuleItem{ExternalID:rec.ExternalID,SourceKey:rec.SourceKey,Name:rec.Name,Category:rec.Category,Platform:rec.Platform,Format:rec.Format,URL:rec.URL,LocalPath:cachePath(rec.SourceKey,rec.Platform,rec.Name,rec.Format),RuleCount:len(rules),UpdatedAt:rec.RemoteUpdate,RemoteRevision:rec.RemoteRevision,Checksum:checksum,Metadata:meta,Warnings:warnings,Sample:sample},rules,nil
 }
 
 func cachePath(source, platform, name, format string) string {

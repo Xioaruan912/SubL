@@ -18,8 +18,9 @@ type RuleItem struct {
 	URL        string            `json:"url"`
 	LocalPath  string            `json:"localPath"`
 	RuleCount  int               `json:"ruleCount"`
-	UpdatedAt  string            `json:"updatedAt"`
-	Checksum   string            `json:"checksum"`
+	UpdatedAt      string            `json:"updatedAt"`
+	RemoteRevision string            `json:"remoteRevision,omitempty"`
+	Checksum       string            `json:"checksum"`
 	Metadata   map[string]int    `json:"metadata,omitempty"`
 	Warnings   []string          `json:"warnings,omitempty"`
 	Sample     []NormalizedRule  `json:"sample,omitempty"`
@@ -36,5 +37,6 @@ type SourceStatus struct {
 	Status     string     `json:"status"`
 	LastSyncAt *time.Time `json:"lastSyncAt"`
 	Error      string     `json:"error,omitempty"`
-	Count      int64      `json:"count"`
+	Count       int64      `json:"count"`
+	CachedCount int64      `json:"cachedCount"`
 }

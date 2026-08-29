@@ -207,7 +207,10 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
     },
     // 构建配置
     build: {
-      chunkSizeWarningLimit: 2000, // 消除打包大小超过500kb警告
+      chunkSizeWarningLimit: 2000,
+      // Admin pages share a large amount of Element Plus CSS. A single CSS
+      // payload avoids a request waterfall every time a lazy route is opened.
+      cssCodeSplit: false,
       minify: "terser", // Vite 2.6.x 以上需要配置 minify: "terser", terserOptions 才能生效
       terserOptions: {
         compress: {
@@ -221,7 +224,14 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
       },
       rollupOptions: {
         output: {
-          manualChunks: {},
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return;
+            if (id.includes("monaco-editor")) return "vendor-monaco";
+            if (id.includes("echarts") || id.includes("zrender")) return "vendor-echarts";
+            if (id.includes("element-plus") || id.includes("@element-plus/icons-vue")) return "vendor-element-plus";
+            if (id.includes("/vue/") || id.includes("vue-router") || id.includes("pinia") || id.includes("@vueuse") || id.includes("vue-i18n")) return "vendor-vue";
+            return "vendor-common";
+          },
           // 用于从入口点创建的块的打包输出格式[name]表示文件名,[hash]表示该文件内容hash值
           entryFileNames: "js/[name].[hash].js",
           // 用于命名代码拆分时创建的共享块的输出命名

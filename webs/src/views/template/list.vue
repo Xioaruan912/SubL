@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { getTemp, AddTemp, UpdateTemp, DelTemp, ValidateTemp, GetTempVersions, GetTempVersion, RollbackTemp } from "@/api/template/temp"
 import TemplateMonacoEditor from '@/components/TemplateMonacoEditor.vue'
+import TemplateMonacoDiff from '@/components/TemplateMonacoDiff.vue'
 
 interface Temp {
   file: string;
@@ -26,6 +27,8 @@ const versionLoading = ref(false)
 const diffVisible = ref(false)
 const oldVersionText = ref('')
 const oldVersionTitle = ref('')
+const outlineExpanded = ref(false)
+const visibleOutline = computed(() => outlineExpanded.value ? outline.value : outline.value.filter(item => item.level === 0))
 
 // 类型识别：yaml→clash / conf→loon / 其他→generic
 const tempType = (file: string) => {
@@ -181,9 +184,9 @@ const copyText = async (row: Temp) => {
         </div>
         <div class="workbench-grid">
           <aside class="outline-panel">
-            <div class="panel-title">结构导航 <span>{{ outline.length }}</span></div>
+            <div class="panel-title"><span>结构导航 <small>{{ visibleOutline.length }}/{{ outline.length }}</small></span><button v-if="outline.some(item => item.level > 0)" class="outline-toggle" @click="outlineExpanded = !outlineExpanded">{{ outlineExpanded ? '仅一级' : '展开全部' }}</button></div>
             <el-empty v-if="!outline.length" :image-size="44" description="点击校验生成结构" />
-            <button v-for="item in outline" :key="`${item.line}-${item.key}`" class="outline-item" :style="{ paddingLeft: `${12 + item.level * 12}px` }" @click.prevent="editorRef?.revealLine(item.line)">
+            <button v-for="item in visibleOutline" :key="`${item.line}-${item.key}`" class="outline-item" :style="{ paddingLeft: `${12 + item.level * 12}px` }" @click.prevent="editorRef?.revealLine(item.line)">
               <span>{{ item.key }}</span><small>{{ item.line }}</small>
             </button>
           </aside>
@@ -213,8 +216,9 @@ const copyText = async (row: Temp) => {
         <el-empty v-if="!versionLoading && !versions.length" description="暂无历史版本" />
       </div>
     </el-drawer>
-    <el-dialog v-model="diffVisible" :title="oldVersionTitle" width="min(1280px, 94vw)" top="5vh">
-      <div class="diff-grid"><div><b>历史版本</b><pre>{{ oldVersionText }}</pre></div><div><b>当前编辑内容</b><pre>{{ TempText }}</pre></div></div>
+    <el-dialog v-model="diffVisible" :title="oldVersionTitle" width="min(1480px, 96vw)" top="3vh">
+      <div class="diff-head"><span>左侧：历史版本</span><span>右侧：当前编辑内容</span><small>绿色为新增，红色为删除，修改行会在两侧直接高亮。</small></div>
+      <TemplateMonacoDiff v-if="diffVisible" :original="oldVersionText" :modified="TempText" :language="editorLanguage" />
     </el-dialog>
   </div>
 </template>
@@ -241,6 +245,6 @@ const copyText = async (row: Temp) => {
 }
 .card-actions { display: flex; justify-content: flex-end; gap: 2px; border-top: 1px solid var(--el-border-color-lighter); padding-top: 8px; margin-top: 8px; }
 .workbench-toolbar { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; }.filename-field { flex:1; max-width:560px; margin-bottom:12px; }.workbench-actions { display:flex; gap:8px; padding-bottom:12px; }
-.workbench-grid { display:grid; grid-template-columns:220px minmax(0,1fr) 260px; gap:12px; min-height:560px; }.outline-panel,.inspect-panel { overflow:auto; max-height:560px; border:1px solid var(--el-border-color-lighter); border-radius:10px; background:var(--el-fill-color-blank); }.panel-title { position:sticky; top:0; z-index:1; display:flex; justify-content:space-between; padding:12px; border-bottom:1px solid var(--el-border-color-lighter); background:var(--el-bg-color); font-weight:700; }.panel-title span { color:var(--el-text-color-secondary); }.outline-item { display:flex; width:100%; justify-content:space-between; gap:8px; padding:8px 10px; border:0; background:transparent; color:var(--el-text-color-regular); text-align:left; cursor:pointer; }.outline-item:hover { background:var(--el-fill-color-light); color:var(--el-color-primary); }.outline-item small { color:var(--el-text-color-placeholder); }.inspect-panel { padding-bottom:12px; }.inspect-panel :deep(.el-alert) { margin:10px; width:auto; }.inspect-panel :deep(.el-result) { padding:28px 10px 12px; }.inspect-tip { padding:0 14px; color:var(--el-text-color-secondary); font-size:12px; line-height:1.7; }.version-item { display:grid; grid-template-columns:1fr auto; gap:7px; padding:12px 0; border-bottom:1px solid var(--el-border-color-lighter); }.version-item > div:first-child { display:flex; gap:8px; align-items:center; }.version-item > div:last-child { grid-column:1/-1; }.version-item small { color:var(--el-text-color-secondary); }.diff-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }.diff-grid > div { min-width:0; }.diff-grid pre { overflow:auto; height:60vh; padding:12px; border:1px solid var(--el-border-color); border-radius:8px; background:var(--el-fill-color-light); white-space:pre; font-size:12px; }
-@media(max-width:1100px){.workbench-grid{grid-template-columns:180px minmax(0,1fr)}.inspect-panel{display:none}}@media(max-width:700px){.workbench-grid{grid-template-columns:1fr}.outline-panel{display:none}.diff-grid{grid-template-columns:1fr}.diff-grid pre{height:30vh}}
+.workbench-grid { display:grid; grid-template-columns:220px minmax(0,1fr) 260px; gap:12px; min-height:560px; }.outline-panel,.inspect-panel { overflow:auto; max-height:560px; border:1px solid var(--el-border-color-lighter); border-radius:10px; background:var(--el-fill-color-blank); }.panel-title { position:sticky; top:0; z-index:1; display:flex; justify-content:space-between; align-items:center; gap:8px; padding:12px; border-bottom:1px solid var(--el-border-color-lighter); background:var(--el-bg-color); font-weight:700; }.panel-title span { color:var(--el-text-color-secondary); }.panel-title small { margin-left:4px; font-weight:400; }.outline-toggle { border:0; background:transparent; color:var(--el-color-primary); font-size:12px; cursor:pointer; }.outline-item { display:flex; width:100%; justify-content:space-between; gap:8px; padding:8px 10px; border:0; background:transparent; color:var(--el-text-color-regular); text-align:left; cursor:pointer; }.outline-item:hover { background:var(--el-fill-color-light); color:var(--el-color-primary); }.outline-item small { color:var(--el-text-color-placeholder); }.inspect-panel { padding-bottom:12px; }.inspect-panel :deep(.el-alert) { margin:10px; width:auto; }.inspect-panel :deep(.el-result) { padding:28px 10px 12px; }.inspect-tip { padding:0 14px; color:var(--el-text-color-secondary); font-size:12px; line-height:1.7; }.version-item { display:grid; grid-template-columns:1fr auto; gap:7px; padding:12px 0; border-bottom:1px solid var(--el-border-color-lighter); }.version-item > div:first-child { display:flex; gap:8px; align-items:center; }.version-item > div:last-child { grid-column:1/-1; }.version-item small { color:var(--el-text-color-secondary); }.diff-head { display:flex; gap:18px; align-items:center; margin-bottom:10px; color:var(--el-text-color-regular); font-size:13px; }.diff-head small { margin-left:auto; color:var(--el-text-color-secondary); }
+@media(max-width:1100px){.workbench-grid{grid-template-columns:180px minmax(0,1fr)}.inspect-panel{display:none}}@media(max-width:700px){.workbench-grid{grid-template-columns:1fr}.outline-panel{display:none}.diff-head{align-items:flex-start;flex-direction:column;gap:4px}.diff-head small{margin-left:0}}
 </style>

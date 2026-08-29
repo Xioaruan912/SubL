@@ -64,8 +64,8 @@
         <p>地图显示节点地区分布，右侧展示当前设备的网络延迟参考。</p>
       </header>
       <el-row :gutter="20">
-        <el-col :span="16" :xs="24" class="mb-4"><div class="dashboard-panel map-panel"><world-map /></div></el-col>
-        <el-col :span="8" :xs="24" class="mb-4"><div class="dashboard-panel"><node-ping /></div></el-col>
+        <el-col :span="16" :xs="24" class="mb-4"><div class="dashboard-panel map-panel"><world-map v-if="heavyReady" /><div v-else class="deferred-placeholder">地图将在首屏稳定后加载…</div></div></el-col>
+        <el-col :span="8" :xs="24" class="mb-4"><div class="dashboard-panel"><node-ping v-if="heavyReady" /><div v-else class="deferred-placeholder">延迟面板将在首屏稳定后加载…</div></div></el-col>
       </el-row>
     </section>
 
@@ -89,6 +89,7 @@ import { getSubTotal } from "@/api/total";
 import { getNodeQualitySummary, getNodeRecommendations, getNodeHealthEvents, getAlertSetting, updateAlertSetting } from "@/api/subcription/node";
 const WorldMap = defineAsyncComponent(() => import("./components/WorldMap.vue"));
 const NodePing = defineAsyncComponent(() => import("./components/NodePing.vue"));
+const heavyReady = ref(false);
 const userStore = useUserStore();
 const subTotal = ref(0);
 const qualitySummary = ref({ total: 0, healthy: 0, warning: 0, offline: 0, averageScore: 0 });
@@ -101,6 +102,12 @@ const saveAlerts = async () => { await updateAlertSetting(alertForm.value); ElMe
 const aliveNodes = computed(() => Math.max(qualitySummary.value.total - qualitySummary.value.offline, 0));
 const survivalRate = computed(() => qualitySummary.value.total ? Math.round(aliveNodes.value * 1000 / qualitySummary.value.total) / 10 : 0);
 onMounted(async () => {
+  const scheduleHeavy = () => { heavyReady.value = true; };
+  if ('requestIdleCallback' in window) {
+    (window as any).requestIdleCallback(scheduleHeavy, { timeout: 1800 });
+  } else {
+    globalThis.setTimeout(scheduleHeavy, 900);
+  }
   const [subs, quality, recommends, events] = await Promise.allSettled([getSubTotal(), getNodeQualitySummary(), getNodeRecommendations(), getNodeHealthEvents(20)]);
   if (subs.status === "fulfilled") subTotal.value = subs.value?.data || 0;
   if (quality.status === "fulfilled") qualitySummary.value = { ...qualitySummary.value, ...(quality.value?.data || {}) };
@@ -127,7 +134,7 @@ onMounted(async () => {
 .hero-wire { position:absolute; right:0; bottom:0; left:0; width:100%; height:130px; pointer-events:none; }
 .kpi-grid { position:relative; z-index:1; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; margin-top:2px; }.kpi-grid article { display:flex; flex-direction:column; gap:6px; min-height:142px; padding:20px; border:1px solid var(--ui-border); border-radius:14px; background:color-mix(in srgb,var(--ui-surface-strong) 84%,transparent); transition:border-color 150ms ease; }.kpi-grid article::before { width:28px; height:3px; margin-bottom:3px; border-radius:99px; background:var(--tile-accent); content:""; }.kpi-grid article:hover { border-color:color-mix(in srgb,var(--tile-accent) 42%,var(--ui-border)); }
 .kpi-grid span { color:var(--ui-text-secondary); font-size:12px; font-weight:700; }.kpi-grid strong { color:var(--ui-text); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:34px; line-height:1.15; }.kpi-grid small { margin-top:auto; color:var(--ui-text-muted); font-size:11px; }
-.dashboard-section { margin-top:70px; }.section-heading { margin-bottom:22px; }.section-heading h2 { margin:8px 0 7px; color:var(--ui-text); font-size:26px; letter-spacing:-.025em; }.section-heading p { margin:0; color:var(--ui-text-muted); font-size:13px; }.dashboard-panel { height:100%; min-height:420px; padding:22px; border:1px solid var(--ui-border); border-radius:16px; background:var(--ui-surface-strong); box-shadow:var(--ui-panel-shadow); }.map-panel { overflow:hidden; }
+.dashboard-section { margin-top:70px; }.deferred-placeholder { display:grid; place-items:center; min-height:360px; color:var(--ui-text-muted); font-size:13px; }.section-heading { margin-bottom:22px; }.section-heading h2 { margin:8px 0 7px; color:var(--ui-text); font-size:26px; letter-spacing:-.025em; }.section-heading p { margin:0; color:var(--ui-text-muted); font-size:13px; }.dashboard-panel { height:100%; min-height:420px; padding:22px; border:1px solid var(--ui-border); border-radius:16px; background:var(--ui-surface-strong); box-shadow:var(--ui-panel-shadow); }.map-panel { overflow:hidden; }
 .section-heading-row { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; }.scene-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }.scene-card { padding:18px; border:1px solid var(--ui-border); border-radius:15px; background:var(--ui-surface-strong); }.scene-card > header { display:flex; justify-content:space-between; margin-bottom:12px; }.scene-card > header span { font-weight:750; }.scene-card > header small { color:var(--ui-accent-strong); font-family:monospace; font-size:10px; letter-spacing:.12em; }.recommend-item { display:grid; grid-template-columns:24px minmax(0,1fr) auto; align-items:center; gap:9px; padding:10px 0; border-top:1px solid var(--ui-border); }.recommend-item > b { display:grid; place-items:center; width:22px; height:22px; border-radius:7px; background:color-mix(in srgb,var(--ui-accent) 12%,transparent); color:var(--ui-accent-strong); font-size:11px; }.recommend-item > div { min-width:0; display:flex; flex-direction:column; gap:3px; }.recommend-item strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }.recommend-item div small { color:var(--ui-text-muted); font-size:10px; }.recommend-item > span { font-family:monospace; font-size:20px; font-weight:700; }.recommend-item > span small { font-size:9px; color:var(--ui-text-muted); }.event-strip { margin-top:14px; padding:14px 18px; border:1px solid var(--ui-border); border-radius:14px; background:var(--ui-surface-strong); }.event-label { display:block; margin-bottom:8px; color:var(--ui-text-muted); font-size:11px; font-weight:800; letter-spacing:.1em; }.event-item { display:grid; grid-template-columns:8px 120px minmax(0,1fr) auto; align-items:center; gap:9px; min-height:30px; font-size:12px; }.event-item i { width:7px; height:7px; border-radius:50%; background:#d15b4f; }.event-item i.recovery { background:#22a06b; }.event-item > span,.event-item > small { color:var(--ui-text-muted); }.event-item > small { font-size:10px; }
 @keyframes period-breath { 50% { opacity:.38; } } @keyframes live-ping { 70%,100% { box-shadow:0 0 0 7px rgba(34,160,107,0); } }
 @media (max-width:900px) { .dashboard-page { padding-inline:22px; }.dashboard-hero { grid-template-columns:1fr; padding-bottom:70px; }.kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.scene-grid{grid-template-columns:1fr}.event-item{grid-template-columns:8px 90px 1fr}.event-item>small{display:none} }

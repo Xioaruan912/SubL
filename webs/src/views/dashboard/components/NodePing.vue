@@ -14,8 +14,13 @@
       </div>
     </template>
 
+    <div v-if="!loaded && !loading" class="manual-load">
+      <p>为避免首页自动对全部节点测速，延迟数据改为按需加载。</p>
+      <el-button type="primary" plain @click="load">加载延迟数据</el-button>
+    </div>
+
     <!-- 常见目标延迟 -->
-    <div class="section" v-loading="loading">
+    <div v-if="loaded || loading" class="section" v-loading="loading">
       <div class="section-title">常见目标延迟</div>
       <div class="target-list">
         <div v-for="t in targets" :key="t.name" class="target-item">
@@ -28,7 +33,7 @@
     </div>
 
     <!-- 节点延迟 -->
-    <div class="section" v-loading="loading">
+    <div v-if="loaded || loading" class="section" v-loading="loading">
       <div class="section-title">
         当前节点延迟
         <span class="node-count">({{ nodes.length }} 个节点)</span>
@@ -68,6 +73,7 @@ interface NodePingItem {
 }
 
 const loading = ref(false);
+const loaded = ref(false);
 const targets = ref<PingTarget[]>([]);
 const nodes = ref<NodePingItem[]>([]);
 
@@ -87,25 +93,13 @@ const tagType = (rtt: number) => {
   return "danger";
 };
 
-import { testLocalAll } from "@/utils/ping"
-
 const load = async () => {
   loading.value = true;
   try {
     const { data } = await getNodePing();
-    const ts = data?.targets || [];
-    ts.forEach((t: any) => {
-      t.rtt = t.rtt === -1 ? -1 : -2;
-    });
-    targets.value = ts;
-    
-    const ns = data?.nodes || [];
-    ns.forEach((n: any) => {
-      n.rtt = n.rtt === -1 ? -1 : -2;
-    });
-    nodes.value = ns;
-
-    triggerDashboardPings();
+    targets.value = data?.targets || [];
+    nodes.value = data?.nodes || [];
+    loaded.value = true;
   } catch {
     targets.value = [];
     nodes.value = [];
@@ -114,37 +108,6 @@ const load = async () => {
   }
 };
 
-const triggerDashboardPings = () => {
-  const targetsToTest = targets.value.map(t => {
-    const parts = t.addr.split(':');
-    return {
-      server: parts[0],
-      port: parseInt(parts[1]) || 443,
-      rtt: t.rtt
-    };
-  });
-  testLocalAll(targetsToTest, (index, rtt) => {
-    if (targets.value[index]) {
-      targets.value[index].rtt = rtt;
-    }
-  });
-
-  const nodesToTest = nodes.value.map(n => {
-    const parts = n.server.split(':');
-    return {
-      server: parts[0],
-      port: parseInt(parts[1]) || 443,
-      rtt: n.rtt
-    };
-  });
-  testLocalAll(nodesToTest, (index, rtt) => {
-    if (nodes.value[index]) {
-      nodes.value[index].rtt = rtt;
-    }
-  });
-};
-
-onMounted(load);
 </script>
 
 <style lang="scss" scoped>
@@ -228,6 +191,9 @@ onMounted(load);
     }
   }
 }
+
+.manual-load { display:grid; gap:12px; place-items:center; min-height:180px; padding:24px; text-align:center; color:var(--el-text-color-secondary); }
+.manual-load p { margin:0; font-size:13px; line-height:1.6; }
 
 html.dark .target-item {
   background: #202425;

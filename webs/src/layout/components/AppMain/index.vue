@@ -2,7 +2,7 @@
   <section class="app-main">
     <router-view>
       <template #default="{ Component, route }">
-        <transition name="page-shift" mode="out-in">
+        <transition name="page-shift">
           <keep-alive :include="cachedViews">
             <component :is="Component" :key="route.path" />
           </keep-alive>

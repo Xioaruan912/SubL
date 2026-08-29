@@ -139,6 +139,22 @@ func NodeRecommendations(c *gin.Context) {
 		c.JSON(500, gin.H{"msg": "读取质量数据失败"})
 		return
 	}
+	// Load unlock observations once. The old implementation queried per node
+	// and per scene, causing hundreds of SQLite queries on every dashboard load.
+	services := []string{"openai", "claude", "google-gemini", "netflix", "youtube", "disney"}
+	var observations []models.UnlockObservation
+	models.DB.Where("service IN ?", services).Order("node_id asc, service asc, checked_at desc").Find(&observations)
+	latestUnlock := make(map[int]map[string]bool)
+	for _, o := range observations {
+		perNode := latestUnlock[o.NodeID]
+		if perNode == nil {
+			perNode = make(map[string]bool)
+			latestUnlock[o.NodeID] = perNode
+		}
+		if _, exists := perNode[o.Service]; !exists {
+			perNode[o.Service] = o.Available
+		}
+	}
 	type scene struct {
 		Key   string           `json:"key"`
 		Name  string           `json:"name"`
@@ -159,21 +175,19 @@ func NodeRecommendations(c *gin.Context) {
 				reasons = []string{fmt.Sprintf("平均延迟 %dms", s.AverageRtt), fmt.Sprintf("抖动 %dms", s.Jitter)}
 			}
 			if scenes[si].Key == "ai" || scenes[si].Key == "media" {
-				services := []string{"openai", "claude", "google-gemini"}
+				sceneServices := []string{"openai", "claude", "google-gemini"}
 				if scenes[si].Key == "media" {
-					services = []string{"netflix", "youtube", "disney"}
+					sceneServices = []string{"netflix", "youtube", "disney"}
 				}
-				var observations []models.UnlockObservation
-				models.DB.Where("node_id = ? AND service IN ?", n.ID, services).Order("checked_at desc").Find(&observations)
-				latest := map[string]bool{}
 				unlocked, total := 0, 0
-				for _, o := range observations {
-					if _, seen := latest[o.Service]; seen {
+				perNode := latestUnlock[n.ID]
+				for _, service := range sceneServices {
+					available, ok := perNode[service]
+					if !ok {
 						continue
 					}
-					latest[o.Service] = o.Available
 					total++
-					if o.Available {
+					if available {
 						unlocked++
 					}
 				}

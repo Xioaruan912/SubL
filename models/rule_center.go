@@ -32,8 +32,10 @@ type RuleCatalog struct {
 	URL          string    `gorm:"type:text;not null" json:"url"`
 	LocalPath    string    `gorm:"type:text" json:"localPath"`
 	RuleCount    int       `json:"ruleCount"`
-	RemoteUpdate string    `gorm:"size:128" json:"remoteUpdate"`
-	Checksum     string    `gorm:"size:128" json:"checksum"`
+	RemoteUpdate   string    `gorm:"size:128" json:"remoteUpdate"`
+	RemoteRevision string    `gorm:"size:128;index" json:"remoteRevision"`
+	CacheRevision  string    `gorm:"size:128" json:"cacheRevision"`
+	Checksum       string    `gorm:"size:128" json:"checksum"`
 	MetadataJSON string    `gorm:"type:text" json:"metadataJson"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`

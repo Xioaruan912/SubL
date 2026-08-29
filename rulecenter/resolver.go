@@ -59,6 +59,6 @@ func safeLocalProviderPath(raw string)(string,error){
 
 func fetchProviderCached(ctx context.Context, rawURL string)([]byte,string,error){
 	sum:=sha256.Sum256([]byte(rawURL));key:=hex.EncodeToString(sum[:]);ext:=strings.TrimPrefix(strings.ToLower(filepath.Ext(strings.Split(rawURL,"?")[0])),".");if ext==""{ext="yaml"};path:=filepath.Join(cacheRoot,"providers",key+"."+ext)
-	body,_,err:=get(ctx,rawURL,4<<20);if err==nil{if writeErr:=atomicCacheWrite(path,body);writeErr!=nil{return nil,"",writeErr};return body,ext,nil}
+	body,_,err:=get(ctx,rawURL,16<<20);if err==nil{if writeErr:=atomicCacheWrite(path,body);writeErr!=nil{return nil,"",writeErr};return body,ext,nil}
 	cached,readErr:=os.ReadFile(path);if readErr==nil{return cached,ext,nil};return nil,"",err
 }

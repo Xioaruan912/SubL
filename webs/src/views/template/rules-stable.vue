@@ -11,6 +11,8 @@ type RuleItem = {
   platform: string;
   format: string;
   ruleCount: number;
+  checksum?: string;
+  localPath?: string;
   remoteUpdate?: string;
   metadataJson?: string;
 };
@@ -35,7 +37,9 @@ const importLoading = ref(false);
 const importItems = ref<RuleItem[]>([]);
 const templates = ref<any[]>([]);
 const proxyGroups = ref<string[]>([]);
-const importForm = ref({ template: "", policy: "AI节点", proxy: "", conflictPolicy: "keep" });
+const policyGroups = computed(() => [...proxyGroups.value, "DIRECT"]);
+const proxyOptions = computed(() => ["DIRECT", ...proxyGroups.value]);
+const importForm = ref({ template: "", policy: "", proxy: "", conflictPolicy: "keep" });
 
 const selectedRules = computed(() => rules.value.filter(r => selectedIds.value.includes(r.externalId)));
 const sourceLabel = (key: string) => key === "shunt_rules" ? "ShuntRules" : key === "ios_rule_script" ? "ios_rule_script" : key;
@@ -123,10 +127,12 @@ async function openPreview(row: RuleItem) {
 async function loadTemplateGroups() {
   proxyGroups.value = [];
   importForm.value.proxy = "";
+  importForm.value.policy = "";
   if (!importForm.value.template) return;
   try {
     const res = await getRuleTemplateGroups(importForm.value.template);
     proxyGroups.value = Array.isArray(res?.data) ? res.data : [];
+    importForm.value.policy = proxyGroups.value[0] || "DIRECT";
   } catch (e: any) {
     errorText.value = `读取模板节点组失败：${typeof e === "string" ? e : e?.message || "未知错误"}`;
   }
@@ -194,7 +200,7 @@ onMounted(async () => {
       <article v-for="s in sources" :key="s.key" class="source-card">
         <div class="source-head"><strong>{{ s.name }}</strong><span :class="['status', s.status === 'ok' ? 'ok' : 'muted']">{{ s.status === 'ok' ? '已同步' : '尚未同步' }}</span></div>
         <div class="muted-text">{{ s.repo }}</div>
-        <div class="source-foot"><span>{{ s.count || 0 }} 条目录</span><span>{{ s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleString() : '-' }}</span></div>
+        <div class="source-foot"><span>{{ s.count || 0 }} 条目录 · 已缓存 {{ s.cachedCount || 0 }}</span><span>{{ s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleString() : '-' }}</span></div>
       </article>
     </section>
 
@@ -232,7 +238,7 @@ onMounted(async () => {
               <div><strong>{{ r.name || '未命名规则' }}</strong><small>{{ r.category || '其他' }}</small></div>
             </div>
             <div class="tags"><span>{{ sourceLabel(r.sourceKey) }}</span><span>{{ r.platform }}</span><span>{{ r.format }}</span></div>
-            <div class="meta"><span>{{ r.ruleCount ? `${r.ruleCount} 条规则` : '尚未缓存正文' }}</span><span>{{ r.remoteUpdate || '' }}</span></div>
+            <div class="meta"><span>{{ r.checksum ? `${r.ruleCount} 条规则` : '自动缓存中…' }}</span><span>{{ r.remoteUpdate || '' }}</span></div>
             <div v-if="metadataSummary(r)" class="summary">{{ metadataSummary(r) }}</div>
             <div class="actions"><button @click="openPreview(r)">预览</button><button class="primary-link" @click="openImport([r])">导入模板</button></div>
           </article>
@@ -270,8 +276,8 @@ onMounted(async () => {
         <div class="modal-body form">
           <div class="notice">将导入：{{ importItems.map(i => i.name).join('、') }}</div>
           <label>目标模板<select v-model="importForm.template" class="input full" @change="loadTemplateGroups"><option v-for="t in templates" :key="t.file" :value="t.file">{{ t.file }}</option></select></label>
-          <label>策略组<input v-model="importForm.policy" class="input full" placeholder="例如 AI节点" /></label>
-          <label>规则下载代理（proxy）<select v-model="importForm.proxy" class="input full"><option value="">不指定（proxy: ""）</option><option v-for="g in proxyGroups" :key="g" :value="g">{{ g }}</option></select><small class="field-tip">选项来自当前模板的 proxy-groups。用于让 Clash/Mihomo 通过指定策略组下载远程规则。</small></label>
+          <label>策略组<select v-model="importForm.policy" class="input full"><option v-for="g in policyGroups" :key="g" :value="g">{{ g }}</option></select><small class="field-tip">自动读取当前模板的 proxy-groups，并额外提供 DIRECT。</small></label>
+          <label>规则下载代理（proxy）<select v-model="importForm.proxy" class="input full"><option value="">不指定（proxy: ""）</option><option v-for="g in proxyOptions" :key="g" :value="g">{{ g }}</option></select><small class="field-tip">自动读取当前模板的 proxy-groups，并额外提供 DIRECT；用于控制远程规则文件通过哪个策略下载。</small></label>
           <label>Provider 冲突<select v-model="importForm.conflictPolicy" class="input full"><option value="keep">保留现有</option><option value="update-url">更新 URL</option><option value="replace">替换</option></select></label>
           <div class="notice warn">默认使用 Rule Provider，并插入 MATCH 前；写入前会创建模板版本。</div>
         </div>
