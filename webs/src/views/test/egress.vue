@@ -40,6 +40,8 @@ const selectedNode = ref<number | null>(null)
 const nodesLoading = ref(false)
 const planLoading = ref(false)
 const plan = ref<any | null>(null)
+// Changes with each release so browsers do not retain an old immutable chunk.
+const splitVerifierBuild = '20260829-rule-check-2'
 
 const loadSubscriptionNodes = async () => {
   subscriptionNodes.value = []; selectedNode.value = null
@@ -151,13 +153,13 @@ onMounted(async () => {
     </section>
 
     <section v-if="plan" class="plan-card">
-      <header><div><b>模板分流验证</b><small>{{ plan.template || '未读取到本地模板' }} · 已按规则选择质量最优节点</small></div><el-tag type="success" effect="plain">{{ plan.items?.length || 0 }} 个目标</el-tag></header>
+      <header><div><b>模板分流验证</b><small>{{ plan.template || '未读取到本地模板' }} · 已按规则选择质量最优节点 · {{ splitVerifierBuild }}</small></div><el-tag type="success" effect="plain">{{ plan.items?.length || 0 }} 个目标</el-tag></header>
       <el-table :data="plan.items" size="small">
         <el-table-column label="网站" width="140"><template #default="{ row }"><span class="target-title"><img class="site-icon" :src="faviconUrl(row.domain)" @error="iconFallback($event, (targets.find(t => t.domain === row.domain) || { icon: '•' }).icon)">{{ row.name }}</span></template></el-table-column>
         <el-table-column label="命中规则" min-width="220"><template #default="{ row }"><span class="rule-text">{{ row.matchedRule || '默认策略' }}</span></template></el-table-column>
         <el-table-column label="期望地区" width="100"><template #default="{ row }">{{ row.expectedCountry || '不限' }}</template></el-table-column>
         <el-table-column label="实际节点" min-width="180"><template #default="{ row }">{{ row.selectedNode?.name || '无可用节点' }}<small v-if="row.selectedNode"> · {{ row.selectedNode.countryCode || '未知' }} · 质量 {{ row.selectedNode.score || 0 }}</small></template></el-table-column>
-        <el-table-column label="结果" width="110"><template #default="{ row }"><el-tag :type="row.selectedNode && (row.result?.status === 'available' || row.result?.status === 'reachable') ? 'success' : 'danger'" size="small">{{ row.selectedNode && (row.result?.status === 'available' || row.result?.status === 'reachable') ? '分流成功' : '失败' }}</el-tag></template></el-table-column>
+        <el-table-column label="结果" width="110"><template #default="{ row }"><el-tag :type="row.selectedNode?.id > 0 && (row.result?.status === 'available' || row.result?.status === 'reachable') ? 'success' : 'danger'" size="small">{{ row.selectedNode?.id > 0 && (row.result?.status === 'available' || row.result?.status === 'reachable') ? '分流成功' : '失败' }}</el-tag></template></el-table-column>
       </el-table>
       <el-alert v-if="plan.warnings?.length" class="plan-warning" type="warning" :closable="false" :title="plan.warnings.join('；')" />
     </section>
