@@ -16,10 +16,12 @@ import (
 )
 
 type EgressTarget struct {
-	Key    string `json:"key"`
-	Name   string `json:"name"`
-	Domain string `json:"domain"`
-	Group  string `json:"group"`
+	Key        string `json:"key"`
+	Name       string `json:"name"`
+	Domain     string `json:"domain"`
+	Group      string `json:"group"`
+	Path       string `json:"-"`
+	IPOptional bool   `json:"-"`
 }
 
 type EgressCheckResult struct {
@@ -41,6 +43,7 @@ var egressTargets = []EgressTarget{
 	{Key: "cloudflare", Name: "Cloudflare", Domain: "www.cloudflare.com", Group: "network"},
 	{Key: "chatgpt", Name: "ChatGPT", Domain: "chatgpt.com", Group: "ai"},
 	{Key: "openai", Name: "OpenAI", Domain: "openai.com", Group: "ai"},
+	{Key: "gemini", Name: "Gemini", Domain: "gemini.google.com", Group: "ai", Path: "/", IPOptional: true},
 	{Key: "claude", Name: "Claude", Domain: "claude.ai", Group: "ai"},
 	{Key: "anthropic", Name: "Anthropic", Domain: "anthropic.com", Group: "ai"},
 	{Key: "perplexity", Name: "Perplexity", Domain: "www.perplexity.ai", Group: "ai"},
@@ -57,7 +60,11 @@ var egressTargets = []EgressTarget{
 
 func traceThroughProxy(ctx context.Context, client *http.Client, target EgressTarget) EgressCheckResult {
 	result := EgressCheckResult{EgressTarget: target, Status: "unknown", Rtt: -1, CheckedAt: time.Now()}
-	request, _ := http.NewRequestWithContext(ctx, "GET", "https://"+target.Domain+"/cdn-cgi/trace", nil)
+	path := target.Path
+	if path == "" {
+		path = "/cdn-cgi/trace"
+	}
+	request, _ := http.NewRequestWithContext(ctx, "GET", "https://"+target.Domain+path, nil)
 	request.Header.Set("User-Agent", unlockUA)
 	started := time.Now()
 	response, err := client.Do(request)
@@ -79,6 +86,11 @@ func traceThroughProxy(ctx context.Context, client *http.Client, target EgressTa
 		}
 	}
 	if entries["ip"] == "" {
+		if target.IPOptional && response.StatusCode >= 200 && response.StatusCode < 400 {
+			result.Status = "reachable"
+			result.Note = "站点可达，目标未提供出口 IP"
+			return result
+		}
 		result.Note = fmt.Sprintf("目标未返回出口 IP (HTTP %d)", response.StatusCode)
 		return result
 	}
