@@ -2,10 +2,7 @@
   <section class="app-main">
     <router-view>
       <template #default="{ Component, route }">
-        <transition
-          enter-active-class="animate__animated animate__fadeIn"
-          mode="out-in"
-        >
+        <transition name="page-shift" mode="out-in">
           <keep-alive :include="cachedViews">
             <component :is="Component" :key="route.path" />
           </keep-alive>
@@ -80,4 +77,12 @@ const cachedViews = computed(() => useTagsViewStore().cachedViews); // 缓存页
     padding-top: $tags-view-height;
   }
 }
+</style>
+
+<style>
+.page-shift-enter-active { transition: opacity 180ms ease, transform 220ms cubic-bezier(.22,1,.36,1); }
+.page-shift-leave-active { transition: opacity 110ms ease; }
+.page-shift-enter-from { opacity:0; transform:translateY(7px); }
+.page-shift-leave-to { opacity:0; }
+@media (prefers-reduced-motion: reduce) { .page-shift-enter-active,.page-shift-leave-active { transition:none; } }
 </style>

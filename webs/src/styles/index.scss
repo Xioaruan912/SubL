@@ -3,14 +3,28 @@
 /* ===== Advanced Web UI Theme (EasyCLIProxyAPI Aesthetics) ===== */
 
 :root {
-  /* Primary Color: Professional Slate Blue */
-  --el-color-primary: #3b82f6; /* A clean, professional blue */
-  --el-color-primary-light-3: #60a5fa;
-  --el-color-primary-light-5: #93c5fd;
-  --el-color-primary-light-7: #bfdbfe;
-  --el-color-primary-light-8: #dbeafe;
-  --el-color-primary-light-9: #eff6ff;
-  --el-color-primary-dark-2: #2563eb;
+  --ui-accent: #0f766e;
+  --ui-accent-strong: #0b5d57;
+  --ui-accent-soft: #d9f0ec;
+  --ui-focus-ring: rgba(15, 118, 110, 0.25);
+  --ui-accent-shadow: rgba(15, 118, 110, 0.17);
+  --ui-canvas: #f6f7f5;
+  --ui-sidebar: #eef2ef;
+  --ui-surface: #fbfcfb;
+  --ui-surface-strong: #fff;
+  --ui-text: #202521;
+  --ui-text-secondary: #556159;
+  --ui-text-muted: #758078;
+  --ui-border: #dfe6e0;
+  --ui-hover: #e6ece7;
+  --ui-panel-shadow: 0 8px 24px rgba(32, 42, 36, 0.07);
+  --el-color-primary: #0f766e;
+  --el-color-primary-light-3: #4aa49c;
+  --el-color-primary-light-5: #87c3bd;
+  --el-color-primary-light-7: #b9ddd8;
+  --el-color-primary-light-8: #d9efec;
+  --el-color-primary-light-9: #eef8f6;
+  --el-color-primary-dark-2: #0b5d57;
   
   --el-border-radius-base: 8px; /* Inner cards/buttons */
   --el-border-radius-small: 6px; /* Tags */
@@ -23,15 +37,32 @@
   --el-transition-all: all var(--el-transition-duration) ease-in-out;
 }
 
+html.dark {
+  --ui-accent: #5dd3c7;
+  --ui-accent-strong: #83e0d6;
+  --ui-accent-soft: rgba(45, 169, 158, 0.2);
+  --ui-focus-ring: rgba(93, 211, 199, 0.3);
+  --ui-accent-shadow: rgba(0, 0, 0, 0.22);
+  --ui-canvas: #111412;
+  --ui-sidebar: #171c18;
+  --ui-surface: #1a211c;
+  --ui-surface-strong: #1f2721;
+  --ui-text: #edf2ee;
+  --ui-text-secondary: #c0cac2;
+  --ui-text-muted: #8d998f;
+  --ui-border: #303b32;
+  --ui-hover: #263129;
+  --ui-panel-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
+}
+
 /* Base Backgrounds - Removing app-main backgrounds to float on base html background */
 html, body {
-  background-color: #f6f7f5;
+  background-color: var(--ui-canvas);
+  color: var(--ui-text);
   transition: background-color 150ms ease-in-out;
 }
 
-html.dark, html.dark body {
-  background-color: #111412;
-}
+html.dark, html.dark body { background-color: var(--ui-canvas); }
 
 /* Ensure no rogue shadows on fixed header */
 .fixed-header {
@@ -46,22 +77,26 @@ html.dark, html.dark body {
   background-color: transparent !important;
 }
 .el-menu-item {
-  border-radius: 8px !important;
-  margin: 4px 12px !important;
-  height: 44px !important;
-  line-height: 44px !important;
-  color: #52525b !important;
+  border-radius: 10px !important;
+  margin: 3px 16px !important;
+  height: 46px !important;
+  line-height: 46px !important;
+  color: var(--ui-text-secondary) !important;
+  font-weight: 600;
+  transition: background 140ms ease,color 140ms ease,transform 140ms ease,box-shadow 140ms ease !important;
 }
 html.dark .el-menu-item {
   color: #a1a1aa !important;
 }
 .el-menu-item.is-active {
-  background-color: rgba(59, 130, 246, 0.1) !important;
-  color: var(--el-color-primary) !important;
-  font-weight: 500;
+  background: var(--ui-accent-soft) !important;
+  color: var(--ui-accent-strong) !important;
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb,var(--ui-accent) 22%,transparent),0 4px 12px var(--ui-accent-shadow);
 }
 .el-menu-item:hover:not(.is-active) {
-  background-color: rgba(0, 0, 0, 0.04) !important;
+  background-color: var(--ui-hover) !important;
+  transform: translateX(2px);
 }
 html.dark .el-menu-item:hover:not(.is-active) {
   background-color: rgba(255, 255, 255, 0.04) !important;
@@ -74,9 +109,10 @@ a, button, input, textarea, .el-button, .el-input__wrapper, .el-card {
 
 /* Modals & Dialogs Shadow */
 .el-dialog, .el-drawer, .el-message-box, .el-popover {
-  border-radius: 12px !important;
-  border: none !important;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08) !important;
+  border-radius: 14px !important;
+  border: 1px solid var(--ui-border) !important;
+  background: var(--ui-surface-strong) !important;
+  box-shadow: 0 18px 50px rgba(24, 40, 31, 0.16) !important;
 }
 
 html.dark .el-dialog, html.dark .el-drawer, html.dark .el-message-box, html.dark .el-popover {
@@ -89,8 +125,8 @@ html.dark .el-dialog, html.dark .el-drawer, html.dark .el-message-box, html.dark
 .search-container {
   border-radius: 12px;
   border: none !important; /* Remove solid border */
-  background-color: #ffffff;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+  background-color: var(--ui-surface-strong);
+  box-shadow: inset 0 0 0 1px var(--ui-border), var(--ui-panel-shadow) !important;
   --el-card-padding: 24px; /* More breathing room */
 }
 
@@ -123,6 +159,7 @@ html.dark .el-button--primary:not(.is-text):not(.is-link) {
 /* Hover/Focus States for Buttons */
 .el-button:hover {
   transform: translateY(-1px);
+  filter: saturate(1.04);
 }
 .el-button:active {
   transform: translateY(0);
@@ -134,12 +171,12 @@ html.dark .el-button--primary:not(.is-text):not(.is-link) {
   border-radius: 8px !important;
   border: none !important;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
-  background-color: #ffffff;
+  background-color: var(--ui-surface-strong);
 }
 
 .el-input__wrapper.is-focus,
 .el-textarea__inner:focus {
-  box-shadow: inset 0 0 0 1px var(--el-color-primary), 0 0 0 2px var(--el-color-primary-light-8) !important;
+  box-shadow: inset 0 0 0 1px var(--el-color-primary), 0 0 0 3px var(--ui-focus-ring) !important;
 }
 
 html.dark .el-input__wrapper,
@@ -233,3 +270,48 @@ html.dark ::-webkit-scrollbar-thumb {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* EasyCLI-style application shell */
+.sidebar-container { background: var(--ui-sidebar) !important; border-right: 1px solid var(--ui-border); }
+.navbar-container { padding: 0 18px 0 10px; }
+.fixed-header { backdrop-filter: blur(14px); background: color-mix(in srgb,var(--ui-canvas) 84%,transparent) !important; }
+.app-main { color: var(--ui-text); }
+
+/* Submenu headers use the same motion and selected language as leaf items. */
+.el-sub-menu__title { height:46px !important; margin:3px 16px !important; border-radius:10px; color:var(--ui-text-secondary) !important; font-weight:600; transition:background 140ms ease,color 140ms ease,transform 140ms ease !important; }
+.el-sub-menu__title:hover { background:var(--ui-hover) !important; transform:translateX(2px); }
+.el-sub-menu__icon-arrow { transition:transform 180ms cubic-bezier(.22,1,.36,1) !important; }
+.el-sub-menu.is-opened > .el-sub-menu__title { color:var(--ui-text) !important; }
+
+/* Dropdowns: compact floating surface, arrow rotation and soft entrance. */
+.el-popper.is-pure,.el-select__popper,.el-dropdown__popper { border:1px solid var(--ui-border) !important; border-radius:10px !important; background:var(--ui-surface-strong) !important; box-shadow:0 14px 34px rgba(31,45,36,.16) !important; overflow:hidden; }
+.el-dropdown-menu { min-width:158px; padding:6px !important; background:var(--ui-surface-strong) !important; }
+.el-dropdown-menu__item { min-height:38px; padding:0 11px !important; border-radius:7px; color:var(--ui-text-secondary) !important; font-weight:600; transition:background 120ms ease,color 120ms ease,transform 120ms ease; }
+.el-dropdown-menu__item:not(.is-disabled):focus,.el-dropdown-menu__item:not(.is-disabled):hover { background:var(--ui-hover) !important; color:var(--ui-text) !important; transform:translateX(2px); }
+.el-select-dropdown__item { margin:2px 5px; border-radius:7px; color:var(--ui-text-secondary); transition:background 120ms ease,color 120ms ease; }
+.el-select-dropdown__item.hover,.el-select-dropdown__item:hover { background:var(--ui-hover) !important; color:var(--ui-text); }
+.el-select-dropdown__item.is-selected { color:var(--ui-accent-strong) !important; background:var(--ui-accent-soft) !important; }
+.el-zoom-in-top-enter-active,.el-zoom-in-top-leave-active { transform-origin:top center; transition:opacity 150ms ease,transform 180ms cubic-bezier(.22,1,.36,1) !important; }
+.el-zoom-in-top-enter-from,.el-zoom-in-top-leave-to { opacity:0; transform:translateY(-5px) scale(.985); }
+
+/* Segmented controls and tabs */
+.el-segmented { padding:4px !important; border:1px solid var(--ui-border); border-radius:9px !important; background:var(--ui-hover) !important; }
+.el-segmented__item { border-radius:6px !important; transition:color 150ms ease,background 150ms ease,box-shadow 150ms ease !important; }
+.el-segmented__item-selected { background:var(--ui-surface-strong) !important; box-shadow:0 1px 3px rgba(0,0,0,.08) !important; }
+.el-tabs__item { transition:color 140ms ease !important; }
+
+/* Dialog and drawer motion */
+.dialog-fade-enter-active .el-overlay-dialog,.dialog-fade-leave-active .el-overlay-dialog { transition:opacity 160ms ease !important; }
+.dialog-fade-enter-active .el-dialog { animation:ui-dialog-in 220ms cubic-bezier(.22,1,.36,1); }
+@keyframes ui-dialog-in { from { opacity:0; transform:translateY(10px) scale(.985); } to { opacity:1; transform:none; } }
+.el-drawer { animation-duration:220ms !important; }
+
+/* Tables and cards feel interactive without becoming noisy. */
+.el-table__row td { transition:background-color 120ms ease; }
+.el-table__row:hover > td.el-table__cell { background:var(--ui-hover) !important; }
+.el-card,.bg-white { transition:box-shadow 160ms ease,border-color 160ms ease,transform 160ms ease !important; }
+.el-loading-mask { backdrop-filter:blur(2px); background-color:color-mix(in srgb,var(--ui-surface-strong) 72%,transparent) !important; }
+.el-loading-spinner .circular { animation:loading-rotate 1.15s linear infinite; }
+
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible { outline:3px solid var(--ui-focus-ring); outline-offset:2px; }
+@media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior:auto !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; } }

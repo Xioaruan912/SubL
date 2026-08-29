@@ -5,9 +5,9 @@
         <img v-if="settingsStore.sidebarLogo" :src="logo" class="logo-image" />
       </router-link>
 
-      <router-link v-else class="wh-full flex-center" to="/">
+      <router-link v-else class="wh-full logo-link" to="/">
         <img v-if="settingsStore.sidebarLogo" :src="logo" class="logo-image" />
-        <span class="logo-title"> {{ defaultSettings.title }}</span>
+        <span class="logo-copy"><strong>{{ defaultSettings.title }}</strong><small>节点与订阅控制台</small></span>
       </router-link>
     </transition>
   </div>
@@ -36,9 +36,11 @@ const logo = ref(new URL(`../../../../assets/logo.png`, import.meta.url).href);
   background-color: $sidebar-logo-background;
 
   .logo-image {
-    height: 32px;
-    width: auto;
-    max-width: 100px;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    object-fit: cover;
+    box-shadow: 0 6px 16px var(--ui-accent-shadow);
   }
 
   .logo-title {
@@ -49,6 +51,11 @@ const logo = ref(new URL(`../../../../assets/logo.png`, import.meta.url).href);
     color: var(--menu-text);
   }
 }
+.logo-link { display:flex; align-items:center; justify-content:flex-start; gap:11px; padding:9px 18px; text-decoration:none; }
+.logo-copy { min-width:0; }
+.logo-copy strong,.logo-copy small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.logo-copy strong { color:var(--ui-text); font-size:15px; }
+.logo-copy small { margin-top:3px; color:var(--ui-text-muted); font-size:11px; font-weight:500; }
 
 .layout-top,
 .layout-mix {

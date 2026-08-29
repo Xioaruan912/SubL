@@ -16,5 +16,6 @@
   /* 移除NavBar白色背景，使其与整体 f6f7f5 底色融合 */
   background: transparent;
   border-bottom: none;
+  padding: 0 18px 0 8px;
 }
 </style>

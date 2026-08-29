@@ -6,8 +6,9 @@
 - 上游仓库: https://github.com/gooaclok819/sublinkX
 - 二开仓库: https://github.com/Xioaruan912/SubL
 - VPS: HostDZire `199.47.242.40` (root, ssh 22)
-- 生产目录: `/usr/local/bin/sublink/`（含 db/ template/ logs/ 与可执行文件 `sublink`）
-- 生产服务: `sublink.service`（systemd，监听 8001，nginx:80 反代）
+- 生产目录: `/usr/local/bin/ppeelink/`（含 db/ template/ logs/ 与可执行文件 `ppeelink`）
+- 生产服务: `ppeelink.service`（systemd，监听 8001，nginx:80 反代）
+- 注意：旧记录中的 `/usr/local/bin/sublink/` 与 `sublink.service` 已失效，部署前仍须以实际进程和 systemd 为准。
 
 ## 踩坑记录
 

@@ -12,6 +12,7 @@
       <el-scrollbar>
         <SidebarMenu :menu-list="permissionStore.routes" base-path="" />
       </el-scrollbar>
+      <SidebarFooter v-if="layout === 'left' && appStore.sidebar.opened" />
       <NavbarRight v-if="layout === 'top'" />
     </template>
   </div>
@@ -30,8 +31,12 @@ const layout = computed(() => settingsStore.layout);
 
 <style lang="scss" scoped>
 .has-logo {
+  display: flex;
+  flex-direction: column;
+
   .el-scrollbar {
-    height: calc(100vh - $navbar-height);
+    flex: 1;
+    min-height: 0;
   }
 }
 </style>

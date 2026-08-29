@@ -84,6 +84,9 @@ func EncodeSSURL(s Ss) string {
 }
 
 func DecodeSSURL(s string) (Ss, error) {
+	if !strings.HasPrefix(strings.TrimSpace(s), "ss://") {
+		return Ss{}, fmt.Errorf("invalid SS URL: scheme must be ss")
+	}
 	// 容错: 有可能是纯粹的 ss://Base64(整个链接)
 	if !strings.Contains(s, "@") {
 		// 尝试全局 base64 解码

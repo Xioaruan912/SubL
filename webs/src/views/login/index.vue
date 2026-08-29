@@ -12,10 +12,19 @@
       <lang-select class="ml-2 cursor-pointer" />
     </div>
     <!-- 登录表单 -->
-    <el-card class="!border-none !bg-transparent !rounded-4% w-100 <sm:w-85">
-      <div class="text-center relative">
-        <h2>{{ defaultSettings.title }}</h2>
-        <el-tag class="ml-2 absolute-rt">{{ version }}</el-tag>
+    <el-card class="login-panel w-100 <sm:w-85">
+      <div class="login-brand">
+        <img :src="logo" alt="" />
+        <div>
+          <h2>{{ defaultSettings.title }}</h2>
+          <p>节点与订阅控制台</p>
+        </div>
+        <el-tag effect="plain">v{{ version }}</el-tag>
+      </div>
+
+      <div class="login-intro">
+        <span class="intro-dot"></span>
+        <span>欢迎回来，请登录以继续管理服务</span>
       </div>
 
       <el-form
@@ -111,6 +120,7 @@ import { LocationQuery, LocationQueryValue, useRoute } from "vue-router";
 import router from "@/router";
 import defaultSettings from "@/settings";
 import { ThemeEnum } from "@/enums/ThemeEnum";
+const logo = new URL("../../assets/logo.png", import.meta.url).href;
 // 获取版本号
 const version = ref('')  
 const fetchVersion = function(){
@@ -259,25 +269,47 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 html.dark .login-container {
-  background: url("@/assets/images/login-bg-dark.jpg") no-repeat center right;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(93,211,199,.12), transparent 34%),
+    radial-gradient(circle at 82% 80%, rgba(93,211,199,.07), transparent 30%),
+    var(--ui-canvas);
 }
 
 .login-container {
   overflow-y: auto;
-  background: url("@/assets/images/login-bg.jpg") no-repeat center right;
+  position:relative;
+  background:
+    radial-gradient(circle at 16% 16%, rgba(15,118,110,.12), transparent 34%),
+    radial-gradient(circle at 84% 84%, rgba(15,118,110,.07), transparent 30%),
+    var(--ui-canvas);
 
   @apply wh-full flex-center;
 
   .login-form {
-    padding: 30px 10px;
+    padding: 20px 2px 2px;
   }
 }
 
+.login-container::before { position:absolute; inset:0; pointer-events:none; opacity:.38; background-image:linear-gradient(var(--ui-border) 1px,transparent 1px),linear-gradient(90deg,var(--ui-border) 1px,transparent 1px); background-size:32px 32px; mask-image:radial-gradient(circle at center,#000,transparent 72%); content:""; }
+:deep(.login-panel) { position:relative; z-index:1; max-width:420px; border:1px solid var(--ui-border) !important; border-radius:16px !important; background:color-mix(in srgb,var(--ui-surface-strong) 92%,transparent) !important; box-shadow:0 24px 70px rgba(24,40,31,.14) !important; backdrop-filter:blur(16px); }
+:deep(.login-panel .el-card__body) { padding:26px 28px 28px; }
+.login-brand { display:grid; grid-template-columns:48px minmax(0,1fr) auto; align-items:center; gap:12px; }
+.login-brand img { width:48px; height:48px; border-radius:13px; object-fit:cover; box-shadow:0 8px 20px var(--ui-accent-shadow); }
+.login-brand h2 { margin:0; color:var(--ui-text); font-size:19px; line-height:1.2; }
+.login-brand p { margin:4px 0 0; color:var(--ui-text-muted); font-size:11px; }
+.login-intro { display:flex; align-items:center; gap:8px; margin-top:22px; padding:10px 12px; border:1px solid var(--ui-border); border-radius:9px; background:var(--ui-surface); color:var(--ui-text-secondary); font-size:12px; }
+.intro-dot { width:7px; height:7px; border-radius:50%; background:#22a06b; box-shadow:0 0 0 3px rgba(34,160,107,.13); }
+
 .el-form-item {
-  background: var(--el-input-bg-color);
-  border: 1px solid var(--el-border-color);
-  border-radius: 5px;
+  margin-bottom:14px;
+  padding:0 4px;
+  background: var(--ui-surface-strong);
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  transition:border-color 150ms ease,box-shadow 150ms ease,transform 150ms ease;
 }
+.el-form-item:focus-within { border-color:var(--ui-accent); box-shadow:0 0 0 3px var(--ui-focus-ring); transform:translateY(-1px); }
+:deep(.el-button--primary) { height:44px; margin-top:4px; border-radius:9px !important; font-weight:700; box-shadow:0 8px 18px var(--ui-accent-shadow) !important; }
 
 :deep(.el-input) {
   .el-input__wrapper {

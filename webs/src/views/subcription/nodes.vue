@@ -4,6 +4,7 @@ import { getNodes, getNodeOverview, AddNodes, DelNode, UpdateNode, GetGroup, Set
 import { countryFlag } from "@/utils/flag"
 import NodeUnlockDialog from "@/components/NodeUnlockDialog.vue"
 import NodeTcpDialog from "@/components/NodeTcpDialog.vue"
+import NodeQualityDialog from "@/components/NodeQualityDialog.vue"
 
 interface OverviewItem {
   id: number
@@ -14,6 +15,12 @@ interface OverviewItem {
   countryCode: string
   rtt: number
   groups: string[]
+  score: number
+  availability: number
+  averageRtt: number
+  jitter: number
+  sampleCount: number
+  lastTestedAt: string
 }
 interface NodeItem {
   ID: number
@@ -154,8 +161,11 @@ const rttText = (rtt: number) => rtt === -2 ? "测试中…" : (rtt < 0 ? "超�
 const unlockDialogVisible = ref(false)
 const tcpDialogVisible = ref(false)
 const testNode = ref<{ id: number; name: string } | null>(null)
+const qualityNode = ref<OverviewItem | null>(null)
+const qualityDialogVisible = ref(false)
 const openUnlock = (node: OverviewItem) => { testNode.value = { id: node.id, name: node.name }; unlockDialogVisible.value = true }
 const openTcp = (node: OverviewItem) => { testNode.value = { id: node.id, name: node.name }; tcpDialogVisible.value = true }
+const openQuality = (node: OverviewItem) => { qualityNode.value = node; qualityDialogVisible.value = true }
 
 import { testLocalAll } from "@/utils/ping"
 
@@ -336,7 +346,7 @@ onMounted(loadAll)
           <div class="flex flex-col gap-1">
             <div
               class="px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 flex justify-between items-center"
-              :class="activeGroup === '全部' ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium' : 'hover:bg-gray-50 dark:hover:bg-white/5 text-gray-600 dark:text-gray-400'"
+              :class="activeGroup === '全部' ? 'group-filter-active' : 'group-filter-idle'"
               @click="activeGroup = '全部'"
             >
               <span>全部</span>
@@ -346,7 +356,7 @@ onMounted(loadAll)
               v-for="g in groupTree"
               :key="g.id"
               class="px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 flex justify-between items-center"
-              :class="activeGroup === g.id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium' : 'hover:bg-gray-50 dark:hover:bg-white/5 text-gray-600 dark:text-gray-400'"
+              :class="activeGroup === g.id ? 'group-filter-active' : 'group-filter-idle'"
               @click="activeGroup = g.id"
             >
               <span class="truncate pr-2">{{ g.label }}</span>
@@ -409,7 +419,13 @@ onMounted(loadAll)
                     <span class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap" :style="{ background: rttColor(n.rtt), color: '#fff' }">{{ rttText(n.rtt) }}</span>
                   </div>
                   <div class="text-xs text-gray-500 dark:text-gray-400 mb-4 truncate">{{ n.country }} · {{ n.server }}</div>
+                  <div class="quality-strip">
+                    <span class="quality-score" :class="n.score >= 80 ? 'good' : n.score >= 60 ? 'warn' : 'bad'">{{ n.score || 0 }}分</span>
+                    <span>可用 {{ n.availability ?? 0 }}%</span>
+                    <span>抖动 {{ n.jitter ?? 0 }}ms</span>
+                  </div>
                   <div class="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                    <el-button link type="primary" size="small" @click="openQuality(n)">质量</el-button>
                     <el-button link type="primary" size="small" @click="openUnlock(n)">解锁</el-button>
                     <el-button link type="success" size="small" @click="openTcp(n)">TCP</el-button>
                     <el-button link type="primary" size="small" @click="handleEditNode(n)">编辑</el-button>
@@ -447,6 +463,9 @@ onMounted(loadAll)
                     {{ rttText(row.rtt) }}
                   </el-tag>
                 </template>
+              </el-table-column>
+              <el-table-column label="质量" width="90">
+                <template #default="{ row }"><el-tag :type="row.score >= 80 ? 'success' : row.score >= 60 ? 'warning' : 'danger'" size="small">{{ row.score || 0 }}分</el-tag></template>
               </el-table-column>
               <el-table-column label="分组" min-width="120">
                 <template #default="{ row }">
@@ -561,6 +580,7 @@ onMounted(loadAll)
       :node-id="testNode.id"
       :node-name="testNode.name"
     />
+    <NodeQualityDialog v-model:visible="qualityDialogVisible" :node="qualityNode" />
   </div>
 </template>
 
@@ -612,6 +632,14 @@ onMounted(loadAll)
   box-shadow: inset 0 0 0 2px var(--el-color-primary), 0 1px 2px rgba(0,0,0,0.02) !important;
 }
 .node-check { margin-right: 0; }
+.group-filter-active { color:var(--ui-accent-strong); background:var(--ui-accent-soft); font-weight:700; box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ui-accent) 18%,transparent); }
+.group-filter-idle { color:var(--ui-text-secondary); transition:background 140ms ease,color 140ms ease,transform 140ms ease; }
+.group-filter-idle:hover { color:var(--ui-text); background:var(--ui-hover); transform:translateX(2px); }
+.quality-strip { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:var(--el-text-color-secondary); font-size:11px; }
+.quality-score { padding:2px 7px; border-radius:999px; font-weight:700; }
+.quality-score.good { color:#16803c; background:#dcfce7; }
+.quality-score.warn { color:#a16207; background:#fef3c7; }
+.quality-score.bad { color:#b91c1c; background:#fee2e2; }
 .group-actions { margin-top: 4px; }
 .del-group-card {
   margin-top: 4px;

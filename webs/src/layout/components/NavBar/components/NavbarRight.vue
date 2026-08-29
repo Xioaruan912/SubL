@@ -1,19 +1,19 @@
 <template>
-  <div class="flex">
+  <div class="navbar-actions">
     <template v-if="!isMobile">
       <!--测试状态 -->
-      <div class="setting-item" @click="testDialogVisible = true">
+      <button class="setting-item" title="测试任务" @click="testDialogVisible = true">
         <el-badge is-dot :hidden="!testRunning" class="test-badge">
           <svg-icon icon-class="monitor" />
         </el-badge>
-      </div>
+      </button>
 
       <!--全屏 -->
-      <div class="setting-item" @click="toggle">
+      <button class="setting-item" title="切换全屏" @click="toggle">
         <svg-icon
           :icon-class="isFullscreen ? 'fullscreen-exit' : 'fullscreen'"
         />
-      </div>
+      </button>
 
       <!-- 布局大小 -->
       <el-tooltip
@@ -30,9 +30,10 @@
 
     <!-- 用户 -->
     <el-dropdown class="setting-item" trigger="click">
-      <div class="flex-center h100% p10px">
+      <div class="user-trigger">
         <span class="user-badge">{{ (userStore.user.username || 'U').charAt(0).toUpperCase() }}</span>
-        <span>{{ userStore.user.username }}</span>
+        <span class="user-copy"><strong>{{ userStore.user.username }}</strong><small>管理员</small></span>
+        <el-icon class="dropdown-arrow"><ArrowDown /></el-icon>
       </div>
       <template #dropdown>
         <el-dropdown-menu>
@@ -48,9 +49,9 @@
 
     <!-- 设置 -->
     <template v-if="defaultSettings.showSettings">
-      <div class="setting-item" @click="settingStore.settingsVisible = true">
+      <button class="setting-item" title="界面设置" @click="settingStore.settingsVisible = true">
         <svg-icon icon-class="setting" />
-      </div>
+      </button>
     </template>
 
     <!-- 测试状态弹窗 -->
@@ -68,6 +69,7 @@ import defaultSettings from "@/settings";
 import { DeviceEnum } from "@/enums/DeviceEnum";
 import { GetTestStatus } from "@/api/subcription/node";
 import TestStatusDialog from "@/components/TestStatusDialog.vue";
+import { ArrowDown } from "@element-plus/icons-vue";
 
 const appStore = useAppStore();
 const tagsViewStore = useTagsViewStore();
@@ -137,23 +139,38 @@ function logout() {
   height: 26px;
   margin-right: 8px;
   border-radius: 50%;
-  background: var(--el-color-primary);
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent-strong);
   color: #fff;
   font-size: 13px;
   font-weight: 600;
   flex-shrink: 0;
 }
+.navbar-actions { display:flex; align-items:center; gap:6px; height:100%; }
+.user-trigger { display:grid; grid-template-columns:30px minmax(0,1fr) 14px; align-items:center; gap:8px; min-width:136px; height:42px; padding:0 10px; border:1px solid var(--ui-border); border-radius:10px; background:var(--ui-surface); color:var(--ui-text); cursor:pointer; transition:background 140ms ease,border-color 140ms ease,box-shadow 140ms ease; }
+.user-trigger:hover { background:var(--ui-hover); border-color:color-mix(in srgb,var(--ui-accent) 26%,var(--ui-border)); }
+.user-copy { min-width:0; text-align:left; }
+.user-copy strong,.user-copy small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.user-copy strong { font-size:12px; line-height:1.2; }.user-copy small { margin-top:2px; color:var(--ui-text-muted); font-size:9px; }
+.dropdown-arrow { color:var(--ui-text-muted); transition:transform 160ms ease; }
+:deep(.el-dropdown[aria-expanded="true"]) .dropdown-arrow { transform:rotate(180deg); }
 .setting-item {
-  display: inline-block;
-  min-width: 40px;
-  height: $navbar-height;
-  line-height: $navbar-height;
-  color: var(--el-text-color);
-  text-align: center;
+  display: inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:38px;
+  min-width:38px;
+  height:38px;
+  border:1px solid transparent;
+  border-radius:9px;
+  background:transparent;
+  color: var(--ui-text-secondary);
   cursor: pointer;
 
   &:hover {
-    background: rgb(0 0 0 / 10%);
+    border-color:var(--ui-border);
+    background:var(--ui-hover);
+    color:var(--ui-text);
   }
 }
 
@@ -165,7 +182,6 @@ function logout() {
   }
 }
 
-.dark .setting-item:hover {
-  background: rgb(255 255 255 / 20%);
-}
+.dark .setting-item:hover { background:var(--ui-hover); }
+@media (max-width:700px) { .user-trigger { min-width:44px; grid-template-columns:28px; padding:0 7px; }.user-copy,.dropdown-arrow { display:none; } }
 </style>

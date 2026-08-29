@@ -14,6 +14,21 @@ export function getNodeOverview(){
   });
 }
 
+export function getNodeQualityHistory(id: number, hours = 24){
+  return request({
+    url: "/api/v1/nodes/quality/history",
+    method: "get",
+    params: { id, hours },
+  });
+}
+
+export function getNodeQualitySummary(){
+  return request({
+    url: "/api/v1/nodes/quality/summary",
+    method: "get",
+  });
+}
+
 // 节点解锁测试
 export function UnlockTest(data: any){
   return request({

@@ -27,6 +27,10 @@ export const useSettingsStore = defineStore("setting", () => {
     "themeColor",
     defaultSettings.themeColor
   );
+  // 将旧版橙色/蓝色主题平滑迁移到新的 EasyCLI 风格青绿色。
+  if (["#f97316", "#1890ff", "#3b82f6"].includes(themeColor.value.toLowerCase())) {
+    themeColor.value = defaultSettings.themeColor;
+  }
   // 主题：light-亮色(默认) dark-暗色
   const theme = useStorage<string>("theme", defaultSettings.theme);
   // 是否开启水印
