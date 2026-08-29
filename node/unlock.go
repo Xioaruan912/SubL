@@ -29,12 +29,15 @@ type UnlockService struct {
 
 // UnlockCheckResult 单个服务解锁结果
 type UnlockCheckResult struct {
-	Key   string `json:"key"`
-	Name  string `json:"name"`
-	Group string `json:"group"`
-	Ok    bool   `json:"ok"`
-	Rtt   int    `json:"rtt"` // 毫秒，-1 表示失败
-	Note  string `json:"note"`
+	Key       string    `json:"key"`
+	Name      string    `json:"name"`
+	Group     string    `json:"group"`
+	Ok        bool      `json:"ok"`
+	Rtt       int       `json:"rtt"` // 毫秒，-1 表示失败
+	Note      string    `json:"note"`
+	Status    string    `json:"status"` // available / blocked / unknown
+	Region    string    `json:"region,omitempty"`
+	CheckedAt time.Time `json:"checkedAt"`
 }
 
 // UnlockResult 节点解锁测试总结果
@@ -46,7 +49,7 @@ type UnlockResult struct {
 }
 
 // 常见解锁检测目标（走节点访问，每个服务定制判定逻辑）
-var unlockServices = []UnlockService{
+var defaultUnlockServices = []UnlockService{
 	// AI
 	{Key: "openai", Name: "OpenAI / ChatGPT", Group: "ai", Check: checkOpenAI},
 	{Key: "claude", Name: "Claude", Group: "ai", Check: checkClaude},
@@ -59,6 +62,40 @@ var unlockServices = []UnlockService{
 	{Key: "google", Name: "Google", Group: "forum", Check: checkGoogle},
 	{Key: "github", Name: "GitHub", Group: "forum", Check: checkGitHub},
 	{Key: "telegram", Name: "Telegram", Group: "forum", Check: checkTelegram},
+}
+
+var unlockRegistry = struct {
+	sync.RWMutex
+	services map[string]UnlockService
+}{services: make(map[string]UnlockService)}
+
+func init() {
+	for _, service := range defaultUnlockServices {
+		RegisterUnlockService(service)
+	}
+}
+
+// RegisterUnlockService makes detectors independently extensible without
+// changing the runner. Re-registering a key safely replaces that detector.
+func RegisterUnlockService(service UnlockService) {
+	if service.Key == "" || service.Name == "" || service.Check == nil {
+		return
+	}
+	unlockRegistry.Lock()
+	defer unlockRegistry.Unlock()
+	unlockRegistry.services[service.Key] = service
+}
+
+func ListUnlockServices() []UnlockService {
+	unlockRegistry.RLock()
+	defer unlockRegistry.RUnlock()
+	result := make([]UnlockService, 0, len(unlockRegistry.services))
+	for _, defaultService := range defaultUnlockServices {
+		if service, ok := unlockRegistry.services[defaultService.Key]; ok {
+			result = append(result, service)
+		}
+	}
+	return result
 }
 
 // UnlockTestConfig 一次解锁测试的配置
@@ -153,7 +190,7 @@ func RunUnlockTest(ctx context.Context, cfg UnlockTestConfig) (*UnlockResult, er
 	}
 
 	// 是否过滤到指定服务（如仅测 Gemini）
-	targets := unlockServices
+	targets := ListUnlockServices()
 	if cfg.ServiceFilter != "" {
 		filtered := make([]UnlockService, 0, 1)
 		for _, s := range targets {
@@ -184,7 +221,13 @@ func RunUnlockTest(ctx context.Context, cfg UnlockTestConfig) (*UnlockResult, er
 			start := time.Now()
 			ok, note := svc.Check(checkCtx, client)
 			rtt := max(1, int(time.Since(start).Milliseconds()))
-			result.Results[i] = UnlockCheckResult{Key: svc.Key, Name: svc.Name, Group: svc.Group, Ok: ok, Rtt: rtt, Note: note}
+			status := "blocked"
+			if ok {
+				status = "available"
+			} else if note == "连接失败" || note == "异常响应" {
+				status = "unknown"
+			}
+			result.Results[i] = UnlockCheckResult{Key: svc.Key, Name: svc.Name, Group: svc.Group, Ok: ok, Rtt: rtt, Note: note, Status: status, CheckedAt: time.Now()}
 		}(i, svc)
 	}
 	waitCh := make(chan struct{})

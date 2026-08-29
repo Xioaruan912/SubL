@@ -28,6 +28,10 @@ export function getNodeQualitySummary(){
     method: "get",
   });
 }
+export function getNodeRecommendations(){ return request({ url: "/api/v1/nodes/recommendations", method: "get" }); }
+export function getNodeHealthEvents(limit = 30){ return request({ url: "/api/v1/nodes/health/events", method: "get", params: { limit } }); }
+export function getAlertSetting(){ return request({ url: "/api/v1/nodes/alerts", method: "get" }); }
+export function updateAlertSetting(data: any){ return request({ url: "/api/v1/nodes/alerts", method: "post", data, headers: { "Content-Type": "multipart/form-data" } }); }
 
 // 节点解锁测试
 export function UnlockTest(data: any){

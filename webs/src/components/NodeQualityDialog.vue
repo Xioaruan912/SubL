@@ -13,12 +13,13 @@ const dialogVisible = computed({
 });
 const loading = ref(false);
 const samples = ref<any[]>([]);
+const hours = ref(24);
 
 const load = async () => {
   if (!props.node?.id) return;
   loading.value = true;
   try {
-    const response: any = await getNodeQualityHistory(props.node.id, 24);
+    const response: any = await getNodeQualityHistory(props.node.id, hours.value);
     samples.value = response?.data || [];
   } finally {
     loading.value = false;
@@ -26,6 +27,16 @@ const load = async () => {
 };
 
 watch(() => props.visible, (value) => { if (value) load(); });
+watch(hours, () => { if (props.visible) load(); });
+
+const selectedStats = computed(() => {
+  const success = samples.value.filter(item => item.success && item.rtt >= 0);
+  const sorted = success.map(item => item.rtt).sort((a, b) => a - b);
+  const availability = samples.value.length ? Math.round(success.length * 1000 / samples.value.length) / 10 : 0;
+  const p95 = sorted.length ? sorted[Math.ceil(sorted.length * .95) - 1] : -1;
+  let failures = 0; for (let i = samples.value.length - 1; i >= 0 && !samples.value[i].success; i--) failures++;
+  return { availability, p95, failures };
+});
 
 const points = computed(() => {
   const values = samples.value.slice(-40);
@@ -46,14 +57,15 @@ const formatTime = (value: string) => value ? new Date(value).toLocaleString() :
 <template>
   <el-dialog v-model="dialogVisible" :title="`${node?.name || ''} · 质量详情`" width="680px" align-center>
     <div v-if="node" v-loading="loading">
+      <div class="range-tabs"><el-segmented v-model="hours" :options="[{label:'24 小时',value:24},{label:'7 天',value:168},{label:'30 天',value:720}]" /></div>
       <div class="quality-metrics">
         <div class="metric score"><span>综合评分</span><strong>{{ node.score || 0 }}</strong><el-tag :type="scoreType" size="small">{{ node.score >= 80 ? '优秀' : node.score >= 60 ? '一般' : '需关注' }}</el-tag></div>
-        <div class="metric"><span>24h 可用率</span><strong>{{ node.availability ?? 0 }}%</strong></div>
-        <div class="metric"><span>平均延迟</span><strong>{{ node.averageRtt >= 0 ? `${node.averageRtt}ms` : '--' }}</strong></div>
-        <div class="metric"><span>延迟抖动</span><strong>{{ node.jitter ?? 0 }}ms</strong></div>
+        <div class="metric"><span>所选周期可用率</span><strong>{{ selectedStats.availability }}%</strong></div>
+        <div class="metric"><span>P95 延迟</span><strong>{{ selectedStats.p95 >= 0 ? `${selectedStats.p95}ms` : '--' }}</strong></div>
+        <div class="metric"><span>连续失败</span><strong>{{ selectedStats.failures }} 次</strong></div>
       </div>
       <div class="trend-card">
-        <div class="trend-title"><span>最近 24 小时服务端检测</span><small>{{ samples.length }} 个样本</small></div>
+        <div class="trend-title"><span>服务端检测趋势</span><small>{{ samples.length }} 个样本</small></div>
         <svg v-if="points" viewBox="0 0 560 110" preserveAspectRatio="none" class="trend-chart">
           <defs><linearGradient id="qualityFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#409eff" stop-opacity=".3"/><stop offset="1" stop-color="#409eff" stop-opacity="0"/></linearGradient></defs>
           <polyline :points="points" fill="none" stroke="#409eff" stroke-width="3" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
@@ -71,6 +83,7 @@ const formatTime = (value: string) => value ? new Date(value).toLocaleString() :
 
 <style scoped>
 .quality-metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
+.range-tabs { display:flex; justify-content:flex-end; margin-bottom:12px; }
 .metric { padding:14px; border-radius:12px; background:var(--el-fill-color-light); display:flex; flex-direction:column; gap:5px; }
 .metric span { font-size:12px; color:var(--el-text-color-secondary); }
 .metric strong { font-size:21px; color:var(--el-text-color-primary); }

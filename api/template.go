@@ -5,15 +5,150 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"ppeelink/models"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"gopkg.in/yaml.v3"
 )
 
 type Temp struct {
 	File       string `json:"file"`
 	Text       string `json:"text"`
 	CreateDate string `json:"create_date"`
+}
+
+type templateOutlineItem struct {
+	Key   string `json:"key"`
+	Line  int    `json:"line"`
+	Level int    `json:"level"`
+}
+
+func atomicWrite(path, text string) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".template-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if err = tmp.Chmod(0644); err == nil {
+		_, err = tmp.WriteString(text)
+	}
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
+}
+
+func templateOutline(text string) []templateOutlineItem {
+	items := make([]templateOutlineItem, 0)
+	for i, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "-") {
+			continue
+		}
+		colon := strings.Index(trimmed, ":")
+		if colon <= 0 {
+			continue
+		}
+		key := strings.TrimSpace(trimmed[:colon])
+		if key == "" || strings.ContainsAny(key, "{}[]") {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, " \t"))
+		items = append(items, templateOutlineItem{Key: key, Line: i + 1, Level: indent / 2})
+	}
+	return items
+}
+
+func validateTemplateText(filename, text string) ([]templateOutlineItem, []string) {
+	outline := templateOutline(text)
+	errorsList := make([]string, 0)
+	if strings.TrimSpace(text) == "" {
+		return outline, []string{"模板内容不能为空"}
+	}
+	ext := strings.ToLower(filepath.Ext(filename))
+	if ext == ".yaml" || ext == ".yml" {
+		// Generated placeholders are legal in templates but not YAML. Replace the
+		// common scalar placeholders before syntax validation.
+		normalized := strings.ReplaceAll(text, "{{ nodes }}", "[]")
+		var value interface{}
+		if err := yaml.Unmarshal([]byte(normalized), &value); err != nil {
+			errorsList = append(errorsList, err.Error())
+		}
+	}
+	return outline, errorsList
+}
+
+func ValidateTemp(c *gin.Context) {
+	filename := c.PostForm("filename")
+	text := c.PostForm("text")
+	outline, validationErrors := validateTemplateText(filename, text)
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{
+		"valid": len(validationErrors) == 0, "errors": validationErrors, "outline": outline,
+	}, "msg": "模板校验完成"})
+}
+
+func GetTempVersions(c *gin.Context) {
+	filename := c.Query("filename")
+	if _, err := safeFilePath(filename); err != nil {
+		c.JSON(400, gin.H{"msg": err.Error()})
+		return
+	}
+	var versions []models.TemplateVersion
+	if err := models.DB.Select("id, filename, action, created_at").Where("filename = ?", filename).Order("id desc").Limit(50).Find(&versions).Error; err != nil {
+		c.JSON(500, gin.H{"msg": "读取版本历史失败"})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": versions, "msg": "版本历史"})
+}
+
+func GetTempVersion(c *gin.Context) {
+	id, err := strconv.Atoi(c.Query("id"))
+	if err != nil || id <= 0 {
+		c.JSON(400, gin.H{"msg": "版本 id 无效"})
+		return
+	}
+	var version models.TemplateVersion
+	if err := models.DB.First(&version, id).Error; err != nil {
+		c.JSON(404, gin.H{"msg": "版本不存在"})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": version, "msg": "版本详情"})
+}
+
+func RollbackTemp(c *gin.Context) {
+	id, err := strconv.Atoi(c.PostForm("id"))
+	if err != nil || id <= 0 {
+		c.JSON(400, gin.H{"msg": "版本 id 无效"})
+		return
+	}
+	var version models.TemplateVersion
+	if err := models.DB.First(&version, id).Error; err != nil {
+		c.JSON(404, gin.H{"msg": "版本不存在"})
+		return
+	}
+	path, err := safeFilePath(version.Filename)
+	if err != nil {
+		c.JSON(400, gin.H{"msg": err.Error()})
+		return
+	}
+	current, readErr := os.ReadFile(path)
+	if readErr == nil {
+		_ = models.SaveTemplateVersion(version.Filename, string(current), "before_rollback")
+	}
+	if err := atomicWrite(path, version.Content); err != nil {
+		c.JSON(500, gin.H{"msg": "回滚写入失败"})
+		return
+	}
+	_ = models.SaveTemplateVersion(version.Filename, version.Content, "rollback")
+	c.JSON(200, gin.H{"code": "00000", "msg": "已回滚到 " + version.CreatedAt.Format(time.DateTime)})
 }
 
 // 定义允许操作的基础目录
@@ -215,6 +350,13 @@ func UpdateTemp(c *gin.Context) {
 		}
 	}
 
+	oldContent, err := os.ReadFile(oldFullPath)
+	if err != nil {
+		c.JSON(500, gin.H{"msg": "读取原模板失败"})
+		return
+	}
+	_ = models.SaveTemplateVersion(oldname, string(oldContent), "before_update")
+
 	// 如果文件名不同，则进行重命名操作
 	if oldFullPath != newFullPath {
 		err = os.Rename(oldFullPath, newFullPath)
@@ -227,8 +369,8 @@ func UpdateTemp(c *gin.Context) {
 		}
 	}
 
-	// 写入文件内容到新的安全路径
-	err = os.WriteFile(newFullPath, []byte(text), 0666) // 确保写入到新的安全路径
+	// 原子写入，避免进程中断留下半个模板。
+	err = atomicWrite(newFullPath, text)
 	if err != nil {
 		log.Println("修改文件内容失败:", err)
 		c.JSON(500, gin.H{
@@ -236,6 +378,7 @@ func UpdateTemp(c *gin.Context) {
 		})
 		return
 	}
+	_ = models.SaveTemplateVersion(filename, text, "update")
 
 	c.JSON(200, gin.H{
 		"code": "00000",
@@ -289,7 +432,7 @@ func AddTemp(c *gin.Context) {
 	}
 
 	// 写入文件
-	err = os.WriteFile(fullPath, []byte(text), 0666)
+	err = atomicWrite(fullPath, text)
 	if err != nil {
 		log.Println("写入文件失败:", err)
 		c.JSON(500, gin.H{
@@ -297,6 +440,7 @@ func AddTemp(c *gin.Context) {
 		})
 		return
 	}
+	_ = models.SaveTemplateVersion(filename, text, "create")
 
 	c.JSON(200, gin.H{
 		"code": "00000",
@@ -337,6 +481,8 @@ func DelTemp(c *gin.Context) {
 		return
 	}
 
+	content, _ := os.ReadFile(fullPath)
+	_ = models.SaveTemplateVersion(filename, string(content), "before_delete")
 	// 删除文件
 	err = os.Remove(fullPath)
 	if err != nil {

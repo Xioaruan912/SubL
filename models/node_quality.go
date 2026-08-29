@@ -2,6 +2,7 @@ package models
 
 import (
 	"math"
+	"sort"
 	"time"
 )
 
@@ -16,14 +17,17 @@ type NodeQualitySample struct {
 }
 
 type NodeQualityStats struct {
-	NodeID       int       `json:"nodeId"`
-	Score        int       `json:"score"`
-	Availability float64   `json:"availability"`
-	AverageRtt   int       `json:"averageRtt"`
-	Jitter       int       `json:"jitter"`
-	SampleCount  int       `json:"sampleCount"`
-	LastRtt      int       `json:"lastRtt"`
-	LastTestedAt time.Time `json:"lastTestedAt"`
+	NodeID              int       `json:"nodeId"`
+	Score               int       `json:"score"`
+	Availability        float64   `json:"availability"`
+	AverageRtt          int       `json:"averageRtt"`
+	Jitter              int       `json:"jitter"`
+	P95Rtt              int       `json:"p95Rtt"`
+	ConsecutiveFailures int       `json:"consecutiveFailures"`
+	Confidence          int       `json:"confidence"`
+	SampleCount         int       `json:"sampleCount"`
+	LastRtt             int       `json:"lastRtt"`
+	LastTestedAt        time.Time `json:"lastTestedAt"`
 }
 
 func RecordNodeQuality(samples []NodeQualitySample) error {
@@ -41,10 +45,12 @@ func GetNodeQualityStats(since time.Time) (map[int]NodeQualityStats, error) {
 		return nil, err
 	}
 	type accumulator struct {
-		count, successes int
-		sum, sumSquares  float64
-		lastRtt          int
-		lastAt           time.Time
+		count, successes    int
+		sum, sumSquares     float64
+		lastRtt             int
+		lastAt              time.Time
+		rtts                []int
+		consecutiveFailures int
 	}
 	acc := make(map[int]*accumulator)
 	for _, sample := range samples {
@@ -58,6 +64,10 @@ func GetNodeQualityStats(since time.Time) (map[int]NodeQualityStats, error) {
 			a.successes++
 			a.sum += float64(sample.Rtt)
 			a.sumSquares += float64(sample.Rtt * sample.Rtt)
+			a.rtts = append(a.rtts, sample.Rtt)
+			a.consecutiveFailures = 0
+		} else {
+			a.consecutiveFailures++
 		}
 		if sample.CheckedAt.After(a.lastAt) {
 			a.lastAt = sample.CheckedAt
@@ -67,7 +77,7 @@ func GetNodeQualityStats(since time.Time) (map[int]NodeQualityStats, error) {
 	result := make(map[int]NodeQualityStats, len(acc))
 	for nodeID, a := range acc {
 		availability := 0.0
-		average, jitter := -1, 0
+		average, jitter, p95 := -1, 0, -1
 		if a.count > 0 {
 			availability = float64(a.successes) * 100 / float64(a.count)
 		}
@@ -79,11 +89,15 @@ func GetNodeQualityStats(since time.Time) (map[int]NodeQualityStats, error) {
 			}
 			average = int(math.Round(mean))
 			jitter = int(math.Round(math.Sqrt(variance)))
+			sort.Ints(a.rtts)
+			p95 = a.rtts[int(math.Ceil(float64(len(a.rtts))*0.95))-1]
 		}
 		result[nodeID] = NodeQualityStats{
 			NodeID: nodeID, Score: CalculateNodeQualityScore(availability, average, jitter),
 			Availability: math.Round(availability*10) / 10, AverageRtt: average,
 			Jitter: jitter, SampleCount: a.count, LastRtt: a.lastRtt, LastTestedAt: a.lastAt,
+			P95Rtt: p95, ConsecutiveFailures: a.consecutiveFailures,
+			Confidence: minInt(100, a.count*10),
 		}
 	}
 	return result, nil
@@ -117,6 +131,13 @@ func clamp(v, low, high float64) float64 {
 
 func maxInt(a, b int) int {
 	if a > b {
+		return a
+	}
+	return b
+}
+
+func minInt(a, b int) int {
+	if a < b {
 		return a
 	}
 	return b

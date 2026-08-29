@@ -13,6 +13,9 @@ export function getSubPreviewNodes(id: number){
     params: { id },
   });
 }
+export function previewSubPipeline(data: any){
+  return request({ url: "/api/v1/subcription/pipeline/preview", method: "post", data, headers: { "Content-Type": "multipart/form-data" } });
+}
 
 export function AddSub(data: any){
   return request({

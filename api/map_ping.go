@@ -258,6 +258,15 @@ func NodeUnlock(c *gin.Context) {
 		c.JSON(500, gin.H{"code": "50000", "msg": "解锁测试失败: " + err.Error()})
 		return
 	}
+	if nodeID > 0 {
+		observations := make([]models.UnlockObservation, 0, len(result.Results))
+		for _, check := range result.Results {
+			observations = append(observations, models.UnlockObservation{NodeID: nodeID, Service: check.Key, Available: check.Ok, Status: check.Status, Region: check.Region, Rtt: check.Rtt, CheckedAt: check.CheckedAt})
+		}
+		if len(observations) > 0 {
+			_ = models.DB.Create(&observations).Error
+		}
+	}
 
 	uCache.mu.Lock()
 	uCache.entries[cacheKey] = &unlockCacheEntry{result: result, expires: time.Now().Add(60 * time.Second)}

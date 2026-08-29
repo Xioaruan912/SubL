@@ -37,3 +37,16 @@ export function DelTemp(data: any){
     },
   });
 }
+
+export function ValidateTemp(data: any){
+  return request({ url: "/api/v1/template/validate", method: "post", data, headers: { "Content-Type": "multipart/form-data" } });
+}
+export function GetTempVersions(filename: string){
+  return request({ url: "/api/v1/template/versions", method: "get", params: { filename } });
+}
+export function GetTempVersion(id: number){
+  return request({ url: "/api/v1/template/version", method: "get", params: { id } });
+}
+export function RollbackTemp(data: any){
+  return request({ url: "/api/v1/template/rollback", method: "post", data, headers: { "Content-Type": "multipart/form-data" } });
+}

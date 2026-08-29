@@ -3,6 +3,7 @@
 package api
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -14,6 +15,51 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// fetchSubscriptionSource supports newline/comma separated fallback sources.
+// The first successful 2xx response wins, so one failed airport endpoint no
+// longer prevents a subscription from being refreshed.
+func fetchSubscriptionSource(raw string) ([]byte, string, error) {
+	parts := strings.FieldsFunc(raw, func(r rune) bool { return r == '\n' || r == ',' })
+	client := &http.Client{Timeout: 15 * time.Second}
+	var lastErr error
+	for _, source := range parts {
+		source = strings.TrimSpace(source)
+		if source == "" {
+			continue
+		}
+		req, err := http.NewRequest("GET", source, nil)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		req.Header.Set("User-Agent", "v2rayNG/1.8.5")
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			continue
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			lastErr = fmt.Errorf("%s 返回 HTTP %d", source, resp.StatusCode)
+			continue
+		}
+		if len(body) == 0 {
+			lastErr = fmt.Errorf("%s 返回空内容", source)
+			continue
+		}
+		return body, source, nil
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("没有可用的订阅源")
+	}
+	return nil, "", lastErr
+}
 
 // ensureAirportFromSub 订阅从外部机场URL导入节点后，自动创建/复用同名机场记录
 func ensureAirportFromSub(name, url string, nodeCount int) {
@@ -136,6 +182,7 @@ func SubAdd(c *gin.Context) {
 	nodes := c.PostForm("nodes")
 	airportUrl := c.PostForm("airport_url")
 	groups := c.PostForm("groups")
+	pipeline := c.PostForm("pipeline")
 
 	if name == "" {
 		c.JSON(400, gin.H{
@@ -158,28 +205,22 @@ func SubAdd(c *gin.Context) {
 
 	var NodesData []models.Node
 	var nodeNames []string
+	var lastSyncAt *time.Time
 
 	// 如果提供了机场URL，优先从机场获取节点
 	if airportUrl != "" {
-		req, err := http.NewRequest("GET", airportUrl, nil)
-		if err != nil {
-			c.JSON(400, gin.H{"msg": "无效的订阅链接: " + err.Error()})
-			return
-		}
-		req.Header.Set("User-Agent", "v2rayNG/1.8.5")
-		client := &http.Client{Timeout: 15 * time.Second}
-		resp, err := client.Do(req)
+		body, activeURL, err := fetchSubscriptionSource(airportUrl)
 		if err != nil {
 			c.JSON(400, gin.H{"msg": "请求订阅链接失败: " + err.Error()})
 			return
 		}
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(resp.Body)
-		
+		now := time.Now()
+		lastSyncAt = &now
+
 		// 尝试 Base64 解码，绝大多数标准订阅都是 Base64 编码的链接列表
 		decodedStr := node.Base64Decode(string(body))
 		links := strings.Split(decodedStr, "\n")
-		
+
 		for _, link := range links {
 			link = strings.TrimSpace(link)
 			if link == "" || !strings.Contains(link, "://") {
@@ -191,15 +232,15 @@ func SubAdd(c *gin.Context) {
 				continue
 			}
 			// 保存到数据库
-			n.Add() 
-			
+			n.Add()
+
 			// 为了防止重名导致获取错节点，我们通过精确查找获取 ID
 			var dbNode models.Node
 			models.DB.Model(models.Node{}).Where("name = ? AND link = ?", n.Name, n.Link).First(&dbNode)
 			if dbNode.ID != 0 {
 				NodesData = append(NodesData, dbNode)
 				nodeNames = append(nodeNames, dbNode.Name)
-				
+
 				// 自动将机场抓取到的节点归类到一个以订阅名称命名的分组，防止在节点列表中过于杂乱
 				gn := models.GroupNode{Name: name}
 				gn.Add()
@@ -207,7 +248,7 @@ func SubAdd(c *gin.Context) {
 			}
 		}
 		// 自动创建/复用同名机场记录，使其出现在机场管理
-		ensureAirportFromSub(name, airportUrl, len(nodeNames))
+		ensureAirportFromSub(name, activeURL, len(nodeNames))
 	} else {
 		// 常规的手动选择节点
 		for _, nodeName := range strings.Split(nodes, ",") {
@@ -228,11 +269,15 @@ func SubAdd(c *gin.Context) {
 	}
 
 	sub := models.Subcription{
-		Name:      name,
-		Config:    configs,
-		NodeOrder: strings.Join(nodeNames, ","),
-		Nodes:     NodesData,
-		GroupRefs: groupRefs,
+		Name:             name,
+		Config:           configs,
+		NodeOrder:        strings.Join(nodeNames, ","),
+		Nodes:            NodesData,
+		GroupRefs:        groupRefs,
+		Pipeline:         pipeline,
+		SourceURLs:       airportUrl,
+		LastGoodSnapshot: strings.Join(nodeNames, "\n"),
+		LastSyncAt:       lastSyncAt,
 	}
 	err = sub.Add()
 	if err != nil {
@@ -256,6 +301,7 @@ func SubUpdate(c *gin.Context) {
 	nodes := c.PostForm("nodes")
 	airportUrl := c.PostForm("airport_url")
 	groups := c.PostForm("groups")
+	pipeline := c.PostForm("pipeline")
 
 	if NewName == "" {
 		c.JSON(400, gin.H{
@@ -278,26 +324,34 @@ func SubUpdate(c *gin.Context) {
 
 	var NodesData []models.Node
 	var nodeNames []string
+	var lastSyncAt *time.Time
+	var lastSyncError string
 
 	if airportUrl != "" {
-		req, err := http.NewRequest("GET", airportUrl, nil)
+		body, activeURL, err := fetchSubscriptionSource(airportUrl)
 		if err != nil {
-			c.JSON(400, gin.H{"msg": "无效的订阅链接: " + err.Error()})
-			return
+			// Keep serving the last known-good nodes when every source is down.
+			var existing models.Subcription
+			if dbErr := models.DB.Preload("Nodes").Where("name = ?", OldName).First(&existing).Error; dbErr != nil || len(existing.Nodes) == 0 {
+				c.JSON(400, gin.H{"msg": "请求订阅链接失败且无可用缓存: " + err.Error()})
+				return
+			}
+			NodesData = append(NodesData, existing.Nodes...)
+			for _, cached := range existing.Nodes {
+				nodeNames = append(nodeNames, cached.Name)
+			}
+			lastSyncError = err.Error()
+		} else {
+			now := time.Now()
+			lastSyncAt = &now
 		}
-		req.Header.Set("User-Agent", "v2rayNG/1.8.5")
-		client := &http.Client{Timeout: 15 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			c.JSON(400, gin.H{"msg": "请求订阅链接失败: " + err.Error()})
-			return
+
+		decodedStr := ""
+		if len(body) > 0 {
+			decodedStr = node.Base64Decode(string(body))
 		}
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(resp.Body)
-		
-		decodedStr := node.Base64Decode(string(body))
 		links := strings.Split(decodedStr, "\n")
-		
+
 		for _, link := range links {
 			link = strings.TrimSpace(link)
 			if link == "" || !strings.Contains(link, "://") {
@@ -308,21 +362,23 @@ func SubUpdate(c *gin.Context) {
 			if err != nil || n.Name == "" {
 				continue
 			}
-			n.Add() 
-			
+			n.Add()
+
 			var dbNode models.Node
 			models.DB.Model(models.Node{}).Where("name = ? AND link = ?", n.Name, n.Link).First(&dbNode)
 			if dbNode.ID != 0 {
 				NodesData = append(NodesData, dbNode)
 				nodeNames = append(nodeNames, dbNode.Name)
-				
+
 				gn := models.GroupNode{Name: NewName}
 				gn.Add()
 				dbNode.UpdateGroup([]models.GroupNode{{Name: NewName}})
 			}
 		}
 		// 自动创建/复用同名机场记录，使其出现在机场管理
-		ensureAirportFromSub(NewName, airportUrl, len(nodeNames))
+		if activeURL != "" {
+			ensureAirportFromSub(NewName, activeURL, len(nodeNames))
+		}
 	} else {
 		for _, nodeName := range strings.Split(nodes, ",") {
 			if strings.TrimSpace(nodeName) == "" {
@@ -343,11 +399,16 @@ func SubUpdate(c *gin.Context) {
 
 	OldSub := models.Subcription{Name: OldName}
 	NewSub := models.Subcription{
-		Name:      NewName,
-		Config:    configs,
-		NodeOrder: strings.Join(nodeNames, ","),
-		Nodes:     NodesData,
-		GroupRefs: groupRefs,
+		Name:             NewName,
+		Config:           configs,
+		NodeOrder:        strings.Join(nodeNames, ","),
+		Nodes:            NodesData,
+		GroupRefs:        groupRefs,
+		Pipeline:         pipeline,
+		SourceURLs:       airportUrl,
+		LastGoodSnapshot: strings.Join(nodeNames, "\n"),
+		LastSyncAt:       lastSyncAt,
+		LastSyncError:    lastSyncError,
 	}
 
 	err = OldSub.Update(&NewSub)

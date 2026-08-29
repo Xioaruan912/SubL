@@ -13,21 +13,24 @@ import (
 
 // NodeOverviewItem 节点概览（含国家与延迟）
 type NodeOverviewItem struct {
-	ID           int       `json:"id"`
-	Name         string    `json:"name"`
-	Link         string    `json:"link"`
-	Server       string    `json:"server"`
-	Port         int       `json:"port"`
-	Country      string    `json:"country"`
-	CountryCode  string    `json:"countryCode"`
-	Rtt          int       `json:"rtt"` // 毫秒，-1 失败
-	Groups       []string  `json:"groups"`
-	Score        int       `json:"score"`
-	Availability float64   `json:"availability"`
-	AverageRtt   int       `json:"averageRtt"`
-	Jitter       int       `json:"jitter"`
-	SampleCount  int       `json:"sampleCount"`
-	LastTestedAt time.Time `json:"lastTestedAt"`
+	ID                  int       `json:"id"`
+	Name                string    `json:"name"`
+	Link                string    `json:"link"`
+	Server              string    `json:"server"`
+	Port                int       `json:"port"`
+	Country             string    `json:"country"`
+	CountryCode         string    `json:"countryCode"`
+	Rtt                 int       `json:"rtt"` // 毫秒，-1 失败
+	Groups              []string  `json:"groups"`
+	Score               int       `json:"score"`
+	Availability        float64   `json:"availability"`
+	AverageRtt          int       `json:"averageRtt"`
+	Jitter              int       `json:"jitter"`
+	P95Rtt              int       `json:"p95Rtt"`
+	ConsecutiveFailures int       `json:"consecutiveFailures"`
+	Confidence          int       `json:"confidence"`
+	SampleCount         int       `json:"sampleCount"`
+	LastTestedAt        time.Time `json:"lastTestedAt"`
 }
 
 // overview 缓存（60s）
@@ -122,6 +125,7 @@ func CollectNodeQuality() ([]NodeOverviewItem, error) {
 	if err := models.RecordNodeQuality(samples); err != nil {
 		return nil, err
 	}
+	processNodeHealthEvents(results)
 	stats, err := models.GetNodeQualityStats(time.Now().Add(-24 * time.Hour))
 	if err != nil {
 		return nil, err
@@ -132,6 +136,9 @@ func CollectNodeQuality() ([]NodeOverviewItem, error) {
 			results[i].Availability = stat.Availability
 			results[i].AverageRtt = stat.AverageRtt
 			results[i].Jitter = stat.Jitter
+			results[i].P95Rtt = stat.P95Rtt
+			results[i].ConsecutiveFailures = stat.ConsecutiveFailures
+			results[i].Confidence = stat.Confidence
 			results[i].SampleCount = stat.SampleCount
 			results[i].LastTestedAt = stat.LastTestedAt
 		}
@@ -147,12 +154,12 @@ func NodeQualityHistory(c *gin.Context) {
 		return
 	}
 	hours := 24
-	if value, parseErr := strconv.Atoi(c.DefaultQuery("hours", "24")); parseErr == nil && value >= 1 && value <= 168 {
+	if value, parseErr := strconv.Atoi(c.DefaultQuery("hours", "24")); parseErr == nil && value >= 1 && value <= 720 {
 		hours = value
 	}
 	var samples []models.NodeQualitySample
 	err = models.DB.Where("node_id = ? AND checked_at >= ?", nodeID, time.Now().Add(-time.Duration(hours)*time.Hour)).
-		Order("checked_at ASC").Limit(1000).Find(&samples).Error
+		Order("checked_at ASC").Limit(5000).Find(&samples).Error
 	if err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "读取质量历史失败"})
 		return

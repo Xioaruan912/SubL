@@ -1,6 +1,6 @@
 <script setup lang='ts'>
-import { ref, computed, onMounted } from 'vue'
-import { getSubs, getSubPreviewNodes, AddSub, DelSub, UpdateSub, ResetToken, SetExpire } from "@/api/subcription/subs"
+import { ref, reactive, computed, onMounted } from 'vue'
+import { getSubs, getSubPreviewNodes, previewSubPipeline, AddSub, DelSub, UpdateSub, ResetToken, SetExpire } from "@/api/subcription/subs"
 import { getTemp } from "@/api/subcription/temp"
 import { getNodes, getNodeOverview, GetGroupFull } from "@/api/subcription/node"
 import QrcodeVue from 'qrcode.vue'
@@ -18,6 +18,8 @@ interface Sub {
   ExpiresAt: string | null
   Nodes: Node[]
   GroupRefs?: GroupRef[]
+  Pipeline?: string
+  SourceURLs?: string
   SubLogs: SubLogs[]
 }
 interface Node { ID: number; Name: string; Link: string; GroupNodes?: { Name: string }[] }
@@ -67,6 +69,21 @@ const qrcode = ref('')
 const qrTitle = ref('')
 const qrDialog = ref(false)
 const templist = ref<Temp[]>([])
+const editingSubId = ref(0)
+const pipeline = reactive({ include: '', exclude: '', renamePattern: '', renameReplacement: '', protocols: [] as string[], sort: 'original', dedupe: true, maxNodes: 0 })
+const pipelinePreview = ref<any>(null)
+const pipelineLoading = ref(false)
+const pipelineJSON = () => JSON.stringify(pipeline)
+const resetPipeline = (raw = '') => {
+  const value = { include: '', exclude: '', renamePattern: '', renameReplacement: '', protocols: [], sort: 'original', dedupe: true, maxNodes: 0 }
+  try { Object.assign(value, JSON.parse(raw || '{}')) } catch { /* use defaults */ }
+  Object.assign(pipeline, value); pipelinePreview.value = null
+}
+const runPipelinePreview = async () => {
+  if (!editingSubId.value) { ElMessage.info('新增订阅保存后即可预览真实处理结果'); return }
+  pipelineLoading.value = true
+  try { const { data } = await previewSubPipeline({ id: editingSubId.value, pipeline: pipelineJSON() }); pipelinePreview.value = data } finally { pipelineLoading.value = false }
+}
 
 // 抽屉
 const drawerVisible = ref(false)
@@ -155,10 +172,10 @@ const addSubs = async () => {
   })
   const groupStr = selectedGroups.value.join(',')
   if (SubTitle.value === '添加订阅') {
-    await AddSub({ config, name: Subname.value.trim(), nodes: value1.value.join(','), groups: groupStr, airport_url: isAirportUrl.value ? airportUrl.value.trim() : '' })
+    await AddSub({ config, name: Subname.value.trim(), nodes: value1.value.join(','), groups: groupStr, airport_url: isAirportUrl.value ? airportUrl.value.trim() : '', pipeline: pipelineJSON() })
     ElMessage.success("添加成功")
   } else {
-    await UpdateSub({ config, name: Subname.value.trim(), nodes: value1.value.join(','), groups: groupStr, oldname: oldSubname.value, airport_url: isAirportUrl.value ? airportUrl.value.trim() : '' })
+    await UpdateSub({ config, name: Subname.value.trim(), nodes: value1.value.join(','), groups: groupStr, oldname: oldSubname.value, airport_url: isAirportUrl.value ? airportUrl.value.trim() : '', pipeline: pipelineJSON() })
     ElMessage.success("更新成功")
   }
   getsubs()
@@ -181,6 +198,8 @@ const handleAddSub = () => {
   loonMode.value = '1'
   value1.value = []
   selectedGroups.value = []
+  editingSubId.value = 0
+  resetPipeline()
   dialogVisible.value = true
 }
 
@@ -198,8 +217,8 @@ const handleEdit = (sub: Sub) => {
   SubTitle.value = '编辑订阅'
   Subname.value = sub.Name
   oldSubname.value = sub.Name
-  airportUrl.value = ''
-  isAirportUrl.value = false
+  airportUrl.value = sub.SourceURLs || ''
+  isAirportUrl.value = !!sub.SourceURLs
   udpOn.value = !!config.udp
   certOn.value = !!config.cert
   Clash.value = config.clash
@@ -209,6 +228,8 @@ const handleEdit = (sub: Sub) => {
   loonMode.value = config.loon.startsWith('./template/') ? '1' : '2'
   value1.value = sub.Nodes.map(n => n.Name)
   selectedGroups.value = (sub.GroupRefs || []).map(g => g.ID)
+  editingSubId.value = sub.ID
+  resetPipeline(sub.Pipeline || '')
   dialogVisible.value = true
 }
 
@@ -445,7 +466,7 @@ const saveExpire = async () => {
     </el-dialog>
 
     <!-- 添加/编辑订阅弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="SubTitle" width="720px" align-center>
+    <el-dialog v-model="dialogVisible" :title="SubTitle" width="min(920px, 96vw)" align-center>
       <el-form label-position="top" class="sub-form">
         <!-- 分区一：基本信息 -->
         <el-divider content-position="left">基本信息</el-divider>
@@ -524,9 +545,9 @@ const saveExpire = async () => {
         </div>
 
         <template v-if="isAirportUrl">
-          <el-form-item label="机场订阅链接">
-            <el-input v-model="airportUrl" placeholder="输入机场提供的订阅链接 (通常返回 Base64 节点列表)" clearable />
-            <div class="text-xs text-gray-500 mt-1">提交后，系统将自动拉取链接中的所有节点，存入本地数据库并与此订阅绑定。</div>
+          <el-form-item label="机场订阅源（支持主源 + 备用源）">
+            <el-input v-model="airportUrl" type="textarea" :rows="3" placeholder="每行一个订阅链接；主源失败时自动尝试下一行" clearable />
+            <div class="text-xs text-gray-500 mt-1">按顺序尝试，首个可用的 2xx 非空响应生效。</div>
           </el-form-item>
         </template>
         
@@ -582,6 +603,21 @@ const saveExpire = async () => {
             </el-col>
           </el-row>
         </template>
+
+        <el-divider content-position="left">节点处理链</el-divider>
+        <div class="pipeline-card">
+          <el-row :gutter="12">
+            <el-col :span="12" :xs="24"><el-form-item label="包含名称（正则）"><el-input v-model="pipeline.include" placeholder="例如 香港|日本" clearable /></el-form-item></el-col>
+            <el-col :span="12" :xs="24"><el-form-item label="排除名称（正则）"><el-input v-model="pipeline.exclude" placeholder="例如 剩余|官网" clearable /></el-form-item></el-col>
+            <el-col :span="12" :xs="24"><el-form-item label="重命名正则"><el-input v-model="pipeline.renamePattern" placeholder="例如 ^\[机场A\]\s*" clearable /></el-form-item></el-col>
+            <el-col :span="12" :xs="24"><el-form-item label="替换为"><el-input v-model="pipeline.renameReplacement" placeholder="留空表示删除匹配内容" clearable /></el-form-item></el-col>
+            <el-col :span="12" :xs="24"><el-form-item label="协议过滤"><el-select v-model="pipeline.protocols" multiple clearable placeholder="全部协议" class="full"><el-option v-for="p in ['ss','ssr','vmess','vless','trojan','hysteria2','tuic']" :key="p" :label="p" :value="p" /></el-select></el-form-item></el-col>
+            <el-col :span="8" :xs="16"><el-form-item label="排序"><el-select v-model="pipeline.sort" class="full"><el-option label="保留原顺序" value="original"/><el-option label="名称" value="name"/><el-option label="国家/地区" value="country"/><el-option label="低延迟优先" value="latency"/><el-option label="质量分优先" value="quality"/></el-select></el-form-item></el-col>
+            <el-col :span="4" :xs="8"><el-form-item label="最多节点"><el-input-number v-model="pipeline.maxNodes" :min="0" :max="9999" controls-position="right" /></el-form-item></el-col>
+          </el-row>
+          <div class="pipeline-footer"><el-checkbox v-model="pipeline.dedupe">按节点链接去重</el-checkbox><el-button :loading="pipelineLoading" @click="runPipelinePreview">预览处理结果</el-button></div>
+          <el-alert v-if="pipelinePreview" type="success" :closable="false" show-icon><template #title>处理前 {{ pipelinePreview.before }} 个 → 处理后 {{ pipelinePreview.after }} 个</template><template #default><span v-for="(count, reason) in pipelinePreview.rejected" :key="reason" class="reject-stat">{{ reason }} {{ count }}</span></template></el-alert>
+        </div>
       </el-form>
 
       <template #footer>
@@ -740,4 +776,5 @@ html.dark .order-badge { background: var(--el-color-primary-light-3); color: #ff
 .country-group-count { color: var(--el-text-color-secondary); font-size: 12px; font-weight: normal; }
 .gc-name { font-size: 13px; }
 .gc-count { margin-left: 8px; font-size: 12px; color: var(--el-text-color-secondary); }
+.pipeline-card { padding:14px; border:1px solid var(--el-border-color-lighter); border-radius:10px; background:var(--el-fill-color-extra-light); }.pipeline-card .el-form-item { margin-bottom:12px; }.pipeline-footer { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }.reject-stat { margin-right:12px; font-size:12px; }
 </style>

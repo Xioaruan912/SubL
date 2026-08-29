@@ -50,6 +50,7 @@
     "element-plus": "^2.6.1",
     "lodash-es": "^4.17.21",
     "md5": "^2.3.0",
+    "monaco-editor": "^0.52.2",
     "net": "^1.0.2",
     "nprogress": "^0.2.0",
     "path-browserify": "^1.0.1",

@@ -9,9 +9,9 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"strings"
 	"ppeelink/models"
 	"ppeelink/node"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -92,6 +92,13 @@ func mergeGroupNodes(sub *models.Subcription) error {
 	}
 
 	sub.Nodes = merged
+	if sub.Pipeline != "" {
+		preview, err := ApplySubscriptionPipeline(sub.Nodes, sub.Pipeline)
+		if err != nil {
+			return err
+		}
+		sub.Nodes = preview.Nodes
+	}
 	return nil
 }
 
