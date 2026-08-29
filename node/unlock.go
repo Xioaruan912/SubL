@@ -427,13 +427,6 @@ func buildVLESSOutbound(vl VLESS) string {
 	if vl.Query.Flow != "" {
 		parts = append(parts, fmt.Sprintf(`"flow": %q`, vl.Query.Flow))
 	}
-	// 网络传输（默认 tcp）
-	network := vl.Query.Type
-	if network == "" {
-		network = "tcp"
-	}
-	parts = append(parts, fmt.Sprintf(`"network": %q`, network))
-
 	// TLS / Reality
 	switch vl.Query.Security {
 	case "reality":
