@@ -142,17 +142,19 @@ onMounted(async () => {
 
     <section class="source-card">
       <el-segmented v-model="mode" :options="[{label:'订阅节点检测',value:'subscription'},{label:'模板规则验证',value:'template'},{label:'本机浏览器检测',value:'local'}]" />
-      <div v-if="mode === 'subscription' || mode === 'template'" class="source-selectors">
+      <div v-if="mode === 'subscription' || mode === 'template'" class="source-selectors" :class="{ 'template-selectors': mode === 'template' }">
         <el-select v-model="selectedSubscription" placeholder="选择订阅" filterable @change="loadSubscriptionNodes"><el-option v-for="sub in subscriptions" :key="sub.ID" :label="sub.Name" :value="sub.ID"><span>{{ sub.Name }}</span><small>{{ sub.Nodes?.length || 0 }} 个固定节点</small></el-option></el-select>
-        <span class="arrow">→</span>
-        <el-select v-model="selectedNode" placeholder="选择具体节点" filterable :loading="nodesLoading"><el-option v-for="item in subscriptionNodes" :key="item.ID" :label="item.Name" :value="item.ID"><span>{{ item.Name }}</span><small>质量 {{ item.quality?.score || 0 }} · {{ item.quality?.averageRtt >= 0 ? item.quality.averageRtt + 'ms' : '无样本' }}</small></el-option></el-select>
-        <el-tag v-if="subscriptionNodes.length" type="success" effect="plain">默认质量最优</el-tag>
-        <el-button v-if="mode === 'subscription'" type="success" plain :loading="planLoading" @click="runPlan">按模板规则验证</el-button>
+        <template v-if="mode === 'subscription'">
+          <span class="arrow">→</span>
+          <el-select v-model="selectedNode" placeholder="选择具体节点" filterable :loading="nodesLoading"><el-option v-for="item in subscriptionNodes" :key="item.ID" :label="item.Name" :value="item.ID"><span>{{ item.Name }}</span><small>质量 {{ item.quality?.score || 0 }} · {{ item.quality?.averageRtt >= 0 ? item.quality.averageRtt + 'ms' : '无样本' }}</small></el-option></el-select>
+          <el-tag v-if="subscriptionNodes.length" type="success" effect="plain">默认质量最优</el-tag>
+        </template>
+        <el-alert v-else type="info" :closable="false" title="将读取该订阅绑定的 Clash/Surge/Loon 模板，并按实际规则自动选择节点" />
       </div>
       <el-alert v-else type="info" :closable="false" title="本机模式由浏览器直连目标网站；它反映当前设备的代理分流，不经过 SubLinkX 节点。" />
     </section>
 
-    <section v-if="plan" class="plan-card">
+    <section v-if="plan && mode === 'template'" class="plan-card">
       <header><div><b>模板分流验证</b><small>{{ plan.template || '未读取到本地模板' }} · 已按规则选择质量最优节点 · {{ splitVerifierBuild }}</small></div><el-tag type="success" effect="plain">{{ plan.items?.length || 0 }} 个目标</el-tag></header>
       <el-table :data="plan.items" size="small">
         <el-table-column label="网站" width="140"><template #default="{ row }"><span class="target-title"><img class="site-icon" :src="faviconUrl(row.domain)" @error="iconFallback($event, (targets.find(t => t.domain === row.domain) || { icon: '•' }).icon)">{{ row.name }}</span></template></el-table-column>
@@ -194,4 +196,5 @@ onMounted(async () => {
 .source-card{padding:16px 20px;margin-bottom:16px;border:1px solid var(--el-border-color-lighter);border-radius:16px;background:var(--el-bg-color);box-shadow:var(--el-box-shadow-light)}.source-selectors{display:grid;grid-template-columns:minmax(220px,1fr) 24px minmax(260px,1.4fr) auto;align-items:center;gap:10px;margin-top:14px}.source-selectors .arrow{text-align:center;color:var(--el-text-color-placeholder)}.source-selectors :deep(.el-select-dropdown__item){display:flex;justify-content:space-between}.source-selectors small{margin-left:14px;color:var(--el-text-color-secondary)}
 .egress-page{width:min(1120px,100%);margin:0 auto;padding:28px}.hero-card,.summary-card,.result-card{border:1px solid var(--el-border-color-lighter);border-radius:16px;background:var(--el-bg-color);box-shadow:var(--el-box-shadow-light)}.hero-card{display:flex;align-items:flex-end;justify-content:space-between;gap:30px;padding:28px;margin-bottom:16px;background:radial-gradient(circle at 90% 0,color-mix(in srgb,var(--el-color-primary) 12%,transparent),transparent 42%),var(--el-bg-color)}.eyebrow{color:var(--el-color-primary);font-family:monospace;font-size:11px;font-weight:800;letter-spacing:.14em}.hero-card h1{margin:8px 0 7px;font-size:30px;letter-spacing:-.03em}.hero-card p{max-width:700px;margin:0;color:var(--el-text-color-secondary);font-size:13px;line-height:1.7}.hero-actions{display:flex;align-items:center;gap:16px;flex-shrink:0}.summary-card,.result-card{padding:20px;margin-bottom:16px}.summary-card>header,.result-card>header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}.summary-card header>div,.result-card header>div{display:flex;flex-direction:column;gap:3px}.summary-card header small,.result-card header small{color:var(--el-text-color-secondary);font-size:11px}.egress-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.egress-grid article{display:flex;align-items:center;gap:11px;padding:13px;border:1px solid var(--el-border-color-lighter);border-radius:11px;background:var(--el-fill-color-extra-light)}.egress-grid .flag{font-size:23px}.egress-grid article div,.target-cell{display:flex;min-width:0;flex-direction:column}.egress-grid strong,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.egress-grid small,.target-cell small{overflow:hidden;color:var(--el-text-color-secondary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.target-cell span{font-weight:650}.privacy-note{margin:14px 0 0;color:var(--el-text-color-secondary);font-size:11px;line-height:1.6}.result-table{width:100%}@media(max-width:720px){.egress-page{padding:14px}.hero-card{align-items:flex-start;flex-direction:column;padding:20px}.hero-actions{width:100%;justify-content:space-between}.result-card{padding:12px}.summary-card>header,.result-card>header{align-items:flex-start;flex-direction:column}}
 @media(max-width:720px){.source-selectors{grid-template-columns:1fr}.source-selectors .arrow{display:none}}
+.template-selectors{grid-template-columns:minmax(260px,420px) 1fr}.template-selectors :deep(.el-alert){margin:0}
 </style>
