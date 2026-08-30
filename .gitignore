@@ -9,6 +9,7 @@ AGENTS.txt
 .prod-ssh-pass
 .github-token
 /deploy-vps.sh
+/.deploy.env
 .env
 .env.*
 !.env.example
