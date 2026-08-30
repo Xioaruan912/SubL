@@ -39,6 +39,16 @@ func TestRuleSetTargetMatching(t *testing.T) {
 	}
 }
 
+func TestSplitRulePolicyIgnoresOptionsAndNestedCommas(t *testing.T) {
+	rules := parseSplitRules("rules:\n  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve\n  - AND,((DOMAIN,example.com),(NETWORK,TCP)),Proxy\n  - MATCH,Fallback\n")
+	if len(rules) != 3 {
+		t.Fatalf("unexpected rules: %#v", rules)
+	}
+	if rules[0].Policy != "DIRECT" || rules[1].Policy != "Proxy" || rules[2].Policy != "Fallback" {
+		t.Fatalf("policy parsing failed: %#v", rules)
+	}
+}
+
 func successfulPlanRunner(_ context.Context, _ string, _ time.Duration, keys []string) (*node.EgressResult, error) {
 	results := make([]node.EgressCheckResult, 0, len(keys))
 	for _, key := range keys {

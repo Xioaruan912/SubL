@@ -16,6 +16,7 @@ func Templates(r *gin.Engine) {
 		TempsGroup.POST("/build", api.TemplateBuild)
 		TempsGroup.GET("/default", api.TemplateGetDefault)
 		TempsGroup.POST("/validate", api.ValidateTemp)
+		TempsGroup.POST("/preflight", api.PreflightTemp)
 		TempsGroup.GET("/versions", api.GetTempVersions)
 		TempsGroup.GET("/version", api.GetTempVersion)
 		TempsGroup.POST("/rollback", api.RollbackTemp)

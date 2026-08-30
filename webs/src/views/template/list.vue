@@ -1,6 +1,6 @@
 <script setup lang='ts'>
 import { ref, computed, onMounted } from 'vue'
-import { getTemp, AddTemp, UpdateTemp, DelTemp, ValidateTemp, GetTempVersions, GetTempVersion, RollbackTemp } from "@/api/template/temp"
+import { getTemp, AddTemp, UpdateTemp, DelTemp, ValidateTemp, PreflightTemp, GetTempVersions, GetTempVersion, RollbackTemp } from "@/api/template/temp"
 import TemplateMonacoEditor from '@/components/TemplateMonacoEditor.vue'
 import TemplateMonacoDiff from '@/components/TemplateMonacoDiff.vue'
 
@@ -29,6 +29,11 @@ const oldVersionText = ref('')
 const oldVersionTitle = ref('')
 const outlineExpanded = ref(false)
 const visibleOutline = computed(() => outlineExpanded.value ? outline.value : outline.value.filter(item => item.level === 0))
+const preflightVisible = ref(false)
+const preflightLoading = ref(false)
+const preflightReport = ref<any>(null)
+const preflightDomains = ref('gemini.google.com\nchatgpt.com\nopenai.com\nclaude.ai')
+const lastPreflightSignature = ref('')
 
 // 类型识别：yaml→clash / conf→loon / 其他→generic
 const tempType = (file: string) => {
@@ -68,10 +73,18 @@ const handleAddTemp = () => {
   TempTitle.value = '添加模板'
   Tempname.value = ''
   TempText.value = ''
+  preflightReport.value = null
+  lastPreflightSignature.value = ''
   dialogVisible.value = true
 }
 const addtemp = async () => {
   if (!Tempname.value.trim()) { ElMessage.warning('请填写文件名'); return }
+  const canSave = await runPreflight(false)
+  if (!canSave) {
+    preflightVisible.value = true
+    ElMessage.error('发布前预检发现错误，请修复后再保存')
+    return
+  }
   if (TempTitle.value === '添加模板') {
     await AddTemp({ filename: Tempname.value.trim(), text: TempText.value.trim() })
     ElMessage.success("添加成功")
@@ -90,6 +103,8 @@ const handleEdit = (row: Temp) => {
   Tempname.value = row.file
   Tempoldname.value = row.file
   TempText.value = row.text
+  preflightReport.value = null
+  lastPreflightSignature.value = ''
   dialogVisible.value = true
   runValidation()
 }
@@ -128,6 +143,40 @@ const runValidation = async () => {
     validationErrors.value = data?.errors || []
     if (!validationErrors.value.length) ElMessage.success('模板语法校验通过')
   } finally { validating.value = false }
+}
+const runPreflight = async (show = true) => {
+  if (!Tempname.value.trim() || !TempText.value.trim()) {
+    ElMessage.warning('请先填写模板文件名和内容')
+    return false
+  }
+  const signature = `${Tempname.value.trim()}\u0000${TempText.value}\u0000${preflightDomains.value}`
+  if (!show && signature === lastPreflightSignature.value && preflightReport.value?.valid) return true
+  if (show) preflightVisible.value = true
+  preflightLoading.value = true
+  try {
+    const { data } = await PreflightTemp({ filename: Tempname.value.trim(), text: TempText.value, domains: preflightDomains.value })
+    preflightReport.value = data
+    lastPreflightSignature.value = signature
+    if (data?.valid) {
+      if (show) ElMessage.success(data?.summary?.warnings ? '预检通过，存在需要确认的警告' : '发布前预检通过')
+      return true
+    }
+    return false
+  } catch {
+    return false
+  } finally {
+    preflightLoading.value = false
+  }
+}
+const severityLabel = (value: string) => value === 'error' ? '错误' : value === 'warning' ? '警告' : '提示'
+const severityType = (value: string) => value === 'error' ? 'danger' : value === 'warning' ? 'warning' : 'info'
+const routeLabel = (value: string) => value === 'matched' ? '已确认' : value === 'partial' ? '需复核' : '未命中'
+const routeType = (value: string) => value === 'matched' ? 'success' : value === 'partial' ? 'warning' : 'danger'
+const compatibilityLabel = (value: string) => value === 'pass' ? '通过' : value === 'error' ? '阻止发布' : '需确认'
+const revealIssue = (line?: number) => {
+  if (!line) return
+  preflightVisible.value = false
+  requestAnimationFrame(() => editorRef.value?.revealLine(line))
 }
 const openVersions = async () => {
   if (!Tempoldname.value) return
@@ -204,6 +253,7 @@ const copyText = async (row: Temp) => {
           <el-form-item label="模板文件名" class="filename-field"><el-input v-model="Tempname" placeholder="例如 my_clash.yaml / loon.conf" clearable /></el-form-item>
           <div class="workbench-actions">
             <el-button :loading="validating" @click="runValidation">校验语法</el-button>
+            <el-button type="primary" plain :loading="preflightLoading" @click="runPreflight(true)">发布前预检</el-button>
             <el-button v-if="TempTitle !== '添加模板'" @click="openVersions">版本历史</el-button>
           </div>
         </div>
@@ -245,6 +295,69 @@ const copyText = async (row: Temp) => {
       <div class="diff-head"><span>左侧：历史版本</span><span>右侧：当前编辑内容</span><small>绿色为新增，红色为删除，修改行会在两侧直接高亮。</small></div>
       <TemplateMonacoDiff v-if="diffVisible" :original="oldVersionText" :modified="TempText" :language="editorLanguage" />
     </el-dialog>
+
+    <el-dialog v-model="preflightVisible" title="发布前预检" width="min(1120px, 96vw)" top="4vh" class="preflight-dialog">
+      <div class="preflight-query">
+        <div><strong>规则解释目标</strong><small>每行一个域名；只解释模板规则，不会从浏览器直连目标网站。</small></div>
+        <el-input v-model="preflightDomains" type="textarea" :rows="2" placeholder="gemini.google.com&#10;chatgpt.com" />
+        <el-button type="primary" :loading="preflightLoading" @click="runPreflight(true)">重新预检</el-button>
+      </div>
+
+      <div v-loading="preflightLoading" class="preflight-body">
+        <template v-if="preflightReport">
+          <div class="preflight-hero" :class="preflightReport.valid ? 'is-pass' : 'is-error'">
+            <div class="preflight-mark">{{ preflightReport.valid ? '✓' : '!' }}</div>
+            <div>
+              <strong>{{ preflightReport.valid ? '可以安全保存' : '发现阻止保存的问题' }}</strong>
+              <small>{{ String(preflightReport.format || '').toUpperCase() }} · {{ preflightReport.coverage === 'full' ? '完整语义检查' : '基础结构检查' }}</small>
+            </div>
+            <div class="preflight-stats">
+              <span><b>{{ preflightReport.summary?.errors || 0 }}</b> 错误</span>
+              <span><b>{{ preflightReport.summary?.warnings || 0 }}</b> 警告</span>
+              <span><b>{{ preflightReport.summary?.groups || 0 }}</b> 策略组</span>
+              <span><b>{{ preflightReport.summary?.rules || 0 }}</b> 规则</span>
+            </div>
+          </div>
+
+          <section class="preflight-section">
+            <header><strong>客户端与测试兼容性</strong><small>协议 {{ preflightReport.protocols?.length || 0 }} 类</small></header>
+            <div class="compat-grid">
+              <article v-for="item in preflightReport.compatibility" :key="item.target">
+                <div><b>{{ item.target }}</b><el-tag size="small" :type="severityType(item.status === 'error' ? 'error' : item.status === 'warning' ? 'warning' : 'info')">{{ compatibilityLabel(item.status) }}</el-tag></div>
+                <p>{{ item.detail }}</p>
+              </article>
+            </div>
+            <div v-if="preflightReport.protocols?.length" class="protocol-row">
+              <el-tag v-for="item in preflightReport.protocols" :key="`${item.type}-${item.network}`" effect="plain">
+                {{ item.type || '未知' }}{{ item.network ? ` / ${item.network}` : '' }} × {{ item.count }}
+              </el-tag>
+            </div>
+          </section>
+
+          <section class="preflight-section">
+            <header><strong>问题清单</strong><small>{{ preflightReport.issues?.length || 0 }} 项</small></header>
+            <el-empty v-if="!preflightReport.issues?.length" :image-size="48" description="没有发现结构或引用问题" />
+            <button v-for="(item, index) in preflightReport.issues" :key="`${item.code}-${index}`" class="issue-row" :class="{ clickable: item.line }" @click="revealIssue(item.line)">
+              <el-tag size="small" :type="severityType(item.severity)">{{ severityLabel(item.severity) }}</el-tag>
+              <span>{{ item.message }}</span>
+              <small v-if="item.line">第 {{ item.line }} 行</small>
+            </button>
+          </section>
+
+          <section class="preflight-section">
+            <header><strong>规则命中解释</strong><small>按模板顺序首次命中</small></header>
+            <el-table :data="preflightReport.routes || []" class="route-table">
+              <el-table-column label="目标" min-width="150"><template #default="{ row }"><b class="mono">{{ row.domain }}</b></template></el-table-column>
+              <el-table-column label="状态" width="88"><template #default="{ row }"><el-tag size="small" :type="routeType(row.status)">{{ routeLabel(row.status) }}</el-tag></template></el-table-column>
+              <el-table-column label="命中规则" min-width="250"><template #default="{ row }"><div class="route-rule"><span>{{ row.matchedRule || '没有可确认的匹配' }}</span><small v-if="row.ruleIndex">规则 #{{ row.ruleIndex }}</small></div></template></el-table-column>
+              <el-table-column label="策略链" min-width="230"><template #default="{ row }"><div class="route-chain"><span v-for="(part, index) in row.chain" :key="`${part}-${index}`"><i v-if="index">→</i>{{ part }}</span><small v-if="row.candidates?.length" :title="row.candidates.join('、')">候选：{{ row.candidates.join('、') }}</small><small v-if="row.notes?.length" :title="row.notes.join('\n')">{{ row.notes.join('；') }}</small></div></template></el-table-column>
+            </el-table>
+          </section>
+        </template>
+        <el-empty v-else description="点击重新预检生成报告" />
+      </div>
+      <template #footer><el-button @click="preflightVisible = false">关闭</el-button></template>
+    </el-dialog>
   </div>
 </template>
 
@@ -271,5 +384,14 @@ const copyText = async (row: Temp) => {
 .card-actions { display: flex; justify-content: flex-end; gap: 2px; border-top: 1px solid var(--el-border-color-lighter); padding-top: 8px; margin-top: 8px; }
 .workbench-toolbar { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; }.filename-field { flex:1; max-width:560px; margin-bottom:12px; }.workbench-actions { display:flex; gap:8px; padding-bottom:12px; }
 .workbench-grid { display:grid; grid-template-columns:220px minmax(0,1fr) 260px; gap:12px; min-height:560px; }.outline-panel,.inspect-panel { overflow:auto; max-height:560px; border:1px solid var(--el-border-color-lighter); border-radius:10px; background:var(--el-fill-color-blank); }.panel-title { position:sticky; top:0; z-index:1; display:flex; justify-content:space-between; align-items:center; gap:8px; padding:12px; border-bottom:1px solid var(--el-border-color-lighter); background:var(--el-bg-color); font-weight:700; }.panel-title span { color:var(--el-text-color-secondary); }.panel-title small { margin-left:4px; font-weight:400; }.outline-toggle { border:0; background:transparent; color:var(--el-color-primary); font-size:12px; cursor:pointer; }.outline-item { display:flex; width:100%; justify-content:space-between; gap:8px; padding:8px 10px; border:0; background:transparent; color:var(--el-text-color-regular); text-align:left; cursor:pointer; }.outline-item:hover { background:var(--el-fill-color-light); color:var(--el-color-primary); }.outline-item small { color:var(--el-text-color-placeholder); }.inspect-panel { padding-bottom:12px; }.inspect-panel :deep(.el-alert) { margin:10px; width:auto; }.inspect-panel :deep(.el-result) { padding:28px 10px 12px; }.inspect-tip { padding:0 14px; color:var(--el-text-color-secondary); font-size:12px; line-height:1.7; }.version-item { display:grid; grid-template-columns:1fr auto; gap:7px; padding:12px 0; border-bottom:1px solid var(--el-border-color-lighter); }.version-item > div:first-child { display:flex; gap:8px; align-items:center; }.version-item > div:last-child { grid-column:1/-1; }.version-item small { color:var(--el-text-color-secondary); }.diff-head { display:flex; gap:18px; align-items:center; margin-bottom:10px; color:var(--el-text-color-regular); font-size:13px; }.diff-head small { margin-left:auto; color:var(--el-text-color-secondary); }
-@media(max-width:1100px){.workbench-grid{grid-template-columns:180px minmax(0,1fr)}.inspect-panel{display:none}}@media(max-width:700px){.workbench-grid{grid-template-columns:1fr}.outline-panel{display:none}.diff-head{align-items:flex-start;flex-direction:column;gap:4px}.diff-head small{margin-left:0}}
+.preflight-query { display:grid; grid-template-columns:190px minmax(0,1fr) auto; align-items:center; gap:14px; padding:14px; border:1px solid var(--el-border-color-lighter); border-radius:12px; background:var(--el-fill-color-extra-light); }
+.preflight-query>div { display:flex; flex-direction:column; gap:4px; }.preflight-query small { color:var(--el-text-color-secondary); font-size:11px; line-height:1.5; }.preflight-body { min-height:300px; margin-top:14px; }
+.preflight-hero { display:flex; align-items:center; gap:13px; padding:16px 18px; border:1px solid color-mix(in srgb,var(--el-color-success) 35%,var(--el-border-color)); border-radius:13px; background:color-mix(in srgb,var(--el-color-success) 7%,var(--el-bg-color)); }.preflight-hero.is-error { border-color:color-mix(in srgb,var(--el-color-danger) 35%,var(--el-border-color)); background:color-mix(in srgb,var(--el-color-danger) 7%,var(--el-bg-color)); }
+.preflight-mark { display:grid; width:36px; height:36px; place-items:center; border-radius:10px; background:var(--el-color-success); color:white; font-size:21px; font-weight:800; }.is-error .preflight-mark { background:var(--el-color-danger); }.preflight-hero>div:nth-child(2) { display:flex; flex-direction:column; gap:3px; }.preflight-hero>div:nth-child(2) small { color:var(--el-text-color-secondary); }
+.preflight-stats { display:flex; gap:18px; margin-left:auto; color:var(--el-text-color-secondary); font-size:12px; }.preflight-stats span { display:flex; align-items:baseline; gap:4px; }.preflight-stats b { color:var(--el-text-color-primary); font-size:18px; }
+.preflight-section { margin-top:14px; overflow:hidden; border:1px solid var(--el-border-color-lighter); border-radius:12px; }.preflight-section>header { display:flex; justify-content:space-between; padding:12px 14px; background:var(--el-fill-color-extra-light); }.preflight-section>header small { color:var(--el-text-color-secondary); }
+.compat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:10px; padding:12px; }.compat-grid article { padding:12px; border:1px solid var(--el-border-color-lighter); border-radius:10px; }.compat-grid article>div { display:flex; justify-content:space-between; gap:8px; }.compat-grid p { margin:7px 0 0; color:var(--el-text-color-secondary); font-size:12px; line-height:1.55; }.protocol-row { display:flex; flex-wrap:wrap; gap:7px; padding:0 12px 12px; }
+.issue-row { display:grid; width:100%; grid-template-columns:64px 1fr auto; align-items:center; gap:10px; padding:10px 13px; border:0; border-top:1px solid var(--el-border-color-lighter); background:transparent; color:var(--el-text-color-regular); text-align:left; }.issue-row.clickable { cursor:pointer; }.issue-row.clickable:hover { background:var(--el-fill-color-light); }.issue-row small { color:var(--el-color-primary); }
+.route-rule,.route-chain { display:flex; flex-direction:column; gap:3px; }.route-rule span { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; }.route-rule small,.route-chain small { overflow:hidden; color:var(--el-text-color-secondary); font-size:11px; text-overflow:ellipsis; white-space:nowrap; }.route-chain>span { display:inline; font-size:12px; }.route-chain i { margin:0 5px; color:var(--el-text-color-placeholder); font-style:normal; }
+@media(max-width:1100px){.workbench-grid{grid-template-columns:180px minmax(0,1fr)}.inspect-panel{display:none}}@media(max-width:700px){.workbench-grid{grid-template-columns:1fr}.outline-panel{display:none}.diff-head{align-items:flex-start;flex-direction:column;gap:4px}.diff-head small{margin-left:0}.preflight-query{grid-template-columns:1fr}.preflight-stats{display:grid;grid-template-columns:1fr 1fr;margin-left:auto}.preflight-hero{align-items:flex-start}.preflight-mark{flex:0 0 auto}.issue-row{grid-template-columns:58px 1fr}.issue-row small{grid-column:2}}
 </style>

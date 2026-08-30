@@ -17,7 +17,13 @@ import (
 	"ppeelink/rulecenter"
 )
 
-type splitRule struct{ Kind, Domain, Policy, Raw string }
+type splitRule struct {
+	Kind   string
+	Domain string
+	Policy string
+	Raw    string
+	Index  int
+}
 type planNode struct {
 	ID          int    `json:"id"`
 	Name        string `json:"name"`
@@ -91,21 +97,57 @@ func parseSplitRules(content string) []splitRule {
 		return nil
 	}
 	result := make([]splitRule, 0, len(raw))
-	for _, value := range raw {
+	for index, value := range raw {
 		line := strings.TrimSpace(fmt.Sprint(value))
-		parts := strings.Split(line, ",")
+		parts := splitTopLevelRule(line)
 		if len(parts) < 2 {
 			continue
 		}
 		kind := strings.ToUpper(strings.TrimSpace(parts[0]))
-		policy := strings.TrimSpace(parts[len(parts)-1])
+		policyIndex := 2
+		if kind == "MATCH" || kind == "FINAL" {
+			policyIndex = 1
+		} else if kind == "AND" || kind == "OR" || kind == "NOT" {
+			policyIndex = len(parts) - 1
+		}
+		if policyIndex >= len(parts) {
+			continue
+		}
+		policy := strings.TrimSpace(parts[policyIndex])
 		domain := ""
 		if len(parts) > 2 {
 			domain = strings.TrimSpace(parts[1])
 		}
-		result = append(result, splitRule{Kind: kind, Domain: domain, Policy: policy, Raw: line})
+		result = append(result, splitRule{Kind: kind, Domain: domain, Policy: policy, Raw: line, Index: index + 1})
 	}
 	return result
+}
+
+// splitTopLevelRule keeps logical Clash rule expressions intact. A plain
+// strings.Split breaks AND/OR rules because nested predicates also use commas.
+func splitTopLevelRule(line string) []string {
+	parts := make([]string, 0, 4)
+	start, depth := 0, 0
+	var quote rune
+	for index, char := range line {
+		switch {
+		case quote != 0:
+			if char == quote {
+				quote = 0
+			}
+		case char == '\'' || char == '"':
+			quote = char
+		case char == '(':
+			depth++
+		case char == ')' && depth > 0:
+			depth--
+		case char == ',' && depth == 0:
+			parts = append(parts, strings.TrimSpace(line[start:index]))
+			start = index + 1
+		}
+	}
+	parts = append(parts, strings.TrimSpace(line[start:]))
+	return parts
 }
 
 func ruleForDomain(rules []splitRule, domain string) (splitRule, bool) {
@@ -138,7 +180,7 @@ func ruleForDomain(rules []splitRule, domain string) (splitRule, bool) {
 		}
 	}
 	for _, r := range rules {
-		if r.Kind == "MATCH" {
+		if r.Kind == "MATCH" || r.Kind == "FINAL" {
 			return r, true
 		}
 	}
@@ -174,7 +216,7 @@ func ruleForDomainResolved(ctx context.Context, rules []splitRule, content, doma
 			if rulecenter.MatchDomain(providerRules, key) {
 				return r, true, warning
 			}
-		case "MATCH":
+		case "MATCH", "FINAL":
 			return r, true, warning
 		}
 	}

@@ -41,6 +41,9 @@ export function DelTemp(data: any){
 export function ValidateTemp(data: any){
   return request({ url: "/api/v1/template/validate", method: "post", data, headers: { "Content-Type": "multipart/form-data" } });
 }
+export function PreflightTemp(data: any){
+  return request({ url: "/api/v1/template/preflight", method: "post", data, headers: { "Content-Type": "multipart/form-data" } });
+}
 export function GetTempVersions(filename: string){
   return request({ url: "/api/v1/template/versions", method: "get", params: { filename } });
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { countryFlag } from '@/utils/flag'
-import { getSubs, getSubPreviewNodes, subscriptionEgressPlan } from '@/api/subcription/subs'
+import { getSubs, getSubPreviewNodes, subscriptionEgressPlan, subscriptionRuleExplain } from '@/api/subcription/subs'
 import { EgressTest, getNodeOverview } from '@/api/subcription/node'
 
 defineOptions({ name: 'EgressTest' })
@@ -32,7 +32,7 @@ const results = ref<Result[]>(targets.map(item => ({ ...item, status: 'pending',
 const running = ref(false)
 const lastTestedAt = ref<Date | null>(null)
 const hideIP = ref(false)
-const mode = ref<'subscription' | 'local' | 'template'>('subscription')
+const mode = ref<'subscription' | 'local' | 'template' | 'explain'>('subscription')
 const subscriptions = ref<any[]>([])
 const selectedSubscription = ref<number | null>(null)
 const subscriptionNodes = ref<any[]>([])
@@ -40,6 +40,12 @@ const selectedNode = ref<number | null>(null)
 const nodesLoading = ref(false)
 const planLoading = ref(false)
 const plan = ref<any | null>(null)
+const explainTarget = ref('gemini.google.com')
+const explainIP = ref('')
+const explainPort = ref<number | undefined>(443)
+const explainProtocol = ref('tcp')
+const explainLoading = ref(false)
+const explainResult = ref<any | null>(null)
 // Changes with each release so browsers do not retain an old immutable chunk.
 const splitVerifierBuild = '20260829-rule-check-2'
 
@@ -111,11 +117,20 @@ const runSelected = async () => {
   } finally { running.value = false }
 }
 
-const runCurrent = () => mode.value === 'subscription' ? runSelected() : mode.value === 'template' ? runPlan() : runLocal()
+const runCurrent = () => mode.value === 'subscription' ? runSelected() : mode.value === 'template' ? runPlan() : mode.value === 'explain' ? runExplain() : runLocal()
 const runPlan = async () => {
   if (!selectedSubscription.value) { ElMessage.warning('请先选择订阅'); return }
   planLoading.value = true
   try { const { data } = await subscriptionEgressPlan(selectedSubscription.value); plan.value = data; if (data?.items) results.value = data.items.map((item:any) => { const target = targets.find(t => t.domain === item.domain) || { icon:'•' }; const check = item.result || {}; return { ...target, name:item.name, domain:item.domain, group:item.group, status: check.status === 'available' || check.status === 'reachable' ? 'done' : check.status ? 'error' : 'pending', ip:check.ip || '', countryCode:check.countryCode || '', rtt:check.rtt ?? -1, note:check.note || (item.fallback ? `未找到 ${item.expectedCountry}，已使用质量最优节点` : '') } }) ; lastTestedAt.value = new Date() } finally { planLoading.value = false }
+}
+const runExplain = async () => {
+  if (!selectedSubscription.value) { ElMessage.warning('请先选择订阅'); return }
+  if (!explainTarget.value.trim() && !explainIP.value.trim() && !explainPort.value) { ElMessage.warning('至少输入域名、IP 或端口之一'); return }
+  explainLoading.value = true; explainResult.value = null
+  try {
+    const { data } = await subscriptionRuleExplain({ subscriptionId:selectedSubscription.value, target:explainTarget.value.trim(), ip:explainIP.value.trim(), port:explainPort.value || 0, protocol:explainProtocol.value })
+    explainResult.value = data
+  } finally { explainLoading.value = false }
 }
 const faviconUrl = (domain:string) => {
   // npm registry 没有稳定的 favicon，使用 npm 官方站点图标。
@@ -141,17 +156,53 @@ onMounted(async () => {
     </section>
 
     <section class="source-card">
-      <el-segmented v-model="mode" :options="[{label:'订阅节点检测',value:'subscription'},{label:'模板规则验证',value:'template'},{label:'本机浏览器检测',value:'local'}]" />
-      <div v-if="mode === 'subscription' || mode === 'template'" class="source-selectors" :class="{ 'template-selectors': mode === 'template' }">
+      <el-segmented v-model="mode" :options="[{label:'订阅节点检测',value:'subscription'},{label:'模板规则验证',value:'template'},{label:'规则解释器',value:'explain'},{label:'本机浏览器检测',value:'local'}]" />
+      <div v-if="mode === 'subscription' || mode === 'template' || mode === 'explain'" class="source-selectors" :class="{ 'template-selectors': mode === 'template' || mode === 'explain' }">
         <el-select v-model="selectedSubscription" placeholder="选择订阅" filterable @change="loadSubscriptionNodes"><el-option v-for="sub in subscriptions" :key="sub.ID" :label="sub.Name" :value="sub.ID"><span>{{ sub.Name }}</span><small>{{ sub.Nodes?.length || 0 }} 个固定节点</small></el-option></el-select>
         <template v-if="mode === 'subscription'">
           <span class="arrow">→</span>
           <el-select v-model="selectedNode" placeholder="选择具体节点" filterable :loading="nodesLoading"><el-option v-for="item in subscriptionNodes" :key="item.ID" :label="item.Name" :value="item.ID"><span>{{ item.Name }}</span><small>质量 {{ item.quality?.score || 0 }} · {{ item.quality?.averageRtt >= 0 ? item.quality.averageRtt + 'ms' : '无样本' }}</small></el-option></el-select>
           <el-tag v-if="subscriptionNodes.length" type="success" effect="plain">默认质量最优</el-tag>
         </template>
-        <el-alert v-else type="info" :closable="false" title="将读取该订阅绑定的 Clash/Surge/Loon 模板，并按实际规则自动选择节点" />
+        <el-alert v-else-if="mode === 'template'" type="info" :closable="false" title="将读取该订阅绑定的 Clash/Surge/Loon 模板，并按实际规则自动选择节点" />
+        <el-alert v-else type="info" :closable="false" title="读取该订阅绑定的 Clash/Mihomo 模板，逐条解释为什么命中或未命中" />
       </div>
       <el-alert v-else type="info" :closable="false" title="本机模式由浏览器直连目标网站；它反映当前设备的代理分流，不经过 SubLinkX 节点。" />
+    </section>
+
+    <section v-if="mode === 'explain'" class="plan-card explain-card">
+      <header><div><b>规则为什么这样走</b><small>按 Clash/Mihomo 首条命中语义逐条解释，不修改任何配置</small></div><el-button type="primary" :loading="explainLoading" @click="runExplain">开始解释</el-button></header>
+      <div class="explain-query">
+        <el-input v-model="explainTarget" placeholder="域名，例如 gemini.google.com" />
+        <el-input v-model="explainIP" placeholder="目标 IP（可选）" />
+        <el-input-number v-model="explainPort" :min="1" :max="65535" placeholder="端口" />
+        <el-select v-model="explainProtocol"><el-option label="TCP" value="tcp" /><el-option label="UDP" value="udp" /></el-select>
+      </div>
+      <template v-if="explainResult">
+        <div class="explain-flow">
+          <span>{{ explainResult.target || explainResult.ip || '请求' }}</span><b>→</b>
+          <span>{{ explainResult.matchedRule || '未命中' }}</span><b>→</b>
+          <span v-for="item in explainResult.chain || []" :key="item">{{ item }}</span>
+          <template v-if="explainResult.selectedNode"><b>→</b><span class="selected">{{ explainResult.selectedNode.name }}</span></template>
+        </div>
+        <el-descriptions :column="3" border size="small" class="explain-meta">
+          <el-descriptions-item label="模板">{{ explainResult.template }}</el-descriptions-item>
+          <el-descriptions-item label="命中位置">第 {{ explainResult.ruleIndex || '--' }} 条</el-descriptions-item>
+          <el-descriptions-item label="候选节点">{{ explainResult.candidateCount || 0 }}</el-descriptions-item>
+          <el-descriptions-item label="策略">{{ explainResult.policy || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="期望地区">{{ explainResult.expectedCountry || '不限' }}</el-descriptions-item>
+          <el-descriptions-item label="实际节点">{{ explainResult.selectedNode?.name || '未选择' }}</el-descriptions-item>
+        </el-descriptions>
+        <header class="subhead"><b>命中前未命中规则</b><small>共评估 {{ explainResult.evaluatedCount || 0 }} 条</small></header>
+        <el-table :data="explainResult.previous || []" size="small" max-height="360">
+          <el-table-column prop="index" label="#" width="64" />
+          <el-table-column prop="rule" label="规则" min-width="320"><template #default="{ row }"><span class="rule-text">{{ row.rule }}</span></template></el-table-column>
+          <el-table-column prop="reason" label="为什么没命中" min-width="240" />
+          <el-table-column prop="source" label="来源" min-width="140" />
+        </el-table>
+        <el-alert v-if="explainResult.warnings?.length" class="plan-warning" type="warning" :closable="false" :title="explainResult.warnings.join('；')" />
+      </template>
+      <el-empty v-else-if="!explainLoading" :image-size="54" description="输入请求上下文后查看完整规则路径" />
     </section>
 
     <section v-if="plan && mode === 'template'" class="plan-card">
@@ -166,7 +217,7 @@ onMounted(async () => {
       <el-alert v-if="plan.warnings?.length" class="plan-warning" type="warning" :closable="false" :title="plan.warnings.join('；')" />
     </section>
 
-    <section class="summary-card">
+    <section v-if="mode !== 'explain'" class="summary-card">
       <header><div><b>出口 IP 汇总</b><small>{{ uniqueEgress.length }} 个不同出口</small></div><small v-if="lastTestedAt">更新于 {{ lastTestedAt.toLocaleTimeString() }}</small></header>
       <div v-if="uniqueEgress.length" class="egress-grid">
         <article v-for="item in uniqueEgress" :key="item.ip"><span class="flag">{{ countryFlag(item.countryCode) }}</span><div><strong>{{ maskIP(item.ip) }}</strong><small>{{ item.countryCode || '未知地区' }} · {{ item.services.length }} 个目标</small></div></article>
@@ -174,7 +225,7 @@ onMounted(async () => {
       <el-empty v-else :image-size="48" description="正在收集出口信息" />
     </section>
 
-    <section class="result-card">
+    <section v-if="mode !== 'explain'" class="result-card">
       <header><div><b>网站分流结果</b><small>{{ mode === 'template' ? '按订阅模板规则选择节点并验证' : mode === 'subscription' ? '通过所选节点检测，最多 4 项并发' : '浏览器直连检测，最多 4 项并发' }}</small></div><el-tag type="info" effect="plain">失败不等于网站不可用</el-tag></header>
       <el-table :data="results" row-key="domain" class="result-table">
         <el-table-column label="目标" min-width="190"><template #default="{ row }"><div class="target-cell"><span class="target-title"><img class="site-icon" :src="faviconUrl(row.domain)" @error="iconFallback($event, row.icon)"><i class="target-icon" style="display:none">{{ row.icon }}</i>{{ row.name }}</span><small>{{ row.domain }}</small></div></template></el-table-column>
@@ -197,4 +248,5 @@ onMounted(async () => {
 .egress-page{width:min(1120px,100%);margin:0 auto;padding:28px}.hero-card,.summary-card,.result-card{border:1px solid var(--el-border-color-lighter);border-radius:16px;background:var(--el-bg-color);box-shadow:var(--el-box-shadow-light)}.hero-card{display:flex;align-items:flex-end;justify-content:space-between;gap:30px;padding:28px;margin-bottom:16px;background:radial-gradient(circle at 90% 0,color-mix(in srgb,var(--el-color-primary) 12%,transparent),transparent 42%),var(--el-bg-color)}.eyebrow{color:var(--el-color-primary);font-family:monospace;font-size:11px;font-weight:800;letter-spacing:.14em}.hero-card h1{margin:8px 0 7px;font-size:30px;letter-spacing:-.03em}.hero-card p{max-width:700px;margin:0;color:var(--el-text-color-secondary);font-size:13px;line-height:1.7}.hero-actions{display:flex;align-items:center;gap:16px;flex-shrink:0}.summary-card,.result-card{padding:20px;margin-bottom:16px}.summary-card>header,.result-card>header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}.summary-card header>div,.result-card header>div{display:flex;flex-direction:column;gap:3px}.summary-card header small,.result-card header small{color:var(--el-text-color-secondary);font-size:11px}.egress-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.egress-grid article{display:flex;align-items:center;gap:11px;padding:13px;border:1px solid var(--el-border-color-lighter);border-radius:11px;background:var(--el-fill-color-extra-light)}.egress-grid .flag{font-size:23px}.egress-grid article div,.target-cell{display:flex;min-width:0;flex-direction:column}.egress-grid strong,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.egress-grid small,.target-cell small{overflow:hidden;color:var(--el-text-color-secondary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.target-cell span{font-weight:650}.privacy-note{margin:14px 0 0;color:var(--el-text-color-secondary);font-size:11px;line-height:1.6}.result-table{width:100%}@media(max-width:720px){.egress-page{padding:14px}.hero-card{align-items:flex-start;flex-direction:column;padding:20px}.hero-actions{width:100%;justify-content:space-between}.result-card{padding:12px}.summary-card>header,.result-card>header{align-items:flex-start;flex-direction:column}}
 @media(max-width:720px){.source-selectors{grid-template-columns:1fr}.source-selectors .arrow{display:none}}
 .template-selectors{grid-template-columns:minmax(260px,420px) 1fr}.template-selectors :deep(.el-alert){margin:0}
+.explain-query{display:grid;grid-template-columns:2fr 1.4fr 150px 120px;gap:10px;margin-bottom:14px}.explain-flow{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:14px;margin-bottom:14px;border:1px solid var(--el-border-color-lighter);border-radius:12px;background:var(--el-fill-color-extra-light)}.explain-flow span{padding:6px 9px;border-radius:8px;background:var(--el-bg-color);font-size:12px}.explain-flow .selected{color:var(--el-color-success);font-weight:700}.explain-flow b{color:var(--el-text-color-placeholder)}.explain-meta{margin-bottom:14px}.subhead{display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px}.subhead small{color:var(--el-text-color-secondary)}@media(max-width:900px){.explain-query{grid-template-columns:1fr 1fr}}@media(max-width:600px){.explain-query{grid-template-columns:1fr}}
 </style>

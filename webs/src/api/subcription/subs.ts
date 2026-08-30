@@ -16,6 +16,9 @@ export function getSubPreviewNodes(id: number){
 export function subscriptionEgressPlan(id: number){
   return request({ url: "/api/v1/subcription/egress-plan", method: "post", params: { id } });
 }
+export function subscriptionRuleExplain(data: any){
+  return request({ url: "/api/v1/subcription/rule-explain", method: "post", data });
+}
 export function previewSubPipeline(data: any){
   return request({ url: "/api/v1/subcription/pipeline/preview", method: "post", data, headers: { "Content-Type": "multipart/form-data" } });
 }

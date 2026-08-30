@@ -37,7 +37,6 @@ func (cv *ClientVersion) Save() error {
 	var rec ClientVersion
 	err := DB.Where("client = ? AND platform = ?", cv.Client, cv.Platform).First(&rec).Error
 	if err == gorm.ErrRecordNotFound {
-		cv.UpdatedAt = cv.UpdatedAt
 		return DB.Create(cv).Error
 	}
 	if err != nil {
@@ -58,7 +57,7 @@ func (cv *ClientVersion) Save() error {
 // SetStatus 更新状态
 func (cv *ClientVersion) SetStatus(status, errMsg string) error {
 	return DB.Model(&ClientVersion{}).Where("client = ? AND platform = ?", cv.Client, cv.Platform).Updates(map[string]any{
-		"status": status,
+		"status":  status,
 		"err_msg": errMsg,
 	}).Error
 }
