@@ -29,7 +29,8 @@ interface SubLogs { IP: string; Count: number; Addr: string; Date: string }
 interface Temp { file: string }
 interface OverviewItem {
   id: number; name: string; server: string; country: string;
-  countryCode: string; rtt: number; groups: string[]
+  countryCode: string; rtt: number; groups: string[];
+  score: number; confidence: number; sampleCount: number
 }
 
 const tableData = ref<Sub[]>([])
@@ -51,6 +52,17 @@ const value1 = ref<string[]>([])
 const allGroups = ref<GroupRef[]>([])
 const selectedGroups = ref<number[]>([])
 const openedNodeGroups = ref<string[]>([])
+const nodeQualityMap = computed(() => new Map(overview.value.map(item => [item.id, item])))
+const nodeByName = computed(() => new Map(NodesList.value.map(item => [item.Name, item])))
+const nodeQuality = (node: Node) => nodeQualityMap.value.get(node.ID)
+const nodeQualityByName = (name: string) => {
+  const node = nodeByName.value.get(name)
+  return node ? nodeQuality(node) : undefined
+}
+const nodeConfidenceLabel = (node: Node) => {
+  const q = nodeQuality(node)
+  return q && q.sampleCount > 0 ? `可信度 ${q.confidence}%` : '可信度暂无样本'
+}
 const groupedNodes = computed(() => {
   const by = new Map<string, Node[]>()
   for (const n of NodesList.value) {
@@ -60,8 +72,27 @@ const groupedNodes = computed(() => {
       by.get(name)!.push(n)
     }
   }
-    return [...by.entries()].filter(([name]) => name !== '未分组').map(([name, nodes]) => ({ name, nodes }))
-    .sort((a, b) => a.name === '未分组' ? 1 : b.name === '未分组' ? -1 : a.name.localeCompare(b.name, 'zh-CN'))
+  return [...by.entries()]
+    .filter(([name]) => name !== '未分组')
+    .map(([name, nodes]) => {
+      const sortedNodes = [...nodes].sort((a, b) => {
+        const qa = nodeQuality(a)
+        const qb = nodeQuality(b)
+        const confidenceDiff = (qb?.confidence || 0) - (qa?.confidence || 0)
+        if (confidenceDiff) return confidenceDiff
+        const scoreDiff = (qb?.score || 0) - (qa?.score || 0)
+        return scoreDiff || a.Name.localeCompare(b.Name, 'zh-CN')
+      })
+      const confidenceSamples = sortedNodes
+        .map(node => nodeQuality(node))
+        .filter((q): q is OverviewItem => !!q && q.sampleCount > 0)
+      return {
+        name,
+        nodes: sortedNodes,
+        confidence: confidenceSamples.length ? Math.max(...confidenceSamples.map(q => q.confidence)) : -1,
+      }
+    })
+    .sort((a, b) => (b.confidence - a.confidence) || a.name.localeCompare(b.name, 'zh-CN'))
 })
 const udpOn = ref(false)
 const certOn = ref(false)
@@ -143,9 +174,10 @@ onMounted(async () => {
   const { data } = await getNodes()
   NodesList.value = data || []
   try {
-    const gp = await GetGroupFull()
+    const [gp, ov] = await Promise.all([GetGroupFull(), getNodeOverview()])
     allGroups.value = Array.isArray(gp.data) ? gp.data.map((g: any) => ({ ID: g.id, Name: g.name, NodeCount: g.node_count || 0 })) : []
-  } catch { /* ignore */ }
+    overview.value = Array.isArray(ov.data) ? ov.data : []
+  } catch { /* quality/group metadata is non-blocking */ }
 })
 
 // ---- 添加/编辑 ----
@@ -562,11 +594,17 @@ const saveExpire = async () => {
                 <el-collapse v-model="openedNodeGroups" class="node-group-picker">
                   <el-collapse-item v-for="group in groupedNodes" :key="group.name" :name="group.name">
                     <template #title>
-                      <span class="picker-group-title">{{ group.name }}</span><span class="picker-group-count">{{ group.nodes.length }} 个节点</span>
+                      <span class="picker-group-title">{{ group.name }}</span>
+                      <span class="picker-group-count">{{ group.nodes.length }} 个节点</span>
+                      <span class="picker-group-confidence" :class="{ empty: group.confidence < 0 }">{{ group.confidence >= 0 ? `最高可信度 ${group.confidence}%` : '暂无可信度' }}</span>
                     </template>
                     <div class="picker-node-list">
                       <el-checkbox v-for="item in group.nodes" :key="item.Name" :model-value="value1.includes(item.Name)" @change="(checked: any) => checked ? value1.push(item.Name) : removeNode(item.Name)">
-                        {{ item.Name }}
+                        <span class="picker-node-label">
+                          <span class="picker-node-name">{{ item.Name }}</span>
+                          <span class="picker-node-confidence" :class="{ empty: !nodeQuality(item)?.sampleCount }">{{ nodeConfidenceLabel(item) }}</span>
+                          <span v-if="nodeQuality(item)?.sampleCount" class="picker-node-samples">样本 {{ nodeQuality(item)?.sampleCount }}</span>
+                        </span>
                       </el-checkbox>
                     </div>
                     <el-button link type="primary" size="small" @click="selectGroupNodes(group.nodes)">选择本组全部</el-button>
@@ -578,6 +616,7 @@ const saveExpire = async () => {
                 <div v-for="(nodeName, index) in value1" :key="nodeName" class="order-item">
                   <span class="order-badge">{{ index + 1 }}</span>
                   <span class="order-name">{{ nodeName }}</span>
+                  <span class="order-confidence" :class="{ empty: !nodeQualityByName(nodeName)?.sampleCount }">{{ nodeQualityByName(nodeName)?.sampleCount ? `可信度 ${nodeQualityByName(nodeName)?.confidence}%` : '暂无样本' }}</span>
                   <span class="order-drag">☰</span>
                   <el-icon class="order-remove" @click="removeNode(nodeName)"><svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M764.288 214.592 512 466.88 259.712 214.592a31.936 31.936 0 0 0-45.12 45.12L466.752 512 214.528 764.224a31.936 31.936 0 1 0 45.12 45.184L512 557.184l252.288 252.288a31.936 31.936 0 0 0 45.12-45.12L557.12 512.064l252.288-252.352a31.936 31.936 0 1 0-45.12-45.184z"/></svg></el-icon>
                 </div>
@@ -604,8 +643,15 @@ const saveExpire = async () => {
           </el-row>
         </template>
 
-        <el-divider content-position="left">节点处理链</el-divider>
-        <div class="pipeline-card">
+        <section class="pipeline-section">
+          <div class="pipeline-section-head">
+            <div>
+              <div class="pipeline-title">节点处理 <el-tag size="small" type="info" effect="plain">可选</el-tag></div>
+              <div class="pipeline-desc">在订阅生成前统一做筛选、重命名、去重和排序；不配置时保持当前节点内容。</div>
+            </div>
+            <span class="pipeline-hint">按顺序应用</span>
+          </div>
+          <div class="pipeline-card">
           <el-row :gutter="12">
             <el-col :span="12" :xs="24"><el-form-item label="包含名称（正则）"><el-input v-model="pipeline.include" placeholder="例如 香港|日本" clearable /></el-form-item></el-col>
             <el-col :span="12" :xs="24"><el-form-item label="排除名称（正则）"><el-input v-model="pipeline.exclude" placeholder="例如 剩余|官网" clearable /></el-form-item></el-col>
@@ -616,8 +662,9 @@ const saveExpire = async () => {
             <el-col :span="4" :xs="8"><el-form-item label="最多节点"><el-input-number v-model="pipeline.maxNodes" :min="0" :max="9999" controls-position="right" /></el-form-item></el-col>
           </el-row>
           <div class="pipeline-footer"><el-checkbox v-model="pipeline.dedupe">按节点链接去重</el-checkbox><el-button :loading="pipelineLoading" @click="runPipelinePreview">预览处理结果</el-button></div>
-          <el-alert v-if="pipelinePreview" type="success" :closable="false" show-icon><template #title>处理前 {{ pipelinePreview.before }} 个 → 处理后 {{ pipelinePreview.after }} 个</template><template #default><span v-for="(count, reason) in pipelinePreview.rejected" :key="reason" class="reject-stat">{{ reason }} {{ count }}</span></template></el-alert>
-        </div>
+            <el-alert v-if="pipelinePreview" type="success" :closable="false" show-icon><template #title>处理前 {{ pipelinePreview.before }} 个 → 处理后 {{ pipelinePreview.after }} 个</template><template #default><span v-for="(count, reason) in pipelinePreview.rejected" :key="reason" class="reject-stat">{{ reason }} {{ count }}</span></template></el-alert>
+          </div>
+        </section>
       </el-form>
 
       <template #footer>
@@ -754,6 +801,8 @@ const saveExpire = async () => {
 }
 html.dark .order-badge { background: var(--el-color-primary-light-3); color: #fff; }
 .order-name { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.order-confidence { flex-shrink:0; font-size:11px; font-weight:600; color:var(--el-color-success); }
+.order-confidence.empty { color:var(--el-text-color-placeholder); font-weight:400; }
 .order-drag { cursor: grab; color: var(--el-text-color-placeholder); font-size: 14px; }
 .order-remove { cursor: pointer; color: var(--el-text-color-placeholder); font-size: 14px; }
 .order-remove:hover { color: var(--el-color-danger); }
@@ -768,13 +817,28 @@ html.dark .order-badge { background: var(--el-color-primary-light-3); color: #ff
 .node-group-picker :deep(.el-collapse-item__header) { padding: 0 10px; height: 38px; line-height: 38px; }
 .picker-group-title { font-weight: 600; }
 .picker-group-count { margin-left: 8px; color: var(--el-text-color-secondary); font-size: 12px; }
-.picker-node-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 8px; margin-bottom: 8px; }
-.picker-node-list .el-checkbox { min-width: 0; margin-right: 0; overflow: hidden; }
-.picker-node-list :deep(.el-checkbox__label) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-group-confidence { margin-left:auto; margin-right:8px; color:var(--el-color-success); font-size:11px; font-weight:600; }
+.picker-group-confidence.empty { color:var(--el-text-color-placeholder); font-weight:400; }
+.picker-node-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
+.picker-node-list .el-checkbox { min-width: 0; margin-right: 0; overflow: hidden; align-items:flex-start; }
+.picker-node-list :deep(.el-checkbox__label) { min-width:0; width:100%; padding-left:7px; }
+.picker-node-label { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:2px 8px; width:100%; }
+.picker-node-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+.picker-node-confidence { color:var(--el-color-success); font-size:11px; font-weight:600; white-space:nowrap; }
+.picker-node-confidence.empty { color:var(--el-text-color-placeholder); font-weight:400; }
+.picker-node-samples { grid-column:1 / -1; color:var(--el-text-color-placeholder); font-size:10px; line-height:1.2; }
 .country-node-groups { display: flex; flex-direction: column; gap: 16px; max-height: 400px; overflow-y: auto; padding-right: 4px; }
 .country-group-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--el-text-color-primary); }
 .country-group-count { color: var(--el-text-color-secondary); font-size: 12px; font-weight: normal; }
 .gc-name { font-size: 13px; }
 .gc-count { margin-left: 8px; font-size: 12px; color: var(--el-text-color-secondary); }
-.pipeline-card { padding:14px; border:1px solid var(--el-border-color-lighter); border-radius:10px; background:var(--el-fill-color-extra-light); }.pipeline-card .el-form-item { margin-bottom:12px; }.pipeline-footer { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }.reject-stat { margin-right:12px; font-size:12px; }
+.pipeline-section { margin-top:8px; padding-top:18px; border-top:1px solid var(--el-border-color-lighter); }
+.pipeline-section-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:10px; }
+.pipeline-title { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; color:var(--el-text-color-primary); }
+.pipeline-desc { margin-top:4px; color:var(--el-text-color-secondary); font-size:12px; line-height:1.6; }
+.pipeline-hint { flex-shrink:0; padding:4px 8px; border-radius:999px; background:var(--el-fill-color-light); color:var(--el-text-color-secondary); font-size:11px; }
+.pipeline-card { padding:14px; border:1px solid var(--el-border-color-lighter); border-radius:12px; background:var(--el-bg-color); box-shadow:0 1px 2px rgba(0,0,0,.02); }
+.pipeline-card .el-form-item { margin-bottom:12px; }
+.pipeline-footer { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-top:2px; }
+.reject-stat { margin-right:12px; font-size:12px; }
 </style>
