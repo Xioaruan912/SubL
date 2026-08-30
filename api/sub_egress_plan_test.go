@@ -1,8 +1,15 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
+	"time"
+
+	"ppeelink/models"
+	"ppeelink/node"
 )
 
 func TestPlanNodeJSONFields(t *testing.T) {
@@ -30,4 +37,92 @@ func TestRuleSetTargetMatching(t *testing.T) {
 	if !ok || rule.Policy != "Gemini" {
 		t.Fatalf("unexpected rule: %#v", rule)
 	}
+}
+
+func successfulPlanRunner(_ context.Context, _ string, _ time.Duration, keys []string) (*node.EgressResult, error) {
+	results := make([]node.EgressCheckResult, 0, len(keys))
+	for _, key := range keys {
+		results = append(results, node.EgressCheckResult{EgressTarget: node.EgressTarget{Key: key}, Status: "available", CountryCode: "US"})
+	}
+	return &node.EgressResult{Results: results}, nil
+}
+
+func planItemByKey(t *testing.T, response egressPlanResponse, key string) egressPlanItem {
+	t.Helper()
+	for _, item := range response.Items {
+		if item.Key == key {
+			return item
+		}
+	}
+	t.Fatalf("plan item %q not found", key)
+	return egressPlanItem{}
+}
+
+func TestBuildEgressPlanIntegration(t *testing.T) {
+	stats := map[int]models.NodeQualityStats{
+		1: {NodeID: 1, Score: 70, AverageRtt: 80},
+		2: {NodeID: 2, Score: 95, AverageRtt: 45},
+		3: {NodeID: 3, Score: 90, AverageRtt: 35},
+	}
+	nodes := []models.Node{
+		{ID: 1, Name: "Tokyo JP", Link: "test://jp"},
+		{ID: 2, Name: "Los Angeles USA", Link: "test://us"},
+		{ID: 3, Name: "Singapore SG", Link: "test://sg"},
+	}
+
+	t.Run("node name region and explicit region rule", func(t *testing.T) {
+		content := "rules:\n  - DOMAIN,chatgpt.com,US\n  - MATCH,Proxy\n"
+		response := buildEgressPlan(context.Background(), &models.Subcription{ID: 10, Name: "real-sub", Nodes: nodes}, "clash.yaml", content, stats, successfulPlanRunner)
+		item := planItemByKey(t, response, "chatgpt")
+		if item.ExpectedCountry != "US" || item.SelectedNode == nil || item.SelectedNode.ID != 2 {
+			t.Fatalf("explicit US rule selected %#v", item)
+		}
+		if item.Result == nil || item.Result.Status != "available" {
+			t.Fatalf("expected successful real-node result, got %#v", item.Result)
+		}
+	})
+
+	t.Run("multi country filter does not force one region", func(t *testing.T) {
+		content := "proxy-groups:\n  - name: AI\n    type: select\n    filter: '(?i)(US|JP)'\nrules:\n  - DOMAIN,chatgpt.com,AI\n  - MATCH,Proxy\n"
+		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes}, "clash.yaml", content, stats, successfulPlanRunner)
+		item := planItemByKey(t, response, "chatgpt")
+		if item.ExpectedCountry != "" || item.CandidateCount != 3 || item.SelectedNode == nil || item.SelectedNode.ID != 2 {
+			t.Fatalf("multi-country filter should rank all nodes, got %#v", item)
+		}
+	})
+
+	t.Run("match fallback", func(t *testing.T) {
+		content := "rules:\n  - DOMAIN,example.com,DIRECT\n  - MATCH,Proxy\n"
+		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes}, "clash.yaml", content, stats, successfulPlanRunner)
+		item := planItemByKey(t, response, "gemini")
+		if item.Policy != "Proxy" || !strings.HasPrefix(item.MatchedRule, "MATCH,") {
+			t.Fatalf("expected MATCH fallback, got %#v", item)
+		}
+	})
+
+	t.Run("no nodes", func(t *testing.T) {
+		response := buildEgressPlan(context.Background(), &models.Subcription{}, "clash.yaml", "rules:\n  - MATCH,Proxy\n", nil, successfulPlanRunner)
+		item := planItemByKey(t, response, "chatgpt")
+		if item.SelectedNode != nil || item.CandidateCount != 0 {
+			t.Fatalf("no-node plan unexpectedly selected node: %#v", item)
+		}
+		if len(response.Warnings) == 0 {
+			t.Fatal("no-node plan should contain warning")
+		}
+	})
+
+	t.Run("detection failure stays failed", func(t *testing.T) {
+		runner := func(context.Context, string, time.Duration, []string) (*node.EgressResult, error) {
+			return nil, errors.New("synthetic egress failure")
+		}
+		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes}, "clash.yaml", "rules:\n  - MATCH,Proxy\n", stats, runner)
+		item := planItemByKey(t, response, "openai")
+		if item.SelectedNode == nil || item.Result != nil {
+			t.Fatalf("failed detection must keep node but no result: %#v", item)
+		}
+		joined := strings.Join(response.Warnings, " | ")
+		if !strings.Contains(joined, "synthetic egress failure") {
+			t.Fatalf("missing detection failure warning: %s", joined)
+		}
+	})
 }

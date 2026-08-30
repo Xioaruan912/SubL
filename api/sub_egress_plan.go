@@ -47,6 +47,8 @@ type egressPlanResponse struct {
 	Warnings         []string         `json:"warnings"`
 }
 
+type egressTestRunner func(context.Context, string, time.Duration, []string) (*node.EgressResult, error)
+
 var planTargets = []struct{ key, name, domain, group string }{
 	{"gemini", "Gemini", "gemini.google.com", "AI"},
 	{"chatgpt", "ChatGPT", "chatgpt.com", "AI"},
@@ -150,18 +152,28 @@ func ruleForDomainResolved(ctx context.Context, rules []splitRule, content, doma
 		d := strings.TrimPrefix(strings.ToLower(r.Domain), ".")
 		switch r.Kind {
 		case "DOMAIN":
-			if strings.EqualFold(d, key) { return r, true, "" }
+			if strings.EqualFold(d, key) {
+				return r, true, ""
+			}
 		case "DOMAIN-SUFFIX":
-			if key == d || strings.HasSuffix(key, "."+d) { return r, true, "" }
+			if key == d || strings.HasSuffix(key, "."+d) {
+				return r, true, ""
+			}
 		case "DOMAIN-KEYWORD":
-			if d != "" && strings.Contains(key, d) { return r, true, "" }
+			if d != "" && strings.Contains(key, d) {
+				return r, true, ""
+			}
 		case "RULE-SET":
 			providerRules, _, err := rulecenter.ResolveProviderRules(ctx, content, r.Domain)
 			if err != nil {
-				if warning == "" { warning = "rule-provider " + r.Domain + " 解析失败: " + err.Error() }
+				if warning == "" {
+					warning = "rule-provider " + r.Domain + " 解析失败: " + err.Error()
+				}
 				continue
 			}
-			if rulecenter.MatchDomain(providerRules, key) { return r, true, warning }
+			if rulecenter.MatchDomain(providerRules, key) {
+				return r, true, warning
+			}
 		case "MATCH":
 			return r, true, warning
 		}
@@ -243,33 +255,18 @@ func choosePlanNode(nodes []models.Node, expected string, stats map[int]models.N
 	return filtered, len(filtered)
 }
 
-// SubscriptionEgressPlan validates the effective template split by selecting
-// a quality-ranked node for each AI destination and testing through it.
-func SubscriptionEgressPlan(c *gin.Context) {
-	id := c.Query("id")
-	var sub models.Subcription
-	if err := models.DB.First(&sub, id).Error; err != nil {
-		c.JSON(404, gin.H{"code": "40400", "msg": "订阅不存在"})
-		return
-	}
-	if err := mergeGroupNodes(&sub); err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": err.Error()})
-		return
-	}
-	response := egressPlanResponse{SubscriptionID: sub.ID, SubscriptionName: sub.Name, Items: make([]egressPlanItem, 0, len(planTargets))}
-	filename, content, err := templateContent(&sub)
-	if err != nil {
-		response.Warnings = append(response.Warnings, err.Error())
-		response.Template = "未读取到本地模板"
-	} else {
-		response.Template = filename
+func buildEgressPlan(ctx context.Context, sub *models.Subcription, templateName, content string, stats map[int]models.NodeQualityStats, run egressTestRunner) egressPlanResponse {
+	response := egressPlanResponse{
+		SubscriptionID:   sub.ID,
+		SubscriptionName: sub.Name,
+		Template:         templateName,
+		Items:            make([]egressPlanItem, 0, len(planTargets)),
 	}
 	rules := parseSplitRules(content)
-	stats, _ := models.GetNodeQualityStats(time.Now().Add(-24 * time.Hour))
 	chosen := make(map[int][]string)
 	for _, target := range planTargets {
 		item := egressPlanItem{Key: target.key, Name: target.name, Domain: target.domain, Group: target.group}
-		if rule, ok, resolveWarning := ruleForDomainResolved(c.Request.Context(), rules, content, target.domain); ok {
+		if rule, ok, resolveWarning := ruleForDomainResolved(ctx, rules, content, target.domain); ok {
 			item.MatchedRule, item.Policy = rule.Raw, rule.Policy
 			item.ExpectedCountry = countryFromText(rule.Policy)
 			if item.ExpectedCountry == "" {
@@ -293,7 +290,8 @@ func SubscriptionEgressPlan(c *gin.Context) {
 		chosen[item.SelectedNode.ID] = append(chosen[item.SelectedNode.ID], item.Key)
 		response.Items = append(response.Items, item)
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+
+	testCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	cache := make(map[int]*node.EgressResult)
 	for i := range response.Items {
@@ -304,7 +302,7 @@ func SubscriptionEgressPlan(c *gin.Context) {
 		result := cache[id]
 		if result == nil {
 			var runErr error
-			result, runErr = node.RunEgressTestKeys(ctx, response.Items[i].SelectedNode.Link, 7*time.Second, chosen[id])
+			result, runErr = run(testCtx, response.Items[i].SelectedNode.Link, 7*time.Second, chosen[id])
 			if runErr != nil {
 				response.Warnings = append(response.Warnings, runErr.Error())
 				continue
@@ -318,5 +316,31 @@ func SubscriptionEgressPlan(c *gin.Context) {
 			}
 		}
 	}
+	return response
+}
+
+// SubscriptionEgressPlan validates the effective template split by selecting
+// a quality-ranked node for each AI destination and testing through it.
+func SubscriptionEgressPlan(c *gin.Context) {
+	id := c.Query("id")
+	var sub models.Subcription
+	if err := models.DB.First(&sub, id).Error; err != nil {
+		c.JSON(404, gin.H{"code": "40400", "msg": "订阅不存在"})
+		return
+	}
+	if err := mergeGroupNodes(&sub); err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": err.Error()})
+		return
+	}
+	filename, content, err := templateContent(&sub)
+	templateName := filename
+	initialWarnings := []string{}
+	if err != nil {
+		initialWarnings = append(initialWarnings, err.Error())
+		templateName = "未读取到本地模板"
+	}
+	stats, _ := models.GetNodeQualityStats(time.Now().Add(-24 * time.Hour))
+	response := buildEgressPlan(c.Request.Context(), &sub, templateName, content, stats, node.RunEgressTestKeys)
+	response.Warnings = append(initialWarnings, response.Warnings...)
 	c.JSON(200, gin.H{"code": "00000", "data": response, "msg": "模板分流验证完成"})
 }
