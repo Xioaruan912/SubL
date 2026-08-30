@@ -6,3 +6,4 @@ export const revokeApiToken = (id:number) => request({ url:'/api/v1/tokens/revok
 export const inspectSafeBackup = () => request({ url:'/api/v1/ops/backup/inspect', method:'get' })
 export const exportSafeBackup = () => request({ url:'/api/v1/ops/backup/export', method:'get' })
 export const importSafeBackup = (data:any) => request({ url:'/api/v1/ops/backup/import', method:'post', data })
+export const getAuditLogs = () => request({ url:'/api/v1/audit/list', method:'get', params:{ limit:150 } })

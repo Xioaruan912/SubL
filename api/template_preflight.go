@@ -46,6 +46,16 @@ type templateCompatibility struct {
 	Detail string `json:"detail"`
 }
 
+type templateClientCapability struct {
+	Client      string   `json:"client"`
+	Status      string   `json:"status"`
+	Native      []string `json:"native"`
+	Converted   []string `json:"converted"`
+	Unsupported []string `json:"unsupported"`
+	LostFields  []string `json:"lostFields"`
+	Detail      string   `json:"detail"`
+}
+
 type templatePreflightSummary struct {
 	Errors        int `json:"errors"`
 	Warnings      int `json:"warnings"`
@@ -58,14 +68,15 @@ type templatePreflightSummary struct {
 }
 
 type templatePreflightReport struct {
-	Valid         bool                     `json:"valid"`
-	Format        string                   `json:"format"`
-	Coverage      string                   `json:"coverage"`
-	Summary       templatePreflightSummary `json:"summary"`
-	Issues        []templatePreflightIssue `json:"issues"`
-	Routes        []templatePreflightRoute `json:"routes"`
-	Protocols     []templateProtocolStat   `json:"protocols"`
-	Compatibility []templateCompatibility  `json:"compatibility"`
+	Valid            bool                       `json:"valid"`
+	Format           string                     `json:"format"`
+	Coverage         string                     `json:"coverage"`
+	Summary          templatePreflightSummary   `json:"summary"`
+	Issues           []templatePreflightIssue   `json:"issues"`
+	Routes           []templatePreflightRoute   `json:"routes"`
+	Protocols        []templateProtocolStat     `json:"protocols"`
+	Compatibility    []templateCompatibility    `json:"compatibility"`
+	CapabilityMatrix []templateClientCapability `json:"capabilityMatrix"`
 }
 
 type clashPreflightGroup struct {
@@ -211,7 +222,7 @@ func buildTemplatePreflight(ctx context.Context, filename, text string, domains 
 	report := templatePreflightReport{
 		Format: format, Coverage: "basic", Issues: []templatePreflightIssue{},
 		Routes: []templatePreflightRoute{}, Protocols: []templateProtocolStat{},
-		Compatibility: []templateCompatibility{},
+		Compatibility: []templateCompatibility{}, CapabilityMatrix: []templateClientCapability{},
 	}
 	if strings.TrimSpace(text) == "" {
 		report.addIssue("error", "empty_template", "模板内容不能为空", 0)
@@ -376,6 +387,30 @@ func analyzeClashPreflight(ctx context.Context, text string, domains []string, r
 			}
 		}
 	}
+	referencedProviders := map[string]bool{}
+	for _, rule := range rules {
+		if rule.Kind == "RULE-SET" && rule.Domain != "" {
+			referencedProviders[rule.Domain] = true
+		}
+	}
+	providerNames := make([]string, 0, len(referencedProviders))
+	for name := range referencedProviders {
+		providerNames = append(providerNames, name)
+	}
+	sort.Strings(providerNames)
+	for _, name := range providerNames {
+		if _, ok := cfg.RuleProviders[name]; !ok {
+			continue
+		}
+		_, warnings, err := rulecenter.ResolveProviderRules(ctx, normalized, name)
+		if err != nil {
+			report.addIssue("error", "rule_provider_unavailable", fmt.Sprintf("rule-provider %s 无法下载/解析: %v", name, err), 0)
+			continue
+		}
+		for _, warning := range warnings {
+			report.addIssue("warning", "rule_provider_warning", fmt.Sprintf("rule-provider %s: %s", name, warning), 0)
+		}
+	}
 	report.Routes = explainClashDomains(ctx, normalized, rules, cfg.RuleProviders, groups, proxyNames, domains)
 
 	status, detail := "pass", "Clash YAML、策略引用和可识别传输检查通过"
@@ -388,6 +423,87 @@ func analyzeClashPreflight(ctx context.Context, text string, domains []string, r
 		templateCompatibility{Target: "Mihomo", Status: status, Detail: detail},
 		templateCompatibility{Target: "SublinkX 实测引擎", Status: runtimeTestCompatibility(cfg.Proxies), Detail: runtimeTestCompatibilityDetail(cfg.Proxies)},
 	)
+	report.CapabilityMatrix = buildClientCapabilityMatrix(cfg.Proxies)
+}
+
+func buildClientCapabilityMatrix(proxies []map[string]interface{}) []templateClientCapability {
+	type rules struct {
+		client         string
+		nativeTypes    map[string]bool
+		nativeNetworks map[string]bool
+	}
+	clients := []rules{
+		{"Clash/Mihomo", map[string]bool{"ss": true, "ssr": true, "vmess": true, "vless": true, "trojan": true, "hysteria": true, "hysteria2": true, "tuic": true, "socks5": true, "http": true}, map[string]bool{"": true, "tcp": true, "ws": true, "grpc": true, "httpupgrade": true, "h2": true}},
+		{"sing-box", map[string]bool{"ss": true, "vmess": true, "vless": true, "trojan": true, "hysteria2": true, "tuic": true, "socks5": true, "http": true}, map[string]bool{"": true, "tcp": true, "ws": true, "grpc": true, "httpupgrade": true, "h2": true}},
+		{"Surge", map[string]bool{"ss": true, "vmess": true, "trojan": true, "socks5": true, "http": true}, map[string]bool{"": true, "tcp": true, "ws": true}},
+		{"Loon", map[string]bool{"ss": true, "vmess": true, "trojan": true, "socks5": true, "http": true}, map[string]bool{"": true, "tcp": true, "ws": true}},
+		{"Quantumult X", map[string]bool{"ss": true, "vmess": true, "trojan": true, "socks5": true, "http": true}, map[string]bool{"": true, "tcp": true, "ws": true}},
+	}
+	result := make([]templateClientCapability, 0, len(clients))
+	for _, client := range clients {
+		item := templateClientCapability{Client: client.client, Status: "pass", Native: []string{}, Converted: []string{}, Unsupported: []string{}, LostFields: []string{}}
+		seenNative, seenConvert, seenUnsupported, seenLost := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
+		for _, proxy := range proxies {
+			t := strings.ToLower(strings.TrimSpace(fmt.Sprint(proxy["type"])))
+			if t == "<nil>" {
+				t = ""
+			}
+			n := strings.ToLower(strings.TrimSpace(fmt.Sprint(proxy["network"])))
+			if n == "<nil>" {
+				n = ""
+			}
+			label := t
+			if n != "" && n != "tcp" {
+				label += "+" + n
+			}
+			if client.nativeTypes[t] && client.nativeNetworks[n] {
+				if label != "" && !seenNative[label] {
+					seenNative[label] = true
+					item.Native = append(item.Native, label)
+				}
+			} else if client.client == "sing-box" && (t == "ssr" || t == "hysteria") {
+				if !seenUnsupported[label] {
+					seenUnsupported[label] = true
+					item.Unsupported = append(item.Unsupported, label)
+				}
+			} else if (client.client == "Surge" || client.client == "Loon" || client.client == "Quantumult X") && (t == "vless" || t == "hysteria" || t == "hysteria2" || t == "tuic" || n == "grpc" || n == "httpupgrade") {
+				if !seenUnsupported[label] {
+					seenUnsupported[label] = true
+					item.Unsupported = append(item.Unsupported, label)
+				}
+			} else if label != "" && !seenConvert[label] {
+				seenConvert[label] = true
+				item.Converted = append(item.Converted, label)
+			}
+			for _, field := range []string{"udp", "tfo", "mptcp"} {
+				if _, ok := proxy[field]; ok && client.client != "Clash/Mihomo" {
+					key := field + " 可能在转换中丢失"
+					if !seenLost[key] {
+						seenLost[key] = true
+						item.LostFields = append(item.LostFields, key)
+					}
+				}
+			}
+			if _, ok := proxy["reality-opts"]; ok && (client.client == "Surge" || client.client == "Loon" || client.client == "Quantumult X") {
+				key := "reality-opts 无法无损表达"
+				if !seenLost[key] {
+					seenLost[key] = true
+					item.LostFields = append(item.LostFields, key)
+				}
+			}
+		}
+		if len(item.Unsupported) > 0 {
+			item.Status = "error"
+			item.Detail = "存在目标客户端无法表达的协议或传输"
+		} else if len(item.Converted) > 0 || len(item.LostFields) > 0 {
+			item.Status = "warning"
+			item.Detail = "可尝试转换，但需要确认协议/字段损失"
+		} else {
+			item.Detail = "当前模板中的已识别协议可原生表达"
+		}
+		result = append(result, item)
+	}
+	return result
 }
 
 func displayName(name string, index int) string {

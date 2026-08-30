@@ -25,6 +25,7 @@ export function previewSubPipeline(data: any){
 export function startSubscriptionBuild(data:any){ return request({ url:'/api/v1/subcription/build-task', method:'post', data }); }
 export function getSubscriptionArtifacts(id:number, client = ''){ return request({ url:'/api/v1/subcription/artifacts', method:'get', params:{ id, client } }); }
 export function rollbackSubscriptionArtifact(artifactId:number){ return request({ url:'/api/v1/subcription/artifacts/rollback', method:'post', params:{ artifactId } }); }
+export function safePublishSubscription(data:any){ return request({ url:'/api/v1/tasks/safe-publish', method:'post', data }); }
 
 export function AddSub(data: any){
   return request({

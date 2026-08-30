@@ -73,8 +73,12 @@ func AuthorToken(c *gin.Context) {
 	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions {
 		required = "write"
 	}
-	if strings.HasPrefix(c.Request.URL.Path, "/api/v1/tokens") {
-		required = "admin"
+	adminPaths := []string{"/api/v1/tokens", "/api/v1/tasks/safe-publish", "/api/v1/tasks/system-deploy", "/api/v1/ops/backup/import", "/api/v1/audit"}
+	for _, prefix := range adminPaths {
+		if strings.HasPrefix(c.Request.URL.Path, prefix) {
+			required = "admin"
+			break
+		}
 	}
 	if !apiToken.HasScope(required) {
 		c.JSON(http.StatusForbidden, gin.H{"code": 403, "msg": "API Token 权限不足，需要 " + required})

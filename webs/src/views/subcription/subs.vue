@@ -1,6 +1,6 @@
 <script setup lang='ts'>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { getSubs, getSubPreviewNodes, previewSubPipeline, startSubscriptionBuild, getSubscriptionArtifacts, rollbackSubscriptionArtifact, AddSub, DelSub, UpdateSub, ResetToken, SetExpire } from "@/api/subcription/subs"
+import { getSubs, getSubPreviewNodes, previewSubPipeline, startSubscriptionBuild, getSubscriptionArtifacts, rollbackSubscriptionArtifact, safePublishSubscription, AddSub, DelSub, UpdateSub, ResetToken, SetExpire } from "@/api/subcription/subs"
 import { getTemp } from "@/api/subcription/temp"
 import { getNodes, getNodeOverview, GetGroupFull } from "@/api/subcription/node"
 import QrcodeVue from 'qrcode.vue'
@@ -111,6 +111,10 @@ const artifactSub = ref<Sub | null>(null)
 const artifactClient = ref('clash')
 const artifactItems = ref<any[]>([])
 const artifactPointers = ref<any[]>([])
+const publishDialog = ref(false)
+const publishSub = ref<Sub | null>(null)
+const publishForm = ref({ client:'clash', template:'' })
+const publishLoading = ref(false)
 const pipeline = reactive({ include: '', exclude: '', renamePattern: '', renameReplacement: '', protocols: [] as string[], sort: 'original', dedupe: true, maxNodes: 0 })
 const pipelinePreview = ref<any>(null)
 const pipelineLoading = ref(false)
@@ -129,6 +133,20 @@ const loadArtifacts = async () => {
 const openArtifacts = async (sub:Sub) => { artifactSub.value = sub; artifactDrawer.value = true; await loadArtifacts() }
 const lkgId = computed(() => artifactPointers.value.find((p:any) => p.client === artifactClient.value)?.lastKnownGoodArtifactId || 0)
 const setLkg = async (artifact:any) => { await ElMessageBox.confirm(`将产物 #${artifact.id} 设为 ${artifactClient.value} 的 Last Known Good？`, '切换可用版本', { type:'warning' }); await rollbackSubscriptionArtifact(artifact.id); ElMessage.success('Last Known Good 已切换'); await loadArtifacts() }
+const openSafePublish = (sub:Sub) => {
+  publishSub.value = sub
+  publishForm.value = { client:'clash', template: templist.value.find(t => /\.ya?ml$/i.test(t.file))?.file || '' }
+  publishDialog.value = true
+}
+const runSafePublish = async () => {
+  if (!publishSub.value || !publishForm.value.template) return
+  publishLoading.value = true
+  try {
+    const { data } = await safePublishSubscription({ subscriptionId:publishSub.value.ID, client:publishForm.value.client, template:publishForm.value.template })
+    ElMessage.success(`安全发布任务已创建 #${data?.taskId || ''}，全部检查通过后才会切换 LKG`)
+    publishDialog.value = false
+  } finally { publishLoading.value = false }
+}
 const resetPipeline = (raw = '') => {
   const value = { include: '', exclude: '', renamePattern: '', renameReplacement: '', protocols: [], sort: 'original', dedupe: true, maxNodes: 0 }
   try { Object.assign(value, JSON.parse(raw || '{}')) } catch { /* use defaults */ }
@@ -500,6 +518,7 @@ const saveExpire = async () => {
 
         <!-- 操作 -->
         <div class="card-actions">
+          <el-button link type="success" size="small" @click="openSafePublish(sub)">安全发布</el-button>
           <el-button link type="success" size="small" @click="buildSubscription(sub)">构建</el-button>
           <el-button link type="primary" size="small" @click="openArtifacts(sub)">版本</el-button>
           <el-button link type="warning" size="small" @click="handleReset(sub)">重置链接</el-button>
@@ -773,6 +792,14 @@ const saveExpire = async () => {
         <el-table-column label="操作" width="120"><template #default="{row}"><el-tag v-if="row.id === lkgId" type="success" size="small">当前 LKG</el-tag><el-button v-else-if="row.validationStatus === 'valid'" link type="primary" @click="setLkg(row)">设为 LKG</el-button></template></el-table-column>
       </el-table>
     </el-drawer>
+    <el-dialog v-model="publishDialog" :title="`${publishSub?.Name || ''} · 一键安全发布`" width="560px">
+      <el-alert type="info" :closable="false" title="模板预检 → 协议兼容 → 分流回归 → 生成候选产物 → 节点/真实出口验证 → 与当前 LKG 对比；全部通过才发布。" />
+      <el-form label-position="top" class="publish-form">
+        <el-form-item label="目标客户端"><el-select v-model="publishForm.client" style="width:100%" @change="publishForm.template=''" ><el-option label="Clash/Mihomo" value="clash"/><el-option label="Surge" value="surge"/><el-option label="Loon" value="loon"/></el-select></el-form-item>
+        <el-form-item label="模板"><el-select v-model="publishForm.template" filterable style="width:100%"><el-option v-for="t in templist.filter(t => publishForm.client === 'clash' ? /\.ya?ml$/i.test(t.file) : /\.conf$/i.test(t.file))" :key="t.file" :label="t.file" :value="t.file"/></el-select></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="publishDialog=false">取消</el-button><el-button type="primary" :loading="publishLoading" :disabled="!publishForm.template" @click="runSafePublish">开始安全发布</el-button></template>
+    </el-dialog>
   </div>
 </template>
 

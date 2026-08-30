@@ -136,6 +136,7 @@ func Run(port int) {
 	Templateinit()
 	// 安装中间件
 	r.Use(middlewares.AuthorToken) // jwt验证token
+	r.Use(middlewares.AuditTrail)  // 管理写操作审计（不记录请求体）
 	// 设置静态资源路径（自定义 handler，支持 gzip + 正确 Content-Length）
 	staticFiles, err := fs.Sub(embeddedFiles, "webs/dist")
 	if err != nil {
@@ -168,6 +169,8 @@ func Run(port int) {
 	routers.Tokens(r)        // API Token 管理
 	routers.Ops(r)           // 安全运维/备份
 	routers.Status(r)        // 公共只读状态页
+	routers.Regression(r)    // 分流回归用例与模板命中差异
+	routers.Audit(r)         // 管理操作审计
 	// 客户端下载目录 + 定时检查更新（启动即查 + 每 24h）
 	os.MkdirAll("downloads", 0o755)
 	client.Start()
