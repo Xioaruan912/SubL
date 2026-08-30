@@ -31,9 +31,12 @@ func InitSqlite() {
 		return
 	}
 	err = db.AutoMigrate(&User{}, &Subcription{}, &SubLogs{}, &GroupNode{}, &Node{}, &ClientVersion{}, &Airport{},
-		&NodeQualitySample{}, &NodeHealthEvent{}, &AlertSetting{}, &UnlockObservation{}, &TemplateVersion{}, &RuleSource{}, &RuleCatalog{})
+		&NodeQualitySample{}, &NodeHealthEvent{}, &AlertSetting{}, &UnlockObservation{}, &TemplateVersion{}, &RuleSource{}, &RuleCatalog{}, &EgressTarget{})
 	if err != nil {
 		log.Println("数据表迁移失败")
+	}
+	if err := EnsureDefaultEgressTargets(); err != nil {
+		log.Println("初始化分流检测目标失败:", err)
 	}
 	// 初始化用户数据
 	err = db.First(&User{}).Error

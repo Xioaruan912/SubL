@@ -45,6 +45,9 @@ export function UnlockTest(data: any){
   });
 }
 export function EgressTest(data: any){ return request({ url: "/api/v1/nodes/egress", method: "post", data, headers: { "Content-Type": "multipart/form-data" } }); }
+export function getEgressTargets(){ return request({ url: "/api/v1/nodes/egress-targets", method: "get" }); }
+export function saveEgressTarget(data: any){ return request({ url: "/api/v1/nodes/egress-targets", method: "post", data }); }
+export function deleteEgressTarget(id: number){ return request({ url: "/api/v1/nodes/egress-targets", method: "delete", params: { id } }); }
 
 // 中国各地延迟测试
 export function ChinaPingTest(data: any){

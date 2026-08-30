@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
+	"ppeelink/node"
 	"ppeelink/rulecenter"
 )
 
@@ -162,13 +163,13 @@ func normalizeTemplateYAML(text string) string {
 	return strings.ReplaceAll(text, "{{ nodes }}", "[]")
 }
 
-func preflightDomains(raw string) []string {
+func preflightDomains(raw string, targets []node.EgressTarget) []string {
 	values := strings.FieldsFunc(raw, func(r rune) bool {
 		return r == ',' || r == '\n' || r == '\r' || r == ';' || r == ' ' || r == '\t'
 	})
 	if len(values) == 0 {
-		for _, target := range planTargets {
-			values = append(values, target.domain)
+		for _, target := range targets {
+			values = append(values, target.Domain)
 		}
 	}
 	result, seen := make([]string, 0, len(values)), map[string]bool{}
@@ -200,7 +201,8 @@ func PreflightTemp(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 12*time.Second)
 	defer cancel()
-	report := buildTemplatePreflight(ctx, filename, text, preflightDomains(c.PostForm("domains")))
+	targets, _ := enabledNodeEgressTargets()
+	report := buildTemplatePreflight(ctx, filename, text, preflightDomains(c.PostForm("domains"), targets))
 	c.JSON(200, gin.H{"code": "00000", "data": report, "msg": "发布前预检完成"})
 }
 

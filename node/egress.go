@@ -16,12 +16,17 @@ import (
 )
 
 type EgressTarget struct {
-	Key        string `json:"key"`
-	Name       string `json:"name"`
-	Domain     string `json:"domain"`
-	Group      string `json:"group"`
-	Path       string `json:"-"`
-	IPOptional bool   `json:"-"`
+	Key              string        `json:"key"`
+	Name             string        `json:"name"`
+	Domain           string        `json:"domain"`
+	Group            string        `json:"group"`
+	Path             string        `json:"-"`
+	Method           string        `json:"-"`
+	ExpectedStatus   string        `json:"-"`
+	ResponseContains string        `json:"-"`
+	IPOptional       bool          `json:"-"`
+	Timeout          time.Duration `json:"-"`
+	Retries          int           `json:"-"`
 }
 
 type EgressCheckResult struct {
@@ -64,7 +69,11 @@ func traceThroughProxy(ctx context.Context, client *http.Client, target EgressTa
 	if path == "" {
 		path = "/cdn-cgi/trace"
 	}
-	request, _ := http.NewRequestWithContext(ctx, "GET", "https://"+target.Domain+path, nil)
+	method := strings.ToUpper(strings.TrimSpace(target.Method))
+	if method == "" {
+		method = http.MethodGet
+	}
+	request, _ := http.NewRequestWithContext(ctx, method, "https://"+target.Domain+path, nil)
 	request.Header.Set("User-Agent", unlockUA)
 	started := time.Now()
 	response, err := client.Do(request)
@@ -77,6 +86,14 @@ func traceThroughProxy(ctx context.Context, client *http.Client, target EgressTa
 	result.Rtt = max(1, int(time.Since(started).Milliseconds()))
 	if err != nil {
 		result.Note = "读取失败"
+		return result
+	}
+	if target.ExpectedStatus != "" && !statusAllowed(response.StatusCode, target.ExpectedStatus) {
+		result.Note = fmt.Sprintf("HTTP %d 不符合期望 %s", response.StatusCode, target.ExpectedStatus)
+		return result
+	}
+	if target.ResponseContains != "" && !strings.Contains(strings.ToLower(string(body)), strings.ToLower(target.ResponseContains)) {
+		result.Note = "响应未包含预期特征"
 		return result
 	}
 	entries := map[string]string{}
@@ -112,6 +129,29 @@ func traceThroughProxy(ctx context.Context, client *http.Client, target EgressTa
 	return result
 }
 
+func statusAllowed(code int, spec string) bool {
+	for _, token := range strings.Split(spec, ",") {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+		if strings.Contains(token, "-") {
+			parts := strings.SplitN(token, "-", 2)
+			low, lowErr := strconv.Atoi(strings.TrimSpace(parts[0]))
+			high, highErr := strconv.Atoi(strings.TrimSpace(parts[1]))
+			if lowErr == nil && highErr == nil && code >= low && code <= high {
+				return true
+			}
+			continue
+		}
+		value, err := strconv.Atoi(token)
+		if err == nil && code == value {
+			return true
+		}
+	}
+	return false
+}
+
 // RunEgressTest starts a temporary local SOCKS inbound and routes every trace
 // request through exactly one selected subscription node.
 func RunEgressTest(ctx context.Context, link string, timeout time.Duration) (*EgressResult, error) {
@@ -131,6 +171,13 @@ func RunEgressTestKeys(ctx context.Context, link string, timeout time.Duration, 
 			targets = append(targets, target)
 		}
 	}
+	return runEgressTest(ctx, link, timeout, targets)
+}
+
+// RunEgressTestTargets runs an explicit set of administrator-configured
+// targets. This keeps storage concerns out of the node package while allowing
+// API callers to share one target registry.
+func RunEgressTestTargets(ctx context.Context, link string, timeout time.Duration, targets []EgressTarget) (*EgressResult, error) {
 	return runEgressTest(ctx, link, timeout, targets)
 }
 
@@ -176,9 +223,23 @@ func runEgressTest(ctx context.Context, link string, timeout time.Duration, targ
 				return
 			}
 			defer func() { <-sem }()
-			checkCtx, cancel := context.WithTimeout(ctx, timeout)
-			defer cancel()
-			result.Results[index] = traceThroughProxy(checkCtx, client, target)
+			itemTimeout := timeout
+			if target.Timeout > 0 {
+				itemTimeout = target.Timeout
+			}
+			attempts := target.Retries + 1
+			if attempts < 1 {
+				attempts = 1
+			}
+			for attempt := 0; attempt < attempts; attempt++ {
+				checkCtx, cancel := context.WithTimeout(ctx, itemTimeout)
+				check := traceThroughProxy(checkCtx, client, target)
+				cancel()
+				result.Results[index] = check
+				if check.Status == "available" || check.Status == "reachable" || check.Status == "blocked" {
+					break
+				}
+			}
 		}(index, target)
 	}
 	wg.Wait()

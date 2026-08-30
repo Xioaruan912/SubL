@@ -295,7 +295,12 @@ func NodeEgress(c *gin.Context) {
 		return
 	}
 	defer node.EndTest()
-	result, err := node.RunEgressTest(ctx, selected.Link, 7*time.Second)
+	targets, err := enabledNodeEgressTargets()
+	if err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "读取分流检测目标失败: " + err.Error()})
+		return
+	}
+	result, err := node.RunEgressTestTargets(ctx, selected.Link, 7*time.Second, targets)
 	if err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "分流检测失败: " + err.Error()})
 		return

@@ -2,33 +2,19 @@
 import { computed, onMounted, ref } from 'vue'
 import { countryFlag } from '@/utils/flag'
 import { getSubs, getSubPreviewNodes, subscriptionEgressPlan, subscriptionRuleExplain } from '@/api/subcription/subs'
-import { EgressTest, getNodeOverview } from '@/api/subcription/node'
+import { EgressTest, deleteEgressTarget, getEgressTargets, getNodeOverview, saveEgressTarget } from '@/api/subcription/node'
 
 defineOptions({ name: 'EgressTest' })
 
-type Target = { name: string; domain: string; group: string; icon: string; tracePath?: string; ipOptional?: boolean }
+type Target = {
+  id?: number; key: string; name: string; domain: string; group: string; icon: string;
+  path?: string; method?: string; expectedStatus?: string; responseContains?: string;
+  requireEgressIp?: boolean; timeoutSeconds?: number; retries?: number; enabled?: boolean; sortOrder?: number
+}
 type Result = Target & { status: 'pending' | 'testing' | 'done' | 'error'; ip: string; countryCode: string; rtt: number; note: string }
 
-const targets: Target[] = [
-  { name: 'Cloudflare', domain: 'www.cloudflare.com', group: '网络', icon: '☁️' },
-  { name: 'ChatGPT', domain: 'chatgpt.com', group: 'AI', icon: '◉' },
-  { name: 'OpenAI', domain: 'openai.com', group: 'AI', icon: '◎' },
-  { name: 'Gemini', domain: 'gemini.google.com', group: 'AI', icon: '✨', tracePath: '/', ipOptional: true },
-  { name: 'Claude', domain: 'claude.ai', group: 'AI', icon: '◌' },
-  { name: 'Anthropic', domain: 'anthropic.com', group: 'AI', icon: '△' },
-  { name: 'Discord', domain: 'gateway.discord.gg', group: '社交', icon: '♬' },
-  { name: 'X', domain: 'x.com', group: '社交', icon: '𝕏' },
-  { name: 'Medium', domain: 'medium.com', group: '内容', icon: 'M' },
-  { name: 'Perplexity', domain: 'www.perplexity.ai', group: 'AI', icon: '✦' },
-  { name: 'Coinbase', domain: 'coinbase.com', group: '金融', icon: '₿' },
-  { name: 'Notion', domain: 'notion.so', group: '工具', icon: 'N' },
-  { name: 'Cloudflare CDN', domain: 'cdnjs.cloudflare.com', group: '开发', icon: '☁️' },
-  { name: 'npm Registry', domain: 'registry.npmjs.org', group: '开发', icon: 'npm' },
-  { name: 'GitLab', domain: 'gitlab.com', group: '开发', icon: '◈' },
-  { name: 'Crunchyroll', domain: 'crunchyroll.com', group: '媒体', icon: '▶' },
-]
-
-const results = ref<Result[]>(targets.map(item => ({ ...item, status: 'pending', ip: '', countryCode: '', rtt: -1, note: '' })))
+const targets = ref<Target[]>([])
+const results = ref<Result[]>([])
 const running = ref(false)
 const lastTestedAt = ref<Date | null>(null)
 const hideIP = ref(false)
@@ -46,8 +32,31 @@ const explainPort = ref<number | undefined>(443)
 const explainProtocol = ref('tcp')
 const explainLoading = ref(false)
 const explainResult = ref<any | null>(null)
+const targetDrawer = ref(false)
+const targetSaving = ref(false)
+const targetForm = ref<Target>({ key:'', name:'', domain:'', group:'ai', icon:'•', path:'/cdn-cgi/trace', method:'GET', expectedStatus:'200-399', responseContains:'', requireEgressIp:true, timeoutSeconds:7, retries:0, enabled:true, sortOrder:100 })
 // Changes with each release so browsers do not retain an old immutable chunk.
 const splitVerifierBuild = '20260829-rule-check-2'
+
+const groupLabels: Record<string,string> = { network:'网络', ai:'AI', social:'社交', content:'内容', finance:'金融', tools:'工具', developer:'开发', media:'媒体' }
+const resetResults = () => { results.value = targets.value.filter(item => item.enabled !== false).map(item => ({ ...item, group:groupLabels[item.group] || item.group, status:'pending', ip:'', countryCode:'', rtt:-1, note:'' })) }
+const loadTargets = async () => {
+  const { data } = await getEgressTargets()
+  targets.value = (data || []).map((item:any) => ({ ...item, icon:item.icon || '•' }))
+  resetResults()
+}
+const newTarget = () => { targetForm.value = { key:'', name:'', domain:'', group:'ai', icon:'•', path:'/cdn-cgi/trace', method:'GET', expectedStatus:'200-399', responseContains:'', requireEgressIp:true, timeoutSeconds:7, retries:0, enabled:true, sortOrder:(targets.value.length + 1) * 10 } }
+const editTarget = (item:any) => { targetForm.value = { ...item }; targetDrawer.value = true }
+const persistTarget = async () => {
+  if (!targetForm.value.key || !targetForm.value.name || !targetForm.value.domain || !targetForm.value.group) { ElMessage.warning('请填写 key、名称、域名和分类'); return }
+  targetSaving.value = true
+  try { await saveEgressTarget(targetForm.value); ElMessage.success('检测目标已保存'); await loadTargets(); newTarget() } finally { targetSaving.value = false }
+}
+const removeTarget = async (item:any) => {
+  if (!item.id) return
+  await ElMessageBox.confirm(`删除检测目标「${item.name}」？`, '确认删除', { type:'warning' })
+  await deleteEgressTarget(item.id); ElMessage.success('已删除'); await loadTargets()
+}
 
 const loadSubscriptionNodes = async () => {
   subscriptionNodes.value = []; selectedNode.value = null
@@ -78,20 +87,39 @@ const uniqueEgress = computed(() => {
   return [...map.values()]
 })
 
+const statusAllowed = (code:number, spec = '') => {
+  if (!spec.trim()) return true
+  return spec.split(',').some(raw => {
+    const token = raw.trim()
+    if (!token) return false
+    if (token.includes('-')) {
+      const [low, high] = token.split('-', 2).map(Number)
+      return Number.isFinite(low) && Number.isFinite(high) && code >= low && code <= high
+    }
+    return code === Number(token)
+  })
+}
+
 const detect = async (item: Result) => {
   item.status = 'testing'; item.note = ''; item.rtt = -1
-  const controller = new AbortController(); const timer = window.setTimeout(() => controller.abort(), 6000)
-  const started = performance.now()
-  try {
-    const response = await fetch(`https://${item.domain}${item.tracePath || '/cdn-cgi/trace'}?_=${Date.now()}`, { cache: 'no-store', signal: controller.signal })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const text = await response.text()
-    const trace = Object.fromEntries(text.trim().split('\n').map(line => { const index = line.indexOf('='); return index > 0 ? [line.slice(0, index), line.slice(index + 1)] : [line, ''] }))
-    if (!trace.ip && !item.ipOptional) throw new Error('目标未返回出口 IP')
-    item.ip = trace.ip || ''; item.countryCode = (trace.loc || '').toUpperCase(); item.rtt = Math.max(1, Math.round(performance.now() - started)); item.note = item.ip ? '' : '站点可达，未提供出口 IP'; item.status = 'done'
-  } catch (error: any) {
-    item.status = 'error'; item.note = error?.name === 'AbortError' ? '超时' : '目标未开放跨域检测'
-  } finally { window.clearTimeout(timer) }
+  const attempts = Math.max(1, Math.min(6, (item.retries || 0) + 1))
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const controller = new AbortController(); const timer = window.setTimeout(() => controller.abort(), Math.max(1, item.timeoutSeconds || 7) * 1000)
+    const started = performance.now()
+    try {
+      const response = await fetch(`https://${item.domain}${item.path || '/cdn-cgi/trace'}?_=${Date.now()}`, { cache: 'no-store', signal: controller.signal, method:item.method || 'GET' })
+      if (!statusAllowed(response.status, item.expectedStatus || '200-399')) throw new Error(`HTTP ${response.status}`)
+      const text = item.method === 'HEAD' ? '' : await response.text()
+      if (item.responseContains && !text.toLowerCase().includes(item.responseContains.toLowerCase())) throw new Error('响应未包含预期特征')
+      const trace = Object.fromEntries(text.trim().split('\n').map(line => { const index = line.indexOf('='); return index > 0 ? [line.slice(0, index), line.slice(index + 1)] : [line, ''] }))
+      if (!trace.ip && item.requireEgressIp !== false) throw new Error('目标未返回出口 IP')
+      item.ip = trace.ip || ''; item.countryCode = (trace.loc || '').toUpperCase(); item.rtt = Math.max(1, Math.round(performance.now() - started)); item.note = item.ip ? '' : '站点可达，未提供出口 IP'; item.status = 'done'
+      window.clearTimeout(timer)
+      return
+    } catch (error: any) {
+      item.status = 'error'; item.note = error?.name === 'AbortError' ? '超时' : (error?.message || '目标未开放跨域检测')
+    } finally { window.clearTimeout(timer) }
+  }
 }
 
 const runLocal = async () => {
@@ -108,11 +136,10 @@ const runSelected = async () => {
   if (!selectedSubscription.value) { ElMessage.warning('请先选择订阅'); return }
   if (!selectedNode.value) { ElMessage.warning('该订阅没有可检测节点'); return }
   running.value = true
-  results.value = targets.map(item => ({ ...item, status: 'pending', ip: '', countryCode: '', rtt: -1, note: '' }))
+  resetResults()
   try {
     const { data } = await EgressTest({ id: selectedNode.value })
-    const names: Record<string,string> = { network:'网络', ai:'AI', social:'社交', content:'内容', finance:'金融', tools:'工具', developer:'开发', media:'媒体' }
-    results.value = (data?.results || []).map((item: any) => ({ ...(targets.find(target => target.domain === item.domain) || { icon: '•' }), name:item.name, domain:item.domain, group:names[item.group] || item.group, status:item.status === 'available' || item.status === 'reachable' ? 'done' : 'error', ip:item.ip || '', countryCode:item.countryCode || '', rtt:item.rtt ?? -1, note:item.note || '未获取出口 IP' }))
+    results.value = (data?.results || []).map((item: any) => ({ ...(targets.value.find(target => target.domain === item.domain) || { icon: '•' }), key:item.key, name:item.name, domain:item.domain, group:groupLabels[item.group] || item.group, status:item.status === 'available' || item.status === 'reachable' ? 'done' : 'error', ip:item.ip || '', countryCode:item.countryCode || '', rtt:item.rtt ?? -1, note:item.note || '未获取出口 IP' }))
     lastTestedAt.value = new Date()
   } finally { running.value = false }
 }
@@ -121,7 +148,7 @@ const runCurrent = () => mode.value === 'subscription' ? runSelected() : mode.va
 const runPlan = async () => {
   if (!selectedSubscription.value) { ElMessage.warning('请先选择订阅'); return }
   planLoading.value = true
-  try { const { data } = await subscriptionEgressPlan(selectedSubscription.value); plan.value = data; if (data?.items) results.value = data.items.map((item:any) => { const target = targets.find(t => t.domain === item.domain) || { icon:'•' }; const check = item.result || {}; return { ...target, name:item.name, domain:item.domain, group:item.group, status: check.status === 'available' || check.status === 'reachable' ? 'done' : check.status ? 'error' : 'pending', ip:check.ip || '', countryCode:check.countryCode || '', rtt:check.rtt ?? -1, note:check.note || (item.fallback ? `未找到 ${item.expectedCountry}，已使用质量最优节点` : '') } }) ; lastTestedAt.value = new Date() } finally { planLoading.value = false }
+  try { const { data } = await subscriptionEgressPlan(selectedSubscription.value); plan.value = data; if (data?.items) results.value = data.items.map((item:any) => { const target = targets.value.find(t => t.domain === item.domain) || { key:item.key, icon:'•' }; const check = item.result || {}; return { ...target, name:item.name, domain:item.domain, group:groupLabels[item.group] || item.group, status: check.status === 'available' || check.status === 'reachable' ? 'done' : check.status ? 'error' : 'pending', ip:check.ip || '', countryCode:check.countryCode || '', rtt:check.rtt ?? -1, note:check.note || (item.fallback ? `未找到 ${item.expectedCountry}，已使用质量最优节点` : '') } }) ; lastTestedAt.value = new Date() } finally { planLoading.value = false }
 }
 const runExplain = async () => {
   if (!selectedSubscription.value) { ElMessage.warning('请先选择订阅'); return }
@@ -143,6 +170,7 @@ const statusType = (item: any) => item.status === 'done' ? 'success' : item.stat
 const statusText = (item: any) => item.status === 'done' ? '已获取' : item.status === 'testing' ? '检测中' : item.status === 'error' ? item.note : '等待'
 
 onMounted(async () => {
+  await loadTargets()
   const { data } = await getSubs(); subscriptions.value = data || []
   if (subscriptions.value.length) { selectedSubscription.value = subscriptions.value[0].ID; await loadSubscriptionNodes() }
 })
@@ -152,7 +180,7 @@ onMounted(async () => {
   <div class="egress-page">
     <section class="hero-card">
       <div><span class="eyebrow">SPLIT ROUTING INSPECTOR</span><h1>订阅分流与出口检测</h1><p>选择订阅及其中的具体节点，服务端会通过该节点访问各目标并返回真实出口 IP。也可切换为本机模式，检查当前浏览器的分流规则。</p></div>
-      <div class="hero-actions"><el-switch v-model="hideIP" active-text="隐藏 IP" /><el-button type="primary" :loading="running" @click="runCurrent">开始检测</el-button></div>
+      <div class="hero-actions"><el-switch v-model="hideIP" active-text="隐藏 IP" /><el-button @click="targetDrawer = true">检测目标</el-button><el-button type="primary" :loading="running" @click="runCurrent">开始检测</el-button></div>
     </section>
 
     <section class="source-card">
@@ -237,6 +265,34 @@ onMounted(async () => {
       </el-table>
       <p class="privacy-note">检测结果仅用于当前页面展示，SubLinkX 不持久化出口 IP。本机模式下部分目标关闭 CORS 时会显示“未开放跨域检测”。</p>
     </section>
+
+    <el-drawer v-model="targetDrawer" title="分流检测目标" size="720px">
+      <el-alert type="info" :closable="false" title="目标只定义如何检测，不配置期望国家；期望地区始终由当前模板规则与策略组推导。" />
+      <div class="target-admin-form">
+        <el-input v-model="targetForm.key" placeholder="key，例如 youtube" :disabled="!!targetForm.id" />
+        <el-input v-model="targetForm.name" placeholder="名称" />
+        <el-input v-model="targetForm.domain" placeholder="域名，例如 www.youtube.com" />
+        <el-input v-model="targetForm.group" placeholder="分类，例如 media" />
+        <el-input v-model="targetForm.icon" placeholder="图标/Emoji" />
+        <el-input v-model="targetForm.path" placeholder="检测路径，例如 /cdn-cgi/trace" />
+        <el-select v-model="targetForm.method"><el-option label="GET" value="GET" /><el-option label="HEAD" value="HEAD" /></el-select>
+        <el-input v-model="targetForm.expectedStatus" placeholder="期望状态，如 200-399 或 200,204" />
+        <el-input v-model="targetForm.responseContains" placeholder="响应必须包含（可选）" />
+        <el-input-number v-model="targetForm.timeoutSeconds" :min="1" :max="60" controls-position="right" />
+        <el-input-number v-model="targetForm.retries" :min="0" :max="5" controls-position="right" />
+        <el-input-number v-model="targetForm.sortOrder" :min="0" :max="9999" controls-position="right" />
+        <el-switch v-model="targetForm.requireEgressIp" active-text="要求出口 IP" />
+        <el-switch v-model="targetForm.enabled" active-text="启用" />
+      </div>
+      <div class="target-admin-actions"><el-button @click="newTarget">新建</el-button><el-button type="primary" :loading="targetSaving" @click="persistTarget">保存目标</el-button></div>
+      <el-table :data="targets" size="small" class="target-admin-table">
+        <el-table-column prop="name" label="名称" min-width="110" />
+        <el-table-column prop="domain" label="域名" min-width="180" />
+        <el-table-column prop="group" label="分类" width="90" />
+        <el-table-column label="状态" width="76"><template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '启用' : '停用' }}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="120"><template #default="{ row }"><el-button link type="primary" @click="editTarget(row)">编辑</el-button><el-button link type="danger" @click="removeTarget(row)">删除</el-button></template></el-table-column>
+      </el-table>
+    </el-drawer>
   </div>
 </template>
 
@@ -249,4 +305,5 @@ onMounted(async () => {
 @media(max-width:720px){.source-selectors{grid-template-columns:1fr}.source-selectors .arrow{display:none}}
 .template-selectors{grid-template-columns:minmax(260px,420px) 1fr}.template-selectors :deep(.el-alert){margin:0}
 .explain-query{display:grid;grid-template-columns:2fr 1.4fr 150px 120px;gap:10px;margin-bottom:14px}.explain-flow{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:14px;margin-bottom:14px;border:1px solid var(--el-border-color-lighter);border-radius:12px;background:var(--el-fill-color-extra-light)}.explain-flow span{padding:6px 9px;border-radius:8px;background:var(--el-bg-color);font-size:12px}.explain-flow .selected{color:var(--el-color-success);font-weight:700}.explain-flow b{color:var(--el-text-color-placeholder)}.explain-meta{margin-bottom:14px}.subhead{display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px}.subhead small{color:var(--el-text-color-secondary)}@media(max-width:900px){.explain-query{grid-template-columns:1fr 1fr}}@media(max-width:600px){.explain-query{grid-template-columns:1fr}}
+.target-admin-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}.target-admin-actions{display:flex;justify-content:flex-end;gap:8px;margin-bottom:16px}.target-admin-table{margin-top:8px}@media(max-width:720px){.target-admin-form{grid-template-columns:1fr}}
 </style>

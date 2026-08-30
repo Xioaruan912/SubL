@@ -53,14 +53,7 @@ type egressPlanResponse struct {
 	Warnings         []string         `json:"warnings"`
 }
 
-type egressTestRunner func(context.Context, string, time.Duration, []string) (*node.EgressResult, error)
-
-var planTargets = []struct{ key, name, domain, group string }{
-	{"gemini", "Gemini", "gemini.google.com", "AI"},
-	{"chatgpt", "ChatGPT", "chatgpt.com", "AI"},
-	{"openai", "OpenAI", "openai.com", "AI"},
-	{"claude", "Claude", "claude.ai", "AI"},
-}
+type egressTestRunner func(context.Context, string, time.Duration, []node.EgressTarget) (*node.EgressResult, error)
 
 func templateContent(sub *models.Subcription) (string, string, error) {
 	var cfg models.SubscriptionConfig
@@ -297,25 +290,25 @@ func choosePlanNode(nodes []models.Node, expected string, stats map[int]models.N
 	return filtered, len(filtered)
 }
 
-func buildEgressPlan(ctx context.Context, sub *models.Subcription, templateName, content string, stats map[int]models.NodeQualityStats, run egressTestRunner) egressPlanResponse {
+func buildEgressPlan(ctx context.Context, sub *models.Subcription, templateName, content string, stats map[int]models.NodeQualityStats, targets []node.EgressTarget, run egressTestRunner) egressPlanResponse {
 	response := egressPlanResponse{
 		SubscriptionID:   sub.ID,
 		SubscriptionName: sub.Name,
 		Template:         templateName,
-		Items:            make([]egressPlanItem, 0, len(planTargets)),
+		Items:            make([]egressPlanItem, 0, len(targets)),
 	}
 	rules := parseSplitRules(content)
-	chosen := make(map[int][]string)
-	for _, target := range planTargets {
-		item := egressPlanItem{Key: target.key, Name: target.name, Domain: target.domain, Group: target.group}
-		if rule, ok, resolveWarning := ruleForDomainResolved(ctx, rules, content, target.domain); ok {
+	chosen := make(map[int][]node.EgressTarget)
+	for _, target := range targets {
+		item := egressPlanItem{Key: target.Key, Name: target.Name, Domain: target.Domain, Group: target.Group}
+		if rule, ok, resolveWarning := ruleForDomainResolved(ctx, rules, content, target.Domain); ok {
 			item.MatchedRule, item.Policy = rule.Raw, rule.Policy
 			item.ExpectedCountry = countryFromText(rule.Policy)
 			if item.ExpectedCountry == "" {
 				item.ExpectedCountry = policyFilterCountry(content, rule.Policy)
 			}
 		} else if resolveWarning != "" {
-			response.Warnings = append(response.Warnings, target.name+": "+resolveWarning)
+			response.Warnings = append(response.Warnings, target.Name+": "+resolveWarning)
 		}
 		if len(rules) == 0 {
 			item.MatchedRule = "未读取模板，未应用模板规则"
@@ -323,13 +316,13 @@ func buildEgressPlan(ctx context.Context, sub *models.Subcription, templateName,
 		candidates, count := choosePlanNode(sub.Nodes, item.ExpectedCountry, stats)
 		item.CandidateCount = count
 		if len(candidates) == 0 {
-			response.Warnings = append(response.Warnings, target.name+" 没有可用节点")
+			response.Warnings = append(response.Warnings, target.Name+" 没有可用节点")
 			response.Items = append(response.Items, item)
 			continue
 		}
 		item.SelectedNode = &candidates[0]
 		item.Fallback = item.ExpectedCountry != "" && item.SelectedNode.CountryCode != item.ExpectedCountry
-		chosen[item.SelectedNode.ID] = append(chosen[item.SelectedNode.ID], item.Key)
+		chosen[item.SelectedNode.ID] = append(chosen[item.SelectedNode.ID], target)
 		response.Items = append(response.Items, item)
 	}
 
@@ -382,7 +375,12 @@ func SubscriptionEgressPlan(c *gin.Context) {
 		templateName = "未读取到本地模板"
 	}
 	stats, _ := models.GetNodeQualityStats(time.Now().Add(-24 * time.Hour))
-	response := buildEgressPlan(c.Request.Context(), &sub, templateName, content, stats, node.RunEgressTestKeys)
+	targets, targetErr := enabledNodeEgressTargets()
+	if targetErr != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "读取分流检测目标失败: " + targetErr.Error()})
+		return
+	}
+	response := buildEgressPlan(c.Request.Context(), &sub, templateName, content, stats, targets, node.RunEgressTestTargets)
 	response.Warnings = append(initialWarnings, response.Warnings...)
 	c.JSON(200, gin.H{"code": "00000", "data": response, "msg": "模板分流验证完成"})
 }

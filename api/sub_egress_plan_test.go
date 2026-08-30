@@ -49,10 +49,17 @@ func TestSplitRulePolicyIgnoresOptionsAndNestedCommas(t *testing.T) {
 	}
 }
 
-func successfulPlanRunner(_ context.Context, _ string, _ time.Duration, keys []string) (*node.EgressResult, error) {
-	results := make([]node.EgressCheckResult, 0, len(keys))
-	for _, key := range keys {
-		results = append(results, node.EgressCheckResult{EgressTarget: node.EgressTarget{Key: key}, Status: "available", CountryCode: "US"})
+var testPlanTargets = []node.EgressTarget{
+	{Key: "gemini", Name: "Gemini", Domain: "gemini.google.com", Group: "ai"},
+	{Key: "chatgpt", Name: "ChatGPT", Domain: "chatgpt.com", Group: "ai"},
+	{Key: "openai", Name: "OpenAI", Domain: "openai.com", Group: "ai"},
+	{Key: "claude", Name: "Claude", Domain: "claude.ai", Group: "ai"},
+}
+
+func successfulPlanRunner(_ context.Context, _ string, _ time.Duration, targets []node.EgressTarget) (*node.EgressResult, error) {
+	results := make([]node.EgressCheckResult, 0, len(targets))
+	for _, target := range targets {
+		results = append(results, node.EgressCheckResult{EgressTarget: target, Status: "available", CountryCode: "US"})
 	}
 	return &node.EgressResult{Results: results}, nil
 }
@@ -82,7 +89,7 @@ func TestBuildEgressPlanIntegration(t *testing.T) {
 
 	t.Run("node name region and explicit region rule", func(t *testing.T) {
 		content := "rules:\n  - DOMAIN,chatgpt.com,US\n  - MATCH,Proxy\n"
-		response := buildEgressPlan(context.Background(), &models.Subcription{ID: 10, Name: "real-sub", Nodes: nodes}, "clash.yaml", content, stats, successfulPlanRunner)
+		response := buildEgressPlan(context.Background(), &models.Subcription{ID: 10, Name: "real-sub", Nodes: nodes}, "clash.yaml", content, stats, testPlanTargets, successfulPlanRunner)
 		item := planItemByKey(t, response, "chatgpt")
 		if item.ExpectedCountry != "US" || item.SelectedNode == nil || item.SelectedNode.ID != 2 {
 			t.Fatalf("explicit US rule selected %#v", item)
@@ -94,7 +101,7 @@ func TestBuildEgressPlanIntegration(t *testing.T) {
 
 	t.Run("multi country filter does not force one region", func(t *testing.T) {
 		content := "proxy-groups:\n  - name: AI\n    type: select\n    filter: '(?i)(US|JP)'\nrules:\n  - DOMAIN,chatgpt.com,AI\n  - MATCH,Proxy\n"
-		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes}, "clash.yaml", content, stats, successfulPlanRunner)
+		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes}, "clash.yaml", content, stats, testPlanTargets, successfulPlanRunner)
 		item := planItemByKey(t, response, "chatgpt")
 		if item.ExpectedCountry != "" || item.CandidateCount != 3 || item.SelectedNode == nil || item.SelectedNode.ID != 2 {
 			t.Fatalf("multi-country filter should rank all nodes, got %#v", item)
@@ -103,7 +110,7 @@ func TestBuildEgressPlanIntegration(t *testing.T) {
 
 	t.Run("match fallback", func(t *testing.T) {
 		content := "rules:\n  - DOMAIN,example.com,DIRECT\n  - MATCH,Proxy\n"
-		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes}, "clash.yaml", content, stats, successfulPlanRunner)
+		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes}, "clash.yaml", content, stats, testPlanTargets, successfulPlanRunner)
 		item := planItemByKey(t, response, "gemini")
 		if item.Policy != "Proxy" || !strings.HasPrefix(item.MatchedRule, "MATCH,") {
 			t.Fatalf("expected MATCH fallback, got %#v", item)
@@ -111,7 +118,7 @@ func TestBuildEgressPlanIntegration(t *testing.T) {
 	})
 
 	t.Run("no nodes", func(t *testing.T) {
-		response := buildEgressPlan(context.Background(), &models.Subcription{}, "clash.yaml", "rules:\n  - MATCH,Proxy\n", nil, successfulPlanRunner)
+		response := buildEgressPlan(context.Background(), &models.Subcription{}, "clash.yaml", "rules:\n  - MATCH,Proxy\n", nil, testPlanTargets, successfulPlanRunner)
 		item := planItemByKey(t, response, "chatgpt")
 		if item.SelectedNode != nil || item.CandidateCount != 0 {
 			t.Fatalf("no-node plan unexpectedly selected node: %#v", item)
@@ -122,10 +129,10 @@ func TestBuildEgressPlanIntegration(t *testing.T) {
 	})
 
 	t.Run("detection failure stays failed", func(t *testing.T) {
-		runner := func(context.Context, string, time.Duration, []string) (*node.EgressResult, error) {
+		runner := func(context.Context, string, time.Duration, []node.EgressTarget) (*node.EgressResult, error) {
 			return nil, errors.New("synthetic egress failure")
 		}
-		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes}, "clash.yaml", "rules:\n  - MATCH,Proxy\n", stats, runner)
+		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes}, "clash.yaml", "rules:\n  - MATCH,Proxy\n", stats, testPlanTargets, runner)
 		item := planItemByKey(t, response, "openai")
 		if item.SelectedNode == nil || item.Result != nil {
 			t.Fatalf("failed detection must keep node but no result: %#v", item)
