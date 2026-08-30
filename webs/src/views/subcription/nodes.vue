@@ -1,6 +1,6 @@
 <script setup lang='ts'>
 import { ref, computed, onMounted, nextTick } from 'vue'
-import { getNodes, getNodeOverview, AddNodes, DelNode, UpdateNode, GetGroup, SetGroup, UnbindGroup, DelGroup } from "@/api/subcription/node"
+import { getNodes, getNodeOverview, AddNodes, DelNode, UpdateNode, GetGroupFull, SetGroup, UnbindGroup, DelGroup, SetNodeVisibility, SetGroupVisibility } from "@/api/subcription/node"
 import { countryFlag } from "@/utils/flag"
 import NodeUnlockDialog from "@/components/NodeUnlockDialog.vue"
 import NodeTcpDialog from "@/components/NodeTcpDialog.vue"
@@ -26,8 +26,10 @@ interface NodeItem {
   ID: number
   Name: string
   Link: string
-  GroupNodes?: { Name: string }[]
+  Hidden?: boolean
+  GroupNodes?: { ID: number; Name: string; Hidden?: boolean }[]
 }
+interface GroupDetail { id:number; name:string; node_count:number; hidden:boolean }
 
 // ===== 状态 =====
 const loading = ref(false)
@@ -35,6 +37,8 @@ const viewMode = ref<'card' | 'list'>('card')   // 卡片/列表
 const overviewList = ref<OverviewItem[]>([])     // 概览（含国家/延迟）
 const fullNodes = ref<NodeItem[]>([])            // 完整节点（含 Link 供编辑/复制）
 const allGroupNames = ref<string[]>([])          // 分组名列表
+const groupDetails = ref<GroupDetail[]>([])      // 含隐藏状态的完整分组列表
+const manageGroupId = ref<number | null>(null)
 const activeGroup = ref('全部')                  // 当前选中分组
 const searchText = ref('')
 const filterCountries = ref<string[]>([])        // 国家筛选（多选）
@@ -118,6 +122,13 @@ const SelectionNodeGroups = ref<string[]>([])
 const NodeGroupInput = ref('')
 const SelectionNode = ref('')
 const delGroupName = ref('')
+const hiddenNodeCount = computed(() => fullNodes.value.filter(n => nodeEffectiveHidden(n)).length)
+const manageGroupNodes = computed(() => {
+  const group = groupDetails.value.find(g => g.id === manageGroupId.value)
+  if (!group) return []
+  return fullNodes.value.filter(n => (n.GroupNodes || []).some(g => g.ID === group.id))
+})
+const nodeEffectiveHidden = (node:any) => !!node?.Hidden || (node?.GroupNodes || []).some((g:any) => !!g.Hidden)
 
 // ===== 派生数据 =====
 // 可用国家列表（用于筛选）
@@ -146,6 +157,7 @@ const groupTree = computed(() => {
   }
   return nodes
 })
+const groupedVisibleCount = computed(() => overviewList.value.filter(n => (n.groups || []).length > 0).length)
 
 // 延迟颜色
 const rttColor = (rtt: number) => {
@@ -176,7 +188,7 @@ const loadAll = async () => {
   loading.value = true
   try {
     const [ov, nd, gp] = await Promise.all([
-      getNodeOverview(), getNodes(), GetGroup()
+      getNodeOverview(), getNodes(true), GetGroupFull(true)
     ])
     const data = ov?.data || []
     data.forEach((n: any) => {
@@ -184,12 +196,49 @@ const loadAll = async () => {
     })
     overviewList.value = data
     fullNodes.value = nd?.data || []
-    allGroupNames.value = Array.isArray(gp?.data) ? gp.data : []
+    groupDetails.value = Array.isArray(gp?.data) ? gp.data : []
+    allGroupNames.value = groupDetails.value.filter(g => !g.hidden).map(g => g.name)
+    if (!manageGroupId.value && groupDetails.value.length) manageGroupId.value = groupDetails.value[0].id
     
     triggerLocalPing()
   } catch { /* ignore */ } finally {
     loading.value = false
   }
+}
+
+const openGroupManager = () => {
+  if (!manageGroupId.value && groupDetails.value.length) manageGroupId.value = groupDetails.value[0].id
+  Groupdialog.value = true
+}
+const toggleGroupHidden = async (group:any) => {
+  const next = !group.hidden
+  await SetGroupVisibility(group.id, next)
+  ElMessage.success(next ? `分组「${group.name}」已全局隐藏` : `分组「${group.name}」已恢复显示`)
+  if (next && activeGroup.value === group.name) activeGroup.value = '全部'
+  await loadAll()
+}
+const toggleNodeHidden = async (node:any) => {
+  const next = !node.Hidden
+  await SetNodeVisibility(node.ID, next)
+  ElMessage.success(next ? `节点「${node.Name}」已全局隐藏` : `节点「${node.Name}」已恢复显示`)
+  await loadAll()
+}
+const hideVisibleNode = async (id:number) => {
+  const node = fullNodes.value.find(n => n.ID === id)
+  if (node) await toggleNodeHidden(node)
+}
+const hideActiveGroup = async () => {
+  const group = groupDetails.value.find(g => g.name === activeGroup.value)
+  if (!group) return
+  await ElMessageBox.confirm(`隐藏分组「${group.name}」后，该组全部节点会在 SubLinkX 全局隐藏，但不会删除数据。继续？`, '全局隐藏分组', { type:'warning' })
+  await toggleGroupHidden(group)
+}
+const hideSelectedNodes = async () => {
+  const ids = [...selectedIds.value]
+  if (!ids.length) return
+  await ElMessageBox.confirm(`将选中的 ${ids.length} 个节点全局隐藏？节点数据不会删除。`, '隐藏节点', { type:'warning' })
+  for (const id of ids) await SetNodeVisibility(id, true)
+  clearCardSelect(); await loadAll(); ElMessage.success('选中节点已全局隐藏')
 }
 
 const triggerLocalPing = async () => {
@@ -343,8 +392,8 @@ onMounted(loadAll)
       <el-col :span="5" :xs="24">
         <div class="bg-white dark:bg-[#1a1d1b] rounded-xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] p-5 sticky top-6">
           <div class="flex justify-between items-center mb-4">
-            <span class="font-semibold text-gray-700 dark:text-gray-200">分组</span>
-            <el-button link type="primary" size="small" @click="Groupdialog = true">管理</el-button>
+            <div><span class="font-semibold text-gray-700 dark:text-gray-200">分组</span><small class="group-coverage">已分组 {{ groupedVisibleCount }}/{{ overviewList.length }}</small></div>
+            <el-button link type="primary" size="small" @click="openGroupManager">管理</el-button>
           </div>
           <div class="flex flex-col gap-1">
             <div
@@ -388,6 +437,8 @@ onMounted(loadAll)
               </el-button>
               <el-button size="small" @click="clearCardSelect" :disabled="!selectedCount">取消选择</el-button>
               <el-button v-if="activeGroup !== '全部'" size="small" type="warning" @click="cardSelectUnbind" :disabled="!selectedCount">移出分组</el-button>
+              <el-button v-if="activeGroup !== '全部'" size="small" @click="hideSelectedNodes" :disabled="!selectedCount">隐藏选中</el-button>
+              <el-button v-if="activeGroup !== '全部'" size="small" type="warning" plain @click="hideActiveGroup">隐藏本组</el-button>
               <el-button size="small" type="danger" @click="cardSelectDel" :disabled="!selectedCount">删除选中({{ selectedCount }})</el-button>
             </template>
             <div class="flex-1"></div>
@@ -433,6 +484,7 @@ onMounted(loadAll)
                     <el-button link type="success" size="small" @click="openTcp(n)">链路TCP</el-button>
                     <el-button link type="primary" size="small" @click="handleEditNode(n)">编辑</el-button>
                     <el-button link type="primary" size="small" @click="copyInfo(n)">复制</el-button>
+                    <el-button v-if="activeGroup !== '全部'" link type="warning" size="small" @click="hideVisibleNode(n.id)">隐藏</el-button>
                     <el-button link type="danger" size="small" @click="handleDel(n)">删除</el-button>
                   </div>
                 </div>
@@ -528,8 +580,28 @@ onMounted(loadAll)
     </el-dialog>
 
     <!-- 分组管理弹窗 -->
-    <el-dialog v-model="Groupdialog" title="分组管理" width="560px" align-center>
+    <el-dialog v-model="Groupdialog" title="分组管理" width="760px" align-center>
       <el-form label-position="top" class="node-form">
+        <el-alert type="info" :closable="false" :title="`当前隐藏 ${hiddenNodeCount} 个节点。隐藏只影响全局展示、检测、推荐和订阅下发，不会删除节点或分组。`" />
+        <el-divider content-position="left">显示与隐藏</el-divider>
+        <el-table :data="groupDetails" size="small" max-height="220">
+          <el-table-column prop="name" label="分组" min-width="180" />
+          <el-table-column prop="node_count" label="节点" width="80" />
+          <el-table-column label="状态" width="100"><template #default="{row}"><el-tag :type="row.hidden ? 'info' : 'success'" size="small">{{ row.hidden ? '已隐藏' : '显示' }}</el-tag></template></el-table-column>
+          <el-table-column label="操作" width="110"><template #default="{row}"><el-button link :type="row.hidden ? 'primary' : 'warning'" @click="toggleGroupHidden(row)">{{ row.hidden ? '恢复' : '隐藏整组' }}</el-button></template></el-table-column>
+        </el-table>
+        <div class="group-node-visibility">
+          <el-select v-model="manageGroupId" placeholder="选择分组查看内部节点" class="full">
+            <el-option v-for="g in groupDetails" :key="g.id" :label="g.name" :value="g.id" />
+          </el-select>
+          <el-table :data="manageGroupNodes" size="small" max-height="260">
+            <el-table-column prop="Name" label="节点" min-width="260" />
+            <el-table-column label="状态" width="110"><template #default="{row}"><el-tag :type="nodeEffectiveHidden(row) ? 'info' : 'success'" size="small">{{ nodeEffectiveHidden(row) ? '全局隐藏' : '显示' }}</el-tag></template></el-table-column>
+            <el-table-column label="操作" width="100"><template #default="{row}"><el-button link :type="row.Hidden ? 'primary' : 'warning'" @click="toggleNodeHidden(row)">{{ row.Hidden ? '恢复节点' : '隐藏节点' }}</el-button></template></el-table-column>
+          </el-table>
+          <small class="visibility-tip">如果整个分组处于隐藏状态，单独恢复节点后仍不会显示；需要先恢复分组。</small>
+        </div>
+
         <el-divider content-position="left">绑定节点到分组</el-divider>
         <el-form-item label="选择节点">
           <el-select v-model="SelectionNode" filterable placeholder="搜索并选择节点…" class="full">
@@ -618,6 +690,8 @@ onMounted(loadAll)
 .card-country { margin-top: 6px; font-size: 12px; color: var(--el-text-color-secondary); }
 .unlock-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .unlock-item { font-size: 12px; color: var(--el-text-color-regular); }
+.group-node-visibility{display:flex;flex-direction:column;gap:10px;margin-top:14px}.visibility-tip{color:var(--el-text-color-secondary);font-size:11px;line-height:1.6}
+.group-coverage{display:block;margin-top:2px;color:var(--el-text-color-secondary);font-size:10px;font-weight:400}
 .card-actions { margin-top: 10px; display: flex; gap: 4px; }
 .row-flag { margin-right: 6px; }
 .row-name { font-weight: 500; }

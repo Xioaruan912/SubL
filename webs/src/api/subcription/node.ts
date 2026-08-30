@@ -1,8 +1,9 @@
 import request from "@/utils/request";
-export function getNodes(){
+export function getNodes(includeHidden = false){
   return request({
     url: "/api/v1/nodes/get",
     method: "get",
+    params: includeHidden ? { include_hidden: 1 } : undefined,
   });
 }
 
@@ -112,12 +113,15 @@ export function GetGroup(){
   });
 }
 // 获取分组完整信息（含 ID/节点数）
-export function GetGroupFull(){
+export function GetGroupFull(includeHidden = false){
   return request({
     url: "/api/v1/nodes/group/full",
     method: "get",
+    params: includeHidden ? { include_hidden: 1 } : undefined,
   });
 }
+export function SetNodeVisibility(id:number, hidden:boolean){ return request({ url:'/api/v1/nodes/visibility', method:'post', data:{ id, hidden } }) }
+export function SetGroupVisibility(id:number, hidden:boolean){ return request({ url:'/api/v1/nodes/group/visibility', method:'post', data:{ id, hidden } }) }
 // 设置关联分组
 export function SetGroup(data: any){
   return request({

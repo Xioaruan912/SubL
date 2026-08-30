@@ -132,8 +132,11 @@ type recommendation struct {
 }
 
 func NodeRecommendations(c *gin.Context) {
-	var nodes []models.Node
-	models.DB.Find(&nodes)
+	nodes, err := models.GetNodeList()
+	if err != nil {
+		c.JSON(500, gin.H{"msg": "读取节点失败"})
+		return
+	}
 	stats, err := models.GetNodeQualityStats(time.Now().Add(-24 * time.Hour))
 	if err != nil {
 		c.JSON(500, gin.H{"msg": "读取质量数据失败"})

@@ -32,16 +32,18 @@ func Nodes(r *gin.Engine) {
 		NodesGroup.POST("/chinaping/stream", api.NodeChinaPingStream)
 		NodesGroup.GET("/test/status", api.TestStatus)
 		NodesGroup.POST("/test/cancel", api.TestCancel)
+		NodesGroup.POST("/visibility", api.NodeVisibility) // 全局隐藏/恢复单个节点
 
 	}
 	// 分组
 	Group := NodesGroup.Group("/group")
 	{
-		Group.GET("/get", api.GroupNodeGet)        // 添加分组
-		Group.GET("/full", api.GroupNodeGetFull)   // 分组完整信息（含 ID/节点数）
-		Group.POST("/set", api.GroupNodeSet)       // 绑定创建分组
-		Group.POST("/unbind", api.GroupNodeUnbind) // 解除节点与分组绑定
-		Group.DELETE("/delete", api.GroupNodeDel)  // 删除分组
+		Group.GET("/get", api.GroupNodeGet)                // 添加分组
+		Group.GET("/full", api.GroupNodeGetFull)           // 分组完整信息（含 ID/节点数）
+		Group.POST("/set", api.GroupNodeSet)               // 绑定创建分组
+		Group.POST("/unbind", api.GroupNodeUnbind)         // 解除节点与分组绑定
+		Group.POST("/visibility", api.GroupNodeVisibility) // 全局隐藏/恢复分组
+		Group.DELETE("/delete", api.GroupNodeDel)          // 删除分组
 		// Group.POST("/update", api.GroupNodeUpdate) // 更新分组
 	}
 }

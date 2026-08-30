@@ -181,6 +181,10 @@ func SubscriptionRuleExplain(c *gin.Context) {
 		c.JSON(404, gin.H{"code": "40400", "msg": "订阅不存在"})
 		return
 	}
+	if err := mergeGroupNodes(&sub); err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "合并可见节点失败"})
+		return
+	}
 	templateName, content, err := templateContent(&sub)
 	if err != nil {
 		c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})

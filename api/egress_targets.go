@@ -156,8 +156,8 @@ func NodeQualityMatrix(c *gin.Context) {
 		c.JSON(500, gin.H{"code": "50000", "msg": "读取场景质量失败"})
 		return
 	}
-	var nodes []models.Node
-	if err := models.DB.Order("id asc").Find(&nodes).Error; err != nil {
+	nodes, err := models.GetNodeList()
+	if err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "读取节点失败"})
 		return
 	}

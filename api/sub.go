@@ -99,6 +99,9 @@ func parseGroups(groups string) ([]models.GroupNode, error) {
 		if err := models.DB.Where("id = ?", id).First(&gn).Error; err != nil {
 			return nil, err
 		}
+		if gn.Hidden {
+			return nil, fmt.Errorf("分组 %s 已全局隐藏，不能用于订阅", gn.Name)
+		}
 		refs = append(refs, models.GroupNode{ID: gn.ID})
 	}
 	return refs, nil
@@ -131,14 +134,30 @@ func SubGet(c *gin.Context) {
 		})
 		return
 	}
-	// 加载每个订阅引用的分组（含节点数），供前端回显
+	hiddenIDs, _ := models.GloballyHiddenNodeIDs()
+	// 加载每个订阅引用的分组（含可见节点数），供前端回显
 	for i := range Subs {
+		Subs[i].Nodes = models.FilterVisibleNodes(Subs[i].Nodes)
 		models.DB.Preload("GroupRefs").First(&Subs[i], Subs[i].ID)
+		visibleRefs := Subs[i].GroupRefs[:0]
 		for j := range Subs[i].GroupRefs {
-			var cnt int64
-			models.DB.Table("group_node_nodes").Where("group_node_id = ?", Subs[i].GroupRefs[j].ID).Count(&cnt)
-			Subs[i].GroupRefs[j].NodeCount = int(cnt)
+			if Subs[i].GroupRefs[j].Hidden {
+				continue
+			}
+			var ids []int
+			models.DB.Table("group_node_nodes AS x").Select("x.node_id").
+				Joins("JOIN nodes AS n ON n.id = x.node_id AND n.deleted_at IS NULL AND n.hidden = ?", false).
+				Where("x.group_node_id = ?", Subs[i].GroupRefs[j].ID).Scan(&ids)
+			count := 0
+			for _, id := range ids {
+				if !hiddenIDs[id] {
+					count++
+				}
+			}
+			Subs[i].GroupRefs[j].NodeCount = count
+			visibleRefs = append(visibleRefs, Subs[i].GroupRefs[j])
 		}
+		Subs[i].GroupRefs = visibleRefs
 	}
 	c.JSON(200, gin.H{
 		"code": "00000",

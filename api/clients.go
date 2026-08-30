@@ -38,8 +38,9 @@ func mergeGroupNodes(sub *models.Subcription) error {
 	// 收集当前手动节点（按名称去重）
 	seen := map[string]bool{}
 	merged := []models.Node{}
+	hiddenIDs, _ := models.GloballyHiddenNodeIDs()
 	for _, n := range withRefs.Nodes {
-		if n.Name == "" || seen[n.Name] {
+		if n.Name == "" || n.Hidden || hiddenIDs[n.ID] || seen[n.Name] {
 			continue
 		}
 		seen[n.Name] = true
@@ -63,9 +64,12 @@ func mergeGroupNodes(sub *models.Subcription) error {
 
 	// 追加各分组当前节点
 	for _, g := range withRefs.GroupRefs {
+		if g.Hidden {
+			continue
+		}
 		groupFilter, hasFilter := apMap[g.Name]
 		for _, n := range g.Nodes {
-			if n.Name == "" {
+			if n.Name == "" || n.Hidden || hiddenIDs[n.ID] {
 				continue
 			}
 			// 如果该分组对应的机场有勾选设置，且该节点不在勾选中，则跳过

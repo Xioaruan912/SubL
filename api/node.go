@@ -154,7 +154,12 @@ func NodeUpdadte(c *gin.Context) {
 // 获取节点列表
 func NodeGet(c *gin.Context) {
 	var ns []models.Node
-	ns, err := models.GetNodeList()
+	var err error
+	if c.Query("include_hidden") == "1" {
+		ns, err = models.GetAllNodeList()
+	} else {
+		ns, err = models.GetNodeList()
+	}
 	if err != nil {
 		c.JSON(500, gin.H{
 			"msg": "node list error",
@@ -191,7 +196,13 @@ func GroupNodeGet(c *gin.Context) {
 
 // 获取分组列表（含 ID 与节点数，供订阅分组选择器使用）
 func GroupNodeGetFull(c *gin.Context) {
-	Gns, err := models.GetGroupNodeList()
+	var Gns []models.GroupNode
+	var err error
+	if c.Query("include_hidden") == "1" {
+		Gns, err = models.GetAllGroupNodeList()
+	} else {
+		Gns, err = models.GetGroupNodeList()
+	}
 	if err != nil {
 		c.JSON(400, gin.H{"msg": err.Error()})
 		return
@@ -202,6 +213,7 @@ func GroupNodeGetFull(c *gin.Context) {
 			"id":         g.ID,
 			"name":       g.Name,
 			"node_count": len(g.Nodes),
+			"hidden":     g.Hidden,
 		})
 	}
 	c.JSON(200, gin.H{
@@ -231,6 +243,10 @@ func GroupNodeDel(c *gin.Context) {
 	}
 	if err := gn.Del(); err != nil {
 		c.JSON(400, gin.H{"msg": "删除分组失败: " + err.Error()})
+		return
+	}
+	if err := models.EnsureNodeGroupMembership(); err != nil {
+		c.JSON(500, gin.H{"msg": "分组已删除，但自动补充分组失败: " + err.Error()})
 		return
 	}
 	InvalidateOverview() // 节点分组变更，使概览缓存失效
@@ -335,6 +351,10 @@ func NodeAdd(c *gin.Context) {
 	link := c.PostForm("link")
 	name := c.PostForm("name")
 	group := c.PostForm("group")
+	if strings.TrimSpace(group) == "" {
+		c.JSON(400, gin.H{"msg": "节点必须至少选择一个分组"})
+		return
+	}
 	n = models.Node{
 		Name: name,
 		Link: link,
@@ -365,32 +385,33 @@ func NodeAdd(c *gin.Context) {
 		return
 	}
 
-	// 关联分组开始
-	if strings.TrimSpace(group) != "" { // 去除空格后判断分组是否为空
-		groups := strings.Split(group, ",") // 允许多个分组用逗号分隔
-		if len(groups) > 0 {
-			for _, g := range groups {
-				gn := &models.GroupNode{Name: g}
-				err = gn.Add()
-				if err != nil {
-					// 分组不存在
-					log.Println(err)
-					c.JSON(400, gin.H{
-						"msg": err,
-					})
-					return
-				}
-				// 分组存在，关联节点
-				if err := gn.Ass(&n); err != nil {
-					log.Println("关联失败:", err)
-					c.JSON(400, gin.H{
-						"msg": err,
-					})
-					return
-				}
-
-			}
+	// 关联分组。Node.Add 会先给新节点补默认组，这里用 Replace
+	// 原子地替换为用户明确选择的分组，保证最终至少一个分组且不残留默认组。
+	groups := strings.Split(group, ",")
+	gns := make([]models.GroupNode, 0, len(groups))
+	for _, raw := range groups {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
 		}
+		gn := models.GroupNode{Name: name}
+		if err := gn.Add(); err != nil {
+			c.JSON(400, gin.H{"msg": err.Error()})
+			return
+		}
+		if err := models.DB.Where("name = ?", name).First(&gn).Error; err != nil {
+			c.JSON(400, gin.H{"msg": err.Error()})
+			return
+		}
+		gns = append(gns, gn)
+	}
+	if len(gns) == 0 {
+		c.JSON(400, gin.H{"msg": "节点必须至少选择一个有效分组"})
+		return
+	}
+	if err := n.UpdateGroup(gns); err != nil {
+		c.JSON(400, gin.H{"msg": "关联分组失败: " + err.Error()})
+		return
 	}
 	//关联分组结束
 
@@ -400,6 +421,50 @@ func NodeAdd(c *gin.Context) {
 		"code": "00000",
 		"msg":  "添加成功",
 	})
+}
+
+func NodeVisibility(c *gin.Context) {
+	var input struct {
+		ID     int  `json:"id"`
+		Hidden bool `json:"hidden"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil || input.ID <= 0 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "节点 id 无效"})
+		return
+	}
+	var n models.Node
+	if err := models.DB.First(&n, input.ID).Error; err != nil {
+		c.JSON(404, gin.H{"code": "40400", "msg": "节点不存在"})
+		return
+	}
+	if err := models.DB.Model(&n).Update("hidden", input.Hidden).Error; err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "更新隐藏状态失败"})
+		return
+	}
+	InvalidateOverview()
+	c.JSON(200, gin.H{"code": "00000", "msg": map[bool]string{true: "节点已全局隐藏", false: "节点已恢复显示"}[input.Hidden]})
+}
+
+func GroupNodeVisibility(c *gin.Context) {
+	var input struct {
+		ID     int  `json:"id"`
+		Hidden bool `json:"hidden"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil || input.ID <= 0 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "分组 id 无效"})
+		return
+	}
+	var g models.GroupNode
+	if err := models.DB.First(&g, input.ID).Error; err != nil {
+		c.JSON(404, gin.H{"code": "40400", "msg": "分组不存在"})
+		return
+	}
+	if err := models.DB.Model(&g).Update("hidden", input.Hidden).Error; err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "更新分组隐藏状态失败"})
+		return
+	}
+	InvalidateOverview()
+	c.JSON(200, gin.H{"code": "00000", "msg": map[bool]string{true: "分组及其节点已全局隐藏", false: "分组已恢复显示"}[input.Hidden]})
 }
 
 // 删除节点

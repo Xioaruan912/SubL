@@ -39,6 +39,9 @@ func InitSqlite() {
 	if err := EnsureDefaultEgressTargets(); err != nil {
 		log.Println("初始化分流检测目标失败:", err)
 	}
+	if err := EnsureNodeGroupMembership(); err != nil {
+		log.Println("修复未分组节点失败:", err)
+	}
 	// 初始化用户数据
 	err = db.First(&User{}).Error
 	if err == gorm.ErrRecordNotFound {

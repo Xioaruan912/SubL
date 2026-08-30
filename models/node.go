@@ -7,10 +7,13 @@ import (
 	"gorm.io/gorm"
 )
 
+const DefaultNodeGroupName = "默认"
+
 type GroupNode struct {
 	gorm.Model
 	ID        int
 	Name      string
+	Hidden    bool   `gorm:"not null;default:false;index" json:"Hidden"`
 	Nodes     []Node `gorm:"many2many:group_node_nodes"` // 多对多关联字段
 	NodeCount int    `gorm:"-"`                          // 仅用于前端展示，不入库
 }
@@ -20,6 +23,7 @@ type Node struct {
 	ID         int
 	Name       string
 	Link       string
+	Hidden     bool        `gorm:"not null;default:false;index" json:"Hidden"`
 	GroupNodes []GroupNode `gorm:"many2many:group_node_nodes"` // 反向关联字段
 }
 
@@ -121,11 +125,27 @@ func (gn *GroupNode) Del() error {
 
 func GetGroupNodeList() ([]GroupNode, error) {
 	var gns []GroupNode
-	result := DB.Model(gns).Preload("Nodes").Find(&gns)
+	result := DB.Model(gns).Where("hidden = ?", false).Preload("Nodes", "hidden = ?", false).Find(&gns)
 	if result.Error != nil {
 		return nil, errors.New("没有任何分组")
 	}
+	hiddenIDs, _ := GloballyHiddenNodeIDs()
+	for i := range gns {
+		visible := gns[i].Nodes[:0]
+		for _, n := range gns[i].Nodes {
+			if !hiddenIDs[n.ID] {
+				visible = append(visible, n)
+			}
+		}
+		gns[i].Nodes = visible
+	}
 	return gns, result.Error
+}
+
+func GetAllGroupNodeList() ([]GroupNode, error) {
+	var gns []GroupNode
+	err := DB.Model(&GroupNode{}).Preload("Nodes").Order("id asc").Find(&gns).Error
+	return gns, err
 }
 
 /* 下面为节点的增删改查 */
@@ -139,10 +159,13 @@ func (n *Node) Add() error {
 		return result.Error // 如果查询出错，返回错误
 	}
 	if result.RowsAffected > 0 {
-		// log.Println("节点已经存在")
-		return nil // 如果节点已经存在就跳过
+		*n = existingNode
+		return EnsureNodeHasGroup(n.ID)
 	}
-	return DB.Model(n).Create(n).Error // 使用 GORM 创建新的节点记录
+	if err := DB.Model(n).Create(n).Error; err != nil {
+		return err
+	}
+	return EnsureNodeHasGroup(n.ID)
 }
 
 // 删除节点
@@ -216,6 +239,9 @@ func IsGroupNotDel(gns []GroupNode) error {
 // 更新关联分组
 
 func (n *Node) UpdateGroup(gns []GroupNode) error {
+	if len(gns) == 0 {
+		return errors.New("节点必须至少保留一个分组")
+	}
 	// 检测节点是否存在
 	result := DB.Model(n).Where("id = ? or name = ?", n.ID, n.Name).First(&n) // 查找节点
 	if result.Error != nil {
@@ -273,10 +299,106 @@ func (n *Node) UpdateGroup(gns []GroupNode) error {
 // 查看所有节点
 
 func GetNodeList() ([]Node, error) {
+	hiddenIDs, err := GloballyHiddenNodeIDs()
+	if err != nil {
+		return nil, err
+	}
 	var ns []Node
-	result := DB.Model(ns).Preload("GroupNodes").Find(&ns)
+	result := DB.Model(&Node{}).Where("hidden = ?", false).Preload("GroupNodes", "hidden = ?", false).Find(&ns)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	visible := ns[:0]
+	for _, n := range ns {
+		if !hiddenIDs[n.ID] {
+			visible = append(visible, n)
+		}
+	}
+	return visible, nil
+}
+
+func GetAllNodeList() ([]Node, error) {
+	var ns []Node
+	result := DB.Model(&Node{}).Preload("GroupNodes").Order("id asc").Find(&ns)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 	return ns, result.Error
+}
+
+// GloballyHiddenNodeIDs returns nodes hidden directly or indirectly by a hidden group.
+func GloballyHiddenNodeIDs() (map[int]bool, error) {
+	result := map[int]bool{}
+	var direct []int
+	if err := DB.Model(&Node{}).Where("hidden = ?", true).Pluck("id", &direct).Error; err != nil {
+		return nil, err
+	}
+	for _, id := range direct {
+		result[id] = true
+	}
+	var grouped []int
+	err := DB.Table("group_node_nodes AS x").Distinct("x.node_id").
+		Joins("JOIN group_nodes AS g ON g.id = x.group_node_id AND g.deleted_at IS NULL").
+		Where("g.hidden = ?", true).Pluck("x.node_id", &grouped).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, id := range grouped {
+		result[id] = true
+	}
+	return result, nil
+}
+
+func FilterVisibleNodes(nodes []Node) []Node {
+	hiddenIDs, err := GloballyHiddenNodeIDs()
+	if err != nil {
+		return nodes
+	}
+	result := make([]Node, 0, len(nodes))
+	for _, n := range nodes {
+		if !n.Hidden && !hiddenIDs[n.ID] {
+			result = append(result, n)
+		}
+	}
+	return result
+}
+
+func EnsureNodeHasGroup(nodeID int) error {
+	if nodeID <= 0 {
+		return nil
+	}
+	var count int64
+	if err := DB.Table("group_node_nodes AS x").
+		Joins("JOIN group_nodes AS g ON g.id = x.group_node_id AND g.deleted_at IS NULL").
+		Where("x.node_id = ?", nodeID).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	var group GroupNode
+	if err := DB.Where("name = ?", DefaultNodeGroupName).FirstOrCreate(&group, GroupNode{Name: DefaultNodeGroupName}).Error; err != nil {
+		return err
+	}
+	var node Node
+	if err := DB.First(&node, nodeID).Error; err != nil {
+		return err
+	}
+	return DB.Model(&node).Association("GroupNodes").Append(&group)
+}
+
+func EnsureNodeGroupMembership() error {
+	var ids []int
+	err := DB.Model(&Node{}).
+		Where("NOT EXISTS (SELECT 1 FROM group_node_nodes x JOIN group_nodes g ON g.id = x.group_node_id AND g.deleted_at IS NULL WHERE x.node_id = nodes.id)").
+		Pluck("id", &ids).Error
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := EnsureNodeHasGroup(id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
