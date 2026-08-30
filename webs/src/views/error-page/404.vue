@@ -273,4 +273,44 @@ function message() {
     }
   }
 }
+
+@media (max-width: 720px) {
+  .wscn-http404-container {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 100%;
+    padding: 28px 16px;
+    transform: none;
+  }
+
+  .wscn-http404 {
+    display: flex;
+    width: 100%;
+    padding: 0;
+    flex-direction: column;
+    align-items: center;
+
+    .pic-404 {
+      float: none;
+      width: min(100%, 360px);
+    }
+
+    .pic-404__child {
+      display: none;
+    }
+
+    .bullshit {
+      float: none;
+      width: 100%;
+      max-width: 360px;
+      padding: 20px 0 0;
+      text-align: center;
+
+      &__oops { font-size: 28px; }
+      &__headline { font-size: 18px; }
+      &__return-home { float: none; margin: 0 auto; }
+    }
+  }
+}
 </style>

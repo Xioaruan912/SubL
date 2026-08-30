@@ -119,6 +119,90 @@ html.dark .el-dialog, html.dark .el-drawer, html.dark .el-message-box, html.dark
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
 }
 
+/* Mobile safety net: page-level components can still provide tighter rules, but
+ * no fixed desktop dialog/drawer is allowed to overflow a phone viewport. */
+@media (max-width: 720px) {
+  html, body, #app {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .el-dialog {
+    width: calc(100vw - 20px) !important;
+    max-width: calc(100vw - 20px) !important;
+    margin: 10px auto !important;
+    border-radius: 12px !important;
+  }
+
+  .el-dialog__header {
+    padding: 14px 14px 8px !important;
+  }
+
+  .el-dialog__body {
+    max-height: calc(100dvh - 145px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 12px 14px !important;
+  }
+
+  .el-dialog__footer {
+    padding: 8px 14px 14px !important;
+  }
+
+  .el-drawer.ltr,
+  .el-drawer.rtl {
+    width: 100vw !important;
+    max-width: 100vw !important;
+  }
+
+  .el-drawer__header {
+    margin-bottom: 8px !important;
+    padding: 14px !important;
+  }
+
+  .el-drawer__body {
+    min-width: 0;
+    padding: 12px 14px !important;
+    overflow-x: auto;
+  }
+
+  .el-message-box {
+    width: calc(100vw - 28px) !important;
+    max-width: calc(100vw - 28px) !important;
+  }
+
+  .el-card {
+    --el-card-padding: 14px;
+  }
+
+  .el-form-item__content,
+  .el-form-item__label-wrap,
+  .el-input,
+  .el-select,
+  .el-input-number,
+  .el-date-editor {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .el-table {
+    width: 100% !important;
+    max-width: 100%;
+  }
+
+  .el-table__inner-wrapper,
+  .el-table__body-wrapper,
+  .el-table__header-wrapper {
+    max-width: 100%;
+  }
+
+  pre, code {
+    max-width: 100%;
+  }
+}
+
 /* Cards (Outer Panels) */
 .app-container .el-card,
 .el-card,

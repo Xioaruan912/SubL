@@ -509,7 +509,7 @@ const saveExpire = async () => {
         <!-- 链接区 -->
         <div class="link-area">
           <el-segmented v-model="activeClient[sub.ID]" :options="clientOptions" size="small" class="client-tabs" />
-          <div class="flex items-center gap-2">
+          <div class="link-controls flex items-center gap-2">
             <el-input :model-value="currentUrl(sub)" readonly size="small" class="flex-1" />
             <el-button size="small" class="shrink-0" @click="copyUrl(currentUrl(sub))">复制</el-button>
             <el-button size="small" class="shrink-0" @click="handleQrcode(currentUrl(sub), sub.Name)">二维码</el-button>
@@ -906,4 +906,34 @@ html.dark .order-badge { background: var(--el-color-primary-light-3); color: #ff
 .pipeline-card .el-form-item { margin-bottom:12px; }
 .pipeline-footer { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-top:2px; }
 .reject-stat { margin-right:12px; font-size:12px; }
+@media (max-width: 720px) {
+  .subs-page { padding: 6px; }
+  .toolbar { flex-wrap: wrap; }
+  .toolbar .search { width: 100%; flex: 1 1 100%; }
+  .toolbar :deep(.el-button) { flex: 1; }
+  .card-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .sub-card { min-width: 0; }
+  .card-title, .card-stats { flex-wrap: wrap; }
+  .link-controls { flex-wrap: wrap; }
+  .link-controls :deep(.el-input) { flex: 1 1 100% !important; }
+  .link-controls :deep(.el-button) { flex: 1; margin-left: 0; }
+  .card-actions { justify-content: flex-start; flex-wrap: wrap; }
+  .sub-form :deep(.el-col) { max-width: 100%; flex: 0 0 100%; }
+  .sub-form :deep(.el-radio-group) { max-width: 100%; flex-wrap: wrap; }
+  .sub-form :deep(.el-radio-button) { flex: 1 1 auto; }
+  .picker-node-list { grid-template-columns: minmax(0, 1fr); }
+  .picker-group-confidence { display: none; }
+  .order-item { flex-wrap: wrap; gap: 6px 8px; }
+  .order-name { min-width: 0; flex: 1 1 calc(100% - 42px); }
+  .order-confidence { order: 4; margin-left: 30px; }
+  .pipeline-section-head { flex-direction: column; gap: 8px; }
+  .pipeline-footer { align-items: stretch; flex-direction: column; gap: 8px; }
+  .pipeline-footer :deep(.el-button) { width: 100%; margin-left: 0; }
+  .expire-row { align-items: stretch; flex-direction: column; }
+  .expire-row :deep(.el-date-editor), .expire-row :deep(.el-button) { width: 100% !important; }
+  .artifact-toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+  .artifact-toolbar :deep(.el-select) { width: 100% !important; flex: 1 1 100%; }
+  .artifact-toolbar :deep(.el-button) { margin-left: 0; }
+  .cfg-item { align-items: flex-start; }
+}
 </style>

@@ -403,7 +403,7 @@ onMounted(loadAll)
     <el-row :gutter="24">
       <!-- 左侧分组树 -->
       <el-col :span="5" :xs="24">
-        <div class="bg-white dark:bg-[#1a1d1b] rounded-xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] p-5 sticky top-6">
+        <div class="group-sidebar-panel bg-white dark:bg-[#1a1d1b] rounded-xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] p-5 sticky top-6">
           <div class="flex justify-between items-center mb-4">
             <div><span class="font-semibold text-gray-700 dark:text-gray-200">分组</span><small class="group-coverage">已分组 {{ groupedVisibleCount }}/{{ overviewList.length }}</small></div>
             <el-button link type="primary" size="small" @click="openGroupManager">管理</el-button>
@@ -438,7 +438,7 @@ onMounted(loadAll)
       <el-col :span="19" :xs="24">
         <div class="bg-white dark:bg-[#1a1d1b] rounded-xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] flex flex-col overflow-hidden min-h-[500px]">
           <!-- 工具条 -->
-          <div class="p-5 border-b border-gray-100 dark:border-white/5 flex flex-wrap gap-3 items-center">
+          <div class="node-toolbar p-5 border-b border-gray-100 dark:border-white/5 flex flex-wrap gap-3 items-center">
             <el-input v-model="searchText" placeholder="搜索节点名" clearable class="w-64" />
             <el-select v-model="filterCountries" multiple collapse-tags placeholder="国家筛选" class="w-48">
               <el-option v-for="c in countryOptions" :key="c" :label="c" :value="c" />
@@ -749,4 +749,20 @@ onMounted(loadAll)
 html.dark .del-group-card { background: rgba(245, 108, 108, 0.08); border-color: rgba(245, 108, 108, 0.2); }
 .del-group-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--el-color-danger); }
 .del-group-row .el-select { flex: 1; }
+@media (max-width: 720px) {
+  .group-sidebar-panel { position: static !important; top: auto !important; padding: 14px !important; margin-bottom: 12px; }
+  .node-toolbar { padding: 14px !important; gap: 8px !important; }
+  .node-toolbar :deep(.el-input),
+  .node-toolbar :deep(.el-select) { width: 100% !important; flex: 1 1 100%; }
+  .node-toolbar > .flex-1 { display: none; }
+  .node-toolbar :deep(.el-button-group) { flex: 1 1 auto; display: flex; }
+  .node-toolbar :deep(.el-button-group .el-button) { flex: 1; }
+  .node-loading-area { min-height: 320px; padding: 12px !important; }
+  .quality-strip { flex-wrap: wrap; gap: 5px 8px; }
+  .node-card-actions { justify-content: flex-start !important; }
+  .del-group-row { flex-direction: column; align-items: stretch; }
+  .del-group-row :deep(.el-button) { width: 100%; margin-left: 0; }
+  .group-tabs { display: flex; flex-wrap: wrap; }
+  .group-node-visibility :deep(.el-table) { font-size: 12px; }
+}
 </style>

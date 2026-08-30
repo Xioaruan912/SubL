@@ -110,4 +110,20 @@ function back() {
     }
   }
 }
+
+@media (max-width: 720px) {
+  .errPage-container {
+    width: 100%;
+    margin: 30px auto;
+    padding: 0 16px;
+
+    :deep(.el-col) {
+      max-width: 100%;
+      flex: 0 0 100%;
+    }
+
+    .text-jumbo { font-size: 42px; }
+    .pan-gif { width: auto; max-width: 100%; height: auto; margin-top: 20px; }
+  }
+}
 </style>

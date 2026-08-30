@@ -346,4 +346,13 @@ onMounted(async () => {
 .target-admin-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}.target-admin-actions{display:flex;justify-content:flex-end;gap:8px;margin-bottom:16px}.target-admin-table{margin-top:8px}@media(max-width:720px){.target-admin-form{grid-template-columns:1fr}}
 .matrix-table{margin-top:14px}.matrix-cell{display:flex;flex-direction:column;gap:2px}.matrix-cell b{font-size:13px}.matrix-cell span,.matrix-cell small,.matrix-empty{color:var(--el-text-color-secondary);font-size:10px}
 .matrix-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:12px}.matrix-actions span{margin-right:auto;color:var(--el-text-color-secondary);font-size:11px}
+@media(max-width:720px){
+  .template-selectors{grid-template-columns:1fr}
+  .hero-actions{align-items:stretch;flex-direction:column;gap:8px}.hero-actions :deep(.el-button){width:100%;margin-left:0}
+  .source-card{padding:14px}.summary-card{padding:14px}
+  .egress-grid{grid-template-columns:1fr}
+  .subhead{align-items:flex-start;flex-direction:column;gap:4px}
+  .target-admin-actions{align-items:stretch;flex-direction:column}.target-admin-actions :deep(.el-button){width:100%;margin-left:0}
+  .matrix-actions{align-items:stretch;flex-direction:column}.matrix-actions span{margin-right:0;line-height:1.5}.matrix-actions :deep(.el-button){width:100%;margin-left:0}
+}
 </style>

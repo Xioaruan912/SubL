@@ -399,4 +399,13 @@ onMounted(() => {
 .gemini-testing { animation: geminiPulse 1s ease-in-out infinite; }
 @keyframes geminiPulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
 .detail-body .node-select-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
+@media (max-width: 720px) {
+  :deep(.el-dialog .el-col) { max-width: 100%; flex: 0 0 100%; }
+  .detail-body .info-grid { grid-template-columns: 1fr; gap: 8px; }
+  .detail-body .node-select-head,
+  .detail-body .node-select-foot { align-items: flex-start; flex-direction: column; }
+  .detail-body .node-cell { align-items: flex-start; }
+  .detail-body .node-cell-meta { align-items: flex-end; flex-direction: column; gap: 3px; }
+  .detail-body .node-select-foot :deep(.el-button) { width: 100%; margin-left: 0; }
+}
 </style>

@@ -511,4 +511,28 @@ onMounted(async () => {
     font-weight: 700;
   }
 }
+
+@media (max-width: 720px) {
+  .toolbar {
+    align-items: stretch;
+
+    .node-select,
+    .filter-provinces,
+    .filter-isps,
+    .filter-zstatic {
+      width: 100%;
+      flex: 1 1 100%;
+    }
+
+    :deep(.el-button) {
+      flex: 1 1 calc(50% - 5px);
+      margin-left: 0;
+    }
+  }
+
+  .map-card { min-height: 300px; }
+  .china-map { height: 360px; }
+  .legend { gap: 7px 10px; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); }
+}
 </style>

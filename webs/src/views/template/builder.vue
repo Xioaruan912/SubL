@@ -659,4 +659,27 @@ onMounted(async () => {
 .loon-regex { flex: 1; }
 .loon-type { width: 110px; flex-shrink: 0; }
 .full { width: 100%; }
+
+@media (max-width: 720px) {
+  .card-header { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .card-header .header-actions { width: 100%; flex-wrap: wrap; }
+  .card-header .source-select,
+  .card-header .header-actions :deep(.el-select) { width: 100% !important; flex: 1 1 100%; }
+  .card-header .header-actions :deep(.el-button) { width: 100%; margin-left: 0; }
+  .app-container :deep(.el-col) { max-width: 100%; flex: 0 0 100%; }
+  .app-container :deep(.el-form-item) { display: block; }
+  .app-container :deep(.el-form-item__label) { width: auto !important; height: auto; justify-content: flex-start; margin-bottom: 5px; line-height: 1.45; }
+  .app-container :deep(.el-form-item__content) { margin-left: 0 !important; }
+  .group-list .group-row,
+  .group-list .rp-row,
+  .loon-row,
+  .loon-group-row { align-items: stretch; flex-direction: column; }
+  .group-list .group-row .g-name,
+  .group-list .group-row .g-type,
+  .group-list .rp-row .rp-name,
+  .group-list .rp-row .rp-behavior,
+  .loon-name,
+  .loon-type { width: 100%; flex: 1 1 auto; }
+  .field-hint { display: block; margin: 5px 0 0; }
+}
 </style>

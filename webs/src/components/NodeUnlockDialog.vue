@@ -201,4 +201,8 @@ watch(() => props.nodeId, () => { if (props.visible) onOpen(); });
 .item-note { margin-left: 8px; color: var(--el-text-color-placeholder); }
 .loading-hint { padding: 30px 0; text-align: center; color: var(--el-text-color-secondary); }
 html.dark .unlock-item { background: #202425; }
+@media (max-width: 720px) {
+  .group-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .loading-hint { padding: 20px 0; }
+}
 </style>

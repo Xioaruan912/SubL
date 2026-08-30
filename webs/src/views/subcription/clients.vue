@@ -227,4 +227,17 @@ onBeforeUnmount(() => clearTimeout(timer.value));
 }
 .appstore-desc { font-size: 13px; color: var(--el-text-color-regular); text-align: center; }
 .appstore-price { font-size: 28px; font-weight: 700; color: var(--el-color-primary); }
+@media (max-width: 720px) {
+  .clients-page { padding: 6px; }
+  .toolbar { align-items: stretch; flex-direction: column; gap: 10px; }
+  .toolbar-info { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .toolbar :deep(.el-button) { width: 100%; margin-left: 0; }
+  .card-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .card-head { flex-wrap: wrap; }
+  .client-name { min-width: 120px; }
+  .platform-row { align-items: stretch; flex-direction: column; gap: 8px; }
+  .platform-info, .platform-action { flex-wrap: wrap; }
+  .platform-action { justify-content: space-between; }
+  .platform-err { max-width: none; flex: 1; }
+}
 </style>

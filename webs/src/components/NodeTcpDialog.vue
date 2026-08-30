@@ -344,4 +344,12 @@ watch(() => props.nodeId, () => { if (props.visible) onOpen(); });
 .cell { padding: 5px 3px; border-radius: 5px; text-align: center; min-width: 0; }
 .cell-city { font-size: 10px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cell-rtt { margin-top: 2px; font-size: 12px; font-weight: 700; }
+@media (max-width: 720px) {
+  .toolbar { align-items: stretch; flex-wrap: wrap; }
+  .toolbar .zstatic { width: 100%; flex: 1 1 100%; }
+  .toolbar :deep(.el-button) { flex: 1; margin-left: 0; }
+  .method-hint { flex: 1 1 100%; }
+  .china-map { height: 300px; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); }
+}
 </style>

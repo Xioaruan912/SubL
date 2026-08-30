@@ -209,4 +209,8 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 480px;
 }
+@media (max-width: 720px) {
+  .map-loading-area { min-height: 330px; }
+  .world-map { height: 330px; }
+}
 </style>

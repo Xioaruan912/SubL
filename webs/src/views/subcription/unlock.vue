@@ -228,4 +228,11 @@ onMounted(async () => {
 html.dark .unlock-item {
   background: #202425;
 }
+
+@media (max-width: 720px) {
+  .select-bar { align-items: stretch; flex-direction: column; gap: 8px; }
+  .select-bar .node-select { width: 100%; }
+  .select-bar :deep(.el-button) { width: 100%; margin-left: 0; }
+  .group-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}
 </style>

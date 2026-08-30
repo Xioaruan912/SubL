@@ -198,4 +198,11 @@ const load = async () => {
 html.dark .target-item {
   background: #202425;
 }
+@media (max-width: 720px) {
+  .target-list .target-item { flex: 1 1 calc(50% - 5px); min-width: 0; }
+  .node-list .node-item { align-items: flex-start; flex-wrap: wrap; gap: 4px 8px; }
+  .node-list .node-item .node-name { flex: 1 1 150px; }
+  .node-list .node-item .node-server { order: 3; flex: 1 1 100%; }
+  .manual-load { min-height: 140px; padding: 16px; }
+}
 </style>
