@@ -8,6 +8,7 @@ downloads/
 AGENTS.txt
 .prod-ssh-pass
 .github-token
+/deploy-vps.sh
 .env
 .env.*
 !.env.example
