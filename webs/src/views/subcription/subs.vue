@@ -30,7 +30,7 @@ interface Temp { file: string }
 interface OverviewItem {
   id: number; name: string; server: string; country: string;
   countryCode: string; rtt: number; groups: string[];
-  score: number; confidence: number; sampleCount: number
+  score: number; availability: number; confidence: number; sampleCount: number
 }
 
 const tableData = ref<Sub[]>([])
@@ -59,9 +59,11 @@ const nodeQualityByName = (name: string) => {
   const node = nodeByName.value.get(name)
   return node ? nodeQuality(node) : undefined
 }
-const nodeConfidenceLabel = (node: Node) => {
+const nodeQualityLabel = (node: Node) => {
   const q = nodeQuality(node)
-  return q && q.sampleCount > 0 ? `可信度 ${q.confidence}%` : '可信度暂无样本'
+  if (!q || q.sampleCount <= 0) return '暂无质量数据'
+  if (q.rtt < 0) return '当前离线'
+  return `质量 ${q.score}分`
 }
 const groupedNodes = computed(() => {
   const by = new Map<string, Node[]>()
@@ -78,21 +80,23 @@ const groupedNodes = computed(() => {
       const sortedNodes = [...nodes].sort((a, b) => {
         const qa = nodeQuality(a)
         const qb = nodeQuality(b)
-        const confidenceDiff = (qb?.confidence || 0) - (qa?.confidence || 0)
-        if (confidenceDiff) return confidenceDiff
+        const onlineDiff = Number((qb?.rtt ?? -1) >= 0) - Number((qa?.rtt ?? -1) >= 0)
+        if (onlineDiff) return onlineDiff
         const scoreDiff = (qb?.score || 0) - (qa?.score || 0)
-        return scoreDiff || a.Name.localeCompare(b.Name, 'zh-CN')
+        if (scoreDiff) return scoreDiff
+        const availabilityDiff = (qb?.availability || 0) - (qa?.availability || 0)
+        return availabilityDiff || a.Name.localeCompare(b.Name, 'zh-CN')
       })
-      const confidenceSamples = sortedNodes
+      const qualitySamples = sortedNodes
         .map(node => nodeQuality(node))
-        .filter((q): q is OverviewItem => !!q && q.sampleCount > 0)
+        .filter((q): q is OverviewItem => !!q && q.sampleCount > 0 && q.rtt >= 0)
       return {
         name,
         nodes: sortedNodes,
-        confidence: confidenceSamples.length ? Math.max(...confidenceSamples.map(q => q.confidence)) : -1,
+        qualityScore: qualitySamples.length ? Math.max(...qualitySamples.map(q => q.score)) : -1,
       }
     })
-    .sort((a, b) => (b.confidence - a.confidence) || a.name.localeCompare(b.name, 'zh-CN'))
+    .sort((a, b) => (b.qualityScore - a.qualityScore) || a.name.localeCompare(b.name, 'zh-CN'))
 })
 const udpOn = ref(false)
 const certOn = ref(false)
@@ -596,13 +600,13 @@ const saveExpire = async () => {
                     <template #title>
                       <span class="picker-group-title">{{ group.name }}</span>
                       <span class="picker-group-count">{{ group.nodes.length }} 个节点</span>
-                      <span class="picker-group-confidence" :class="{ empty: group.confidence < 0 }">{{ group.confidence >= 0 ? `最高可信度 ${group.confidence}%` : '暂无可信度' }}</span>
+                      <span class="picker-group-confidence" :class="{ empty: group.qualityScore < 0 }">{{ group.qualityScore >= 0 ? `最高质量 ${group.qualityScore}分` : '暂无在线节点' }}</span>
                     </template>
                     <div class="picker-node-list">
                       <el-checkbox v-for="item in group.nodes" :key="item.Name" :model-value="value1.includes(item.Name)" @change="(checked: any) => checked ? value1.push(item.Name) : removeNode(item.Name)">
                         <span class="picker-node-label">
                           <span class="picker-node-name">{{ item.Name }}</span>
-                          <span class="picker-node-confidence" :class="{ empty: !nodeQuality(item)?.sampleCount }">{{ nodeConfidenceLabel(item) }}</span>
+                          <span class="picker-node-confidence" :class="{ empty: !nodeQuality(item)?.sampleCount || (nodeQuality(item)?.rtt ?? -1) < 0 }">{{ nodeQualityLabel(item) }}</span>
                           <span v-if="nodeQuality(item)?.sampleCount" class="picker-node-samples">样本 {{ nodeQuality(item)?.sampleCount }}</span>
                         </span>
                       </el-checkbox>
@@ -616,7 +620,7 @@ const saveExpire = async () => {
                 <div v-for="(nodeName, index) in value1" :key="nodeName" class="order-item">
                   <span class="order-badge">{{ index + 1 }}</span>
                   <span class="order-name">{{ nodeName }}</span>
-                  <span class="order-confidence" :class="{ empty: !nodeQualityByName(nodeName)?.sampleCount }">{{ nodeQualityByName(nodeName)?.sampleCount ? `可信度 ${nodeQualityByName(nodeName)?.confidence}%` : '暂无样本' }}</span>
+                  <span class="order-confidence" :class="{ empty: !nodeQualityByName(nodeName)?.sampleCount || (nodeQualityByName(nodeName)?.rtt ?? -1) < 0 }">{{ !nodeQualityByName(nodeName)?.sampleCount ? '暂无质量数据' : ((nodeQualityByName(nodeName)?.rtt ?? -1) < 0 ? '当前离线' : `质量 ${nodeQualityByName(nodeName)?.score}分`) }}</span>
                   <span class="order-drag">☰</span>
                   <el-icon class="order-remove" @click="removeNode(nodeName)"><svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M764.288 214.592 512 466.88 259.712 214.592a31.936 31.936 0 0 0-45.12 45.12L466.752 512 214.528 764.224a31.936 31.936 0 1 0 45.12 45.184L512 557.184l252.288 252.288a31.936 31.936 0 0 0 45.12-45.12L557.12 512.064l252.288-252.352a31.936 31.936 0 1 0-45.12-45.184z"/></svg></el-icon>
                 </div>
