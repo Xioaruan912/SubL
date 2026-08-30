@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -21,32 +22,34 @@ func SyncAllAirports() {
 		return
 	}
 	for _, a := range airports {
-		SyncAirportNodeTask(a.ID)
+		if err := SyncAirportNodeTask(a.ID); err != nil {
+			log.Printf("[Cron] 机场 %s 同步失败: %v\n", a.Name, err)
+		}
 	}
 	log.Println("[Cron] 每日机场同步任务已下发完毕。")
 }
 
-func SyncAirportNodeTask(airportID int) {
+func SyncAirportNodeTask(airportID int) error {
 	var a models.Airport
 	a.ID = airportID
 	if err := a.Find(); err != nil {
 		log.Println("[Sync] 机场不存在 ID:", airportID)
-		return
+		return err
 	}
 
-	log.Printf("[Sync] 开始同步机场: %s, URL: %s\n", a.Name, a.URL)
+	log.Printf("[Sync] 开始同步机场: %s\n", a.Name)
 
 	req, err := http.NewRequest("GET", a.URL, nil)
 	if err != nil {
 		log.Printf("[Sync] 机场 %s 请求构建失败: %v\n", a.Name, err)
-		return
+		return err
 	}
 	req.Header.Set("User-Agent", "v2rayNG/1.8.5")
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("[Sync] 机场 %s 请求失败: %v\n", a.Name, err)
-		return
+		return err
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
@@ -77,7 +80,7 @@ func SyncAirportNodeTask(airportID int) {
 
 	if len(validNodes) == 0 {
 		log.Printf("[Sync] 机场 %s 未获取到有效节点\n", a.Name)
-		return
+		return fmt.Errorf("机场 %s 未获取到有效节点", a.Name)
 	}
 
 	// 并发测活
@@ -162,4 +165,5 @@ func SyncAirportNodeTask(airportID int) {
 	InvalidateOverview() // 机场同步增删节点，使概览缓存失效
 
 	log.Printf("[Sync] 机场 %s 同步并落库完成。\n", a.Name)
+	return nil
 }

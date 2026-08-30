@@ -22,6 +22,9 @@ export function subscriptionRuleExplain(data: any){
 export function previewSubPipeline(data: any){
   return request({ url: "/api/v1/subcription/pipeline/preview", method: "post", data, headers: { "Content-Type": "multipart/form-data" } });
 }
+export function startSubscriptionBuild(data:any){ return request({ url:'/api/v1/subcription/build-task', method:'post', data }); }
+export function getSubscriptionArtifacts(id:number, client = ''){ return request({ url:'/api/v1/subcription/artifacts', method:'get', params:{ id, client } }); }
+export function rollbackSubscriptionArtifact(artifactId:number){ return request({ url:'/api/v1/subcription/artifacts/rollback', method:'post', params:{ artifactId } }); }
 
 export function AddSub(data: any){
   return request({

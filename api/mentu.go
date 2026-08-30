@@ -31,6 +31,11 @@ type Menu struct {
 func GetMenus(c *gin.Context) {
 	menus := []Menu{
 		{
+			Path: "/ops", Component: "Layout", Redirect: "/ops/security", Name: "ops",
+			Meta:     Meta{Title: "运维", Icon: "setting", Hidden: false, Roles: []string{"ADMIN"}},
+			Children: []Child{{Path: "security", Component: "ops/index", Name: "OpsCenter", Meta: Meta{Title: "运维中心", Icon: "security", Hidden: false, Roles: []string{"ADMIN"}, KeepAlive: true}}},
+		},
+		{
 			Path:      "/system",
 			Component: "Layout",
 			// Redirect:  "/system/user",
@@ -132,6 +137,12 @@ func GetMenus(c *gin.Context) {
 				Roles:  []string{"ADMIN"},
 			},
 			Children: []Child{
+				{
+					Path:      "tasks",
+					Component: "task/index",
+					Name:      "TaskCenter",
+					Meta:      Meta{Title: "任务中心", Icon: "timer", Hidden: false, Roles: []string{"ADMIN"}, KeepAlive: true},
+				},
 				{
 					Path:      "egress",
 					Component: "test/egress",

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"ppeelink/models"
 	"ppeelink/node"
 	"strconv"
@@ -295,17 +296,42 @@ func NodeEgress(c *gin.Context) {
 		return
 	}
 	defer node.EndTest()
-	targets, err := enabledNodeEgressTargets()
-	if err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "读取分流检测目标失败: " + err.Error()})
+	task, trackedCtx, taskErr := createTaskRun(ctx, "node-egress", "节点出口检测 · "+selected.Name, nodeEgressTaskRequest{NodeID: id}, nil)
+	if taskErr != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "创建任务记录失败: " + taskErr.Error()})
 		return
 	}
-	result, err := node.RunEgressTestTargets(ctx, selected.Link, 7*time.Second, targets)
+	updateTaskProgress(task.ID, 20, "正在通过节点检测目标出口")
+	result, err := runNodeEgressTask(trackedCtx, id)
 	if err != nil {
+		if trackedCtx.Err() == context.Canceled {
+			markTaskCancelled(task.ID)
+		} else {
+			finishTaskRun(task.ID, err, nil)
+		}
 		c.JSON(500, gin.H{"code": "50000", "msg": "分流检测失败: " + err.Error()})
 		return
 	}
+	finishTaskRun(task.ID, nil, result)
 	c.JSON(200, gin.H{"code": "00000", "data": result, "msg": "分流检测完成"})
+}
+
+func runNodeEgressTask(ctx context.Context, nodeID int) (*node.EgressResult, error) {
+	var selected models.Node
+	selected.ID = nodeID
+	if err := selected.Find(); err != nil {
+		return nil, err
+	}
+	targets, err := enabledNodeEgressTargets()
+	if err != nil {
+		return nil, err
+	}
+	result, err := node.RunEgressTestTargets(ctx, selected.Link, 7*time.Second, targets)
+	if err != nil {
+		return nil, err
+	}
+	_ = recordEgressQuality(selected.ID, result)
+	return result, nil
 }
 
 // chinaCache 中国延迟缓存

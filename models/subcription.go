@@ -145,7 +145,6 @@ func (sub *Subcription) Find() error {
 		orderedNames := strings.Split(sub.NodeOrder, ",")
 		nodeMap := make(map[string]Node)
 		for _, node := range sub.Nodes {
-			log.Println("node:", node)
 			nodeMap[node.Name] = node
 		}
 

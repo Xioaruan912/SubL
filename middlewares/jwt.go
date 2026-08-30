@@ -3,8 +3,9 @@ package middlewares
 import (
 	"errors"
 	"net/http"
-	"strings"
 	"ppeelink/models"
+	"strings"
+	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
@@ -24,7 +25,7 @@ type JwtClaims struct {
 // AuthorToken 验证token中间件
 func AuthorToken(c *gin.Context) {
 	// 定义白名单
-	list := []string{"/static", "/api/v1/auth/login", "/api/v1/auth/captcha", "/c/", "/api/v1/version"}
+	list := []string{"/static", "/api/v1/auth/login", "/api/v1/auth/captcha", "/c/", "/api/v1/version", "/status", "/api/v1/status/public"}
 	// 如果是首页直接跳过
 	if c.Request.URL.Path == "/" {
 		c.Next()
@@ -37,30 +38,55 @@ func AuthorToken(c *gin.Context) {
 			return
 		}
 	}
-	token := c.Request.Header.Get("Authorization")
-	if token == "" {
+	authorization := strings.TrimSpace(c.Request.Header.Get("Authorization"))
+	if authorization == "" {
 		c.JSON(400, gin.H{"msg": "请求未携带token"})
 		c.Abort()
 		return
 	}
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		c.JSON(400, gin.H{"msg": "token格式错误"})
+	credential := strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer "))
+	if credential == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "msg": "token为空"})
 		c.Abort()
 		return
 	}
-	// 去掉Bearer前缀
-	token = strings.Replace(token, "Bearer ", "", -1)
-	mc, err := ParseToken(token)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"code": 401,
-			"msg":  err.Error(),
-		})
+	if strings.Count(credential, ".") == 2 {
+		if mc, err := ParseToken(credential); err == nil {
+			c.Set("username", mc.Username)
+			c.Set("authType", "jwt")
+			c.Next()
+			return
+		}
+	}
+	var apiToken models.APIToken
+	if err := models.DB.Where("token_hash = ? AND enabled = ?", models.HashAPIToken(credential), true).First(&apiToken).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "msg": "无效的 API Token"})
 		c.Abort()
 		return
 	}
-	c.Set("username", mc.Username)
+	if apiToken.ExpiresAt != nil && time.Now().After(*apiToken.ExpiresAt) {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "msg": "API Token 已过期"})
+		c.Abort()
+		return
+	}
+	required := "read"
+	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead && c.Request.Method != http.MethodOptions {
+		required = "write"
+	}
+	if strings.HasPrefix(c.Request.URL.Path, "/api/v1/tokens") {
+		required = "admin"
+	}
+	if !apiToken.HasScope(required) {
+		c.JSON(http.StatusForbidden, gin.H{"code": 403, "msg": "API Token 权限不足，需要 " + required})
+		c.Abort()
+		return
+	}
+	now := time.Now()
+	_ = models.DB.Model(&apiToken).Update("last_used_at", &now).Error
+	c.Set("username", "api-token:"+apiToken.Name)
+	c.Set("authType", "api-token")
+	c.Set("apiTokenId", apiToken.ID)
+	c.Set("apiScopes", apiToken.Scopes)
 	c.Next()
 }
 

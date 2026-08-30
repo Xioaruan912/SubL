@@ -139,6 +139,7 @@ func NodeRecommendations(c *gin.Context) {
 		c.JSON(500, gin.H{"msg": "读取质量数据失败"})
 		return
 	}
+	sceneQuality, _ := models.GetNodeSceneQualityStats(time.Now().Add(-24 * time.Hour))
 	// Load unlock observations once. The old implementation queried per node
 	// and per scene, causing hundreds of SQLite queries on every dashboard load.
 	services := []string{"openai", "claude", "google-gemini", "netflix", "youtube", "disney"}
@@ -169,12 +170,19 @@ func NodeRecommendations(c *gin.Context) {
 				continue
 			}
 			score := s.Score
+			confidence := s.Confidence
 			reasons := []string{fmt.Sprintf("24h 可用率 %.1f%%", s.Availability), fmt.Sprintf("P95 %dms", s.P95Rtt)}
 			if scenes[si].Key == "speed" {
 				score = max(0, 100-s.AverageRtt/5)
 				reasons = []string{fmt.Sprintf("平均延迟 %dms", s.AverageRtt), fmt.Sprintf("抖动 %dms", s.Jitter)}
 			}
 			if scenes[si].Key == "ai" || scenes[si].Key == "media" {
+				sceneStat, hasScene := sceneQuality[n.ID][scenes[si].Key]
+				if hasScene && sceneStat.SampleCount > 0 {
+					score = sceneStat.Score
+					confidence = sceneStat.Confidence
+					reasons = []string{fmt.Sprintf("场景可达率 %.1f%%", sceneStat.Availability), fmt.Sprintf("场景平均 %dms", sceneStat.AverageRtt)}
+				}
 				sceneServices := []string{"openai", "claude", "google-gemini"}
 				if scenes[si].Key == "media" {
 					sceneServices = []string{"netflix", "youtube", "disney"}
@@ -192,14 +200,18 @@ func NodeRecommendations(c *gin.Context) {
 					}
 				}
 				if total > 0 {
-					score = s.Score*6/10 + unlocked*40/total
+					if hasScene && sceneStat.SampleCount > 0 {
+						score = score*8/10 + unlocked*20/total
+					} else {
+						score = s.Score*6/10 + unlocked*40/total
+					}
 					reasons = append(reasons, fmt.Sprintf("已解锁 %d/%d 项", unlocked, total))
-				} else {
+				} else if !hasScene || sceneStat.SampleCount == 0 {
 					score = s.Score * 6 / 10
 					reasons = append(reasons, "尚无解锁样本")
 				}
 			}
-			list = append(list, recommendation{NodeID: n.ID, Name: n.Name, Score: score, Confidence: s.Confidence, Reasons: reasons, Rtt: s.AverageRtt})
+			list = append(list, recommendation{NodeID: n.ID, Name: n.Name, Score: score, Confidence: confidence, Reasons: reasons, Rtt: s.AverageRtt})
 		}
 		sort.Slice(list, func(i, j int) bool { return list[i].Score > list[j].Score })
 		if len(list) > 3 {

@@ -13,6 +13,7 @@ import (
 	"ppeelink/routers"
 	"ppeelink/settings"
 	"ppeelink/utils"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -117,6 +118,18 @@ func main() {
 func Run(port int) {
 	// 初始化gin框架
 	r := gin.Default()
+	// Do not trust arbitrary X-Forwarded-For by default. Operators behind a
+	// reverse proxy can explicitly set SUBLINKX_TRUSTED_PROXIES to a
+	// comma-separated list of proxy IPs/CIDRs.
+	trusted := []string{}
+	for _, item := range strings.Split(os.Getenv("SUBLINKX_TRUSTED_PROXIES"), ",") {
+		if value := strings.TrimSpace(item); value != "" {
+			trusted = append(trusted, value)
+		}
+	}
+	if err := r.SetTrustedProxies(trusted); err != nil {
+		log.Printf("可信代理配置无效: %v", err)
+	}
 	// 初始化日志配置
 	utils.Loginit()
 	// 初始化模板
@@ -151,6 +164,10 @@ func Run(port int) {
 	routers.Downloads(r)
 	routers.AirportRoutes(r) // 注册机场管理路由
 	routers.Rules(r)         // 规则中心
+	routers.Tasks(r)         // 后台任务中心
+	routers.Tokens(r)        // API Token 管理
+	routers.Ops(r)           // 安全运维/备份
+	routers.Status(r)        // 公共只读状态页
 	// 客户端下载目录 + 定时检查更新（启动即查 + 每 24h）
 	os.MkdirAll("downloads", 0o755)
 	client.Start()

@@ -3,6 +3,7 @@ package api
 import (
 	"net"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -115,4 +116,60 @@ func EgressTargetDelete(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"code": "00000", "msg": "已删除"})
+}
+
+func recordEgressQuality(nodeID int, result *node.EgressResult) error {
+	if nodeID <= 0 || result == nil {
+		return nil
+	}
+	samples := make([]models.NodeTargetQualitySample, 0, len(result.Results))
+	for _, check := range result.Results {
+		if check.Key == "" {
+			continue
+		}
+		success := check.Status == "available" || check.Status == "reachable"
+		samples = append(samples, models.NodeTargetQualitySample{NodeID: nodeID, TargetKey: check.Key, Scene: check.Group, Rtt: check.Rtt, Success: success, Status: check.Status, CheckedAt: check.CheckedAt})
+	}
+	return models.RecordNodeTargetQuality(samples)
+}
+
+func NodeQualityMatrix(c *gin.Context) {
+	hours := 24
+	if raw := strings.TrimSpace(c.Query("hours")); raw != "" {
+		if value, err := strconv.Atoi(raw); err == nil && value >= 1 && value <= 720 {
+			hours = value
+		}
+	}
+	since := time.Now().Add(-time.Duration(hours) * time.Hour)
+	targets, err := models.EnabledEgressTargets()
+	if err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "读取检测目标失败"})
+		return
+	}
+	byTarget, err := models.GetNodeTargetQualityStats(since)
+	if err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "读取目标质量失败"})
+		return
+	}
+	byScene, err := models.GetNodeSceneQualityStats(since)
+	if err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "读取场景质量失败"})
+		return
+	}
+	var nodes []models.Node
+	if err := models.DB.Order("id asc").Find(&nodes).Error; err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "读取节点失败"})
+		return
+	}
+	type row struct {
+		NodeID  int                                  `json:"nodeId"`
+		Name    string                               `json:"name"`
+		Targets map[string]models.TargetQualityStats `json:"targets"`
+		Scenes  map[string]models.TargetQualityStats `json:"scenes"`
+	}
+	rows := make([]row, 0, len(nodes))
+	for _, n := range nodes {
+		rows = append(rows, row{NodeID: n.ID, Name: n.Name, Targets: byTarget[n.ID], Scenes: byScene[n.ID]})
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"hours": hours, "targets": targets, "nodes": rows}, "msg": "节点目标质量矩阵"})
 }

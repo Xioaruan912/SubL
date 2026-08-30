@@ -228,7 +228,18 @@ func SubscriptionRuleExplain(c *gin.Context) {
 		}
 		response.ExpectedCountry = expected
 		stats, _ := models.GetNodeQualityStats(time.Now().Add(-24 * time.Hour))
-		candidates, count := choosePlanNode(sub.Nodes, expected, stats)
+		targetStats, _ := models.GetNodeTargetQualityStats(time.Now().Add(-24 * time.Hour))
+		sceneStats, _ := models.GetNodeSceneQualityStats(time.Now().Add(-24 * time.Hour))
+		targetKey, scene := "", ""
+		if configured, err := models.EnabledEgressTargets(); err == nil {
+			for _, item := range configured {
+				if strings.EqualFold(strings.TrimPrefix(req.Target, "www."), strings.TrimPrefix(item.Domain, "www.")) {
+					targetKey, scene = item.Key, item.Group
+					break
+				}
+			}
+		}
+		candidates, count := choosePlanNode(sub.Nodes, expected, stats, planQualityMatrix{Targets: targetStats, Scenes: sceneStats}, targetKey, scene)
 		response.CandidateCount = count
 		if len(candidates) > 0 {
 			selected := candidates[0]

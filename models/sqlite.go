@@ -31,10 +31,11 @@ func InitSqlite() {
 		return
 	}
 	err = db.AutoMigrate(&User{}, &Subcription{}, &SubLogs{}, &GroupNode{}, &Node{}, &ClientVersion{}, &Airport{},
-		&NodeQualitySample{}, &NodeHealthEvent{}, &AlertSetting{}, &UnlockObservation{}, &TemplateVersion{}, &RuleSource{}, &RuleCatalog{}, &EgressTarget{})
+		&NodeQualitySample{}, &NodeTargetQualitySample{}, &NodeHealthEvent{}, &AlertSetting{}, &UnlockObservation{}, &TemplateVersion{}, &RuleSource{}, &RuleCatalog{}, &RuleCacheSnapshot{}, &EgressTarget{}, &TaskRun{}, &SubscriptionArtifact{}, &SubscriptionArtifactPointer{}, &APIToken{})
 	if err != nil {
 		log.Println("数据表迁移失败")
 	}
+	_ = RecoverInterruptedTasks()
 	if err := EnsureDefaultEgressTargets(); err != nil {
 		log.Println("初始化分流检测目标失败:", err)
 	}

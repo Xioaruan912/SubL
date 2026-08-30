@@ -89,7 +89,7 @@ func TestBuildEgressPlanIntegration(t *testing.T) {
 
 	t.Run("node name region and explicit region rule", func(t *testing.T) {
 		content := "rules:\n  - DOMAIN,chatgpt.com,US\n  - MATCH,Proxy\n"
-		response := buildEgressPlan(context.Background(), &models.Subcription{ID: 10, Name: "real-sub", Nodes: nodes}, "clash.yaml", content, stats, testPlanTargets, successfulPlanRunner)
+		response := buildEgressPlan(context.Background(), &models.Subcription{ID: 10, Name: "real-sub", Nodes: nodes}, "clash.yaml", content, stats, planQualityMatrix{}, testPlanTargets, successfulPlanRunner)
 		item := planItemByKey(t, response, "chatgpt")
 		if item.ExpectedCountry != "US" || item.SelectedNode == nil || item.SelectedNode.ID != 2 {
 			t.Fatalf("explicit US rule selected %#v", item)
@@ -101,7 +101,7 @@ func TestBuildEgressPlanIntegration(t *testing.T) {
 
 	t.Run("multi country filter does not force one region", func(t *testing.T) {
 		content := "proxy-groups:\n  - name: AI\n    type: select\n    filter: '(?i)(US|JP)'\nrules:\n  - DOMAIN,chatgpt.com,AI\n  - MATCH,Proxy\n"
-		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes}, "clash.yaml", content, stats, testPlanTargets, successfulPlanRunner)
+		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes}, "clash.yaml", content, stats, planQualityMatrix{}, testPlanTargets, successfulPlanRunner)
 		item := planItemByKey(t, response, "chatgpt")
 		if item.ExpectedCountry != "" || item.CandidateCount != 3 || item.SelectedNode == nil || item.SelectedNode.ID != 2 {
 			t.Fatalf("multi-country filter should rank all nodes, got %#v", item)
@@ -110,7 +110,7 @@ func TestBuildEgressPlanIntegration(t *testing.T) {
 
 	t.Run("match fallback", func(t *testing.T) {
 		content := "rules:\n  - DOMAIN,example.com,DIRECT\n  - MATCH,Proxy\n"
-		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes}, "clash.yaml", content, stats, testPlanTargets, successfulPlanRunner)
+		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes}, "clash.yaml", content, stats, planQualityMatrix{}, testPlanTargets, successfulPlanRunner)
 		item := planItemByKey(t, response, "gemini")
 		if item.Policy != "Proxy" || !strings.HasPrefix(item.MatchedRule, "MATCH,") {
 			t.Fatalf("expected MATCH fallback, got %#v", item)
@@ -118,7 +118,7 @@ func TestBuildEgressPlanIntegration(t *testing.T) {
 	})
 
 	t.Run("no nodes", func(t *testing.T) {
-		response := buildEgressPlan(context.Background(), &models.Subcription{}, "clash.yaml", "rules:\n  - MATCH,Proxy\n", nil, testPlanTargets, successfulPlanRunner)
+		response := buildEgressPlan(context.Background(), &models.Subcription{}, "clash.yaml", "rules:\n  - MATCH,Proxy\n", nil, planQualityMatrix{}, testPlanTargets, successfulPlanRunner)
 		item := planItemByKey(t, response, "chatgpt")
 		if item.SelectedNode != nil || item.CandidateCount != 0 {
 			t.Fatalf("no-node plan unexpectedly selected node: %#v", item)
@@ -132,7 +132,7 @@ func TestBuildEgressPlanIntegration(t *testing.T) {
 		runner := func(context.Context, string, time.Duration, []node.EgressTarget) (*node.EgressResult, error) {
 			return nil, errors.New("synthetic egress failure")
 		}
-		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes}, "clash.yaml", "rules:\n  - MATCH,Proxy\n", stats, testPlanTargets, runner)
+		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes}, "clash.yaml", "rules:\n  - MATCH,Proxy\n", stats, planQualityMatrix{}, testPlanTargets, runner)
 		item := planItemByKey(t, response, "openai")
 		if item.SelectedNode == nil || item.Result != nil {
 			t.Fatalf("failed detection must keep node but no result: %#v", item)
@@ -140,6 +140,19 @@ func TestBuildEgressPlanIntegration(t *testing.T) {
 		joined := strings.Join(response.Warnings, " | ")
 		if !strings.Contains(joined, "synthetic egress failure") {
 			t.Fatalf("missing detection failure warning: %s", joined)
+		}
+	})
+
+	t.Run("target quality overrides generic tcp ranking", func(t *testing.T) {
+		matrix := planQualityMatrix{Targets: map[int]map[string]models.TargetQualityStats{
+			1: {"chatgpt": {NodeID: 1, TargetKey: "chatgpt", Score: 96, Availability: 100, AverageRtt: 55, Confidence: 80, SampleCount: 8}},
+			2: {"chatgpt": {NodeID: 2, TargetKey: "chatgpt", Score: 25, Availability: 30, AverageRtt: 240, Confidence: 100, SampleCount: 12}},
+		}}
+		content := "rules:\n  - DOMAIN,chatgpt.com,Proxy\n  - MATCH,Proxy\n"
+		response := buildEgressPlan(context.Background(), &models.Subcription{Nodes: nodes[:2]}, "clash.yaml", content, stats, matrix, testPlanTargets, successfulPlanRunner)
+		item := planItemByKey(t, response, "chatgpt")
+		if item.SelectedNode == nil || item.SelectedNode.ID != 1 || item.SelectedNode.QualitySource != "target" {
+			t.Fatalf("expected target history to prefer node 1, got %#v", item.SelectedNode)
 		}
 	})
 }

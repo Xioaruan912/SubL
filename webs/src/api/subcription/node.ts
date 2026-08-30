@@ -28,6 +28,7 @@ export function getNodeQualitySummary(){
     method: "get",
   });
 }
+export function getNodeQualityMatrix(hours = 24){ return request({ url: "/api/v1/nodes/quality/matrix", method: "get", params: { hours } }); }
 export function getNodeRecommendations(){ return request({ url: "/api/v1/nodes/recommendations", method: "get" }); }
 export function getNodeHealthEvents(limit = 30){ return request({ url: "/api/v1/nodes/health/events", method: "get", params: { limit } }); }
 export function getAlertSetting(){ return request({ url: "/api/v1/nodes/alerts", method: "get" }); }

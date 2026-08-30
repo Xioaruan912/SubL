@@ -13,6 +13,10 @@ export const getRulePreview = (id: string) => request({
   method: "get",
   params: { id },
 });
+export const getRuleUpdateImpact = (id:string) => request({ url:'/api/v1/rules/update-impact', method:'get', params:{ id } });
+export const applyRuleUpdate = (id:string) => request({ url:'/api/v1/rules/apply-update', method:'post', params:{ id } });
+export const getRuleSnapshots = (id:string) => request({ url:'/api/v1/rules/snapshots', method:'get', params:{ id } });
+export const rollbackRule = (id:string, snapshotId:number) => request({ url:'/api/v1/rules/rollback', method:'post', params:{ id, snapshotId } });
 
 export const getRuleTemplateGroups = (template: string) => request({
   url: "/api/v1/rules/template-groups",

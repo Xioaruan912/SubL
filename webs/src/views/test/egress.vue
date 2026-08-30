@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { countryFlag } from '@/utils/flag'
 import { getSubs, getSubPreviewNodes, subscriptionEgressPlan, subscriptionRuleExplain } from '@/api/subcription/subs'
-import { EgressTest, deleteEgressTarget, getEgressTargets, getNodeOverview, saveEgressTarget } from '@/api/subcription/node'
+import { EgressTest, deleteEgressTarget, getEgressTargets, getNodeOverview, getNodeQualityMatrix, saveEgressTarget } from '@/api/subcription/node'
 
 defineOptions({ name: 'EgressTest' })
 
@@ -33,12 +33,22 @@ const explainProtocol = ref('tcp')
 const explainLoading = ref(false)
 const explainResult = ref<any | null>(null)
 const targetDrawer = ref(false)
+const matrixDrawer = ref(false)
+const matrixLoading = ref(false)
+const matrixData = ref<any>({ targets:[], nodes:[] })
 const targetSaving = ref(false)
 const targetForm = ref<Target>({ key:'', name:'', domain:'', group:'ai', icon:'•', path:'/cdn-cgi/trace', method:'GET', expectedStatus:'200-399', responseContains:'', requireEgressIp:true, timeoutSeconds:7, retries:0, enabled:true, sortOrder:100 })
 // Changes with each release so browsers do not retain an old immutable chunk.
 const splitVerifierBuild = '20260829-rule-check-2'
 
 const groupLabels: Record<string,string> = { network:'网络', ai:'AI', social:'社交', content:'内容', finance:'金融', tools:'工具', developer:'开发', media:'媒体' }
+const matrixScenes = computed<string[]>(() => [...new Set<string>((matrixData.value.targets || []).map((item:any) => String(item.group || '')).filter(Boolean))])
+const matrixStat = (row:any, scene:string) => row.scenes?.[scene]
+const openMatrix = async () => {
+  matrixDrawer.value = true; matrixLoading.value = true
+  try { const { data } = await getNodeQualityMatrix(24); matrixData.value = data || { targets:[], nodes:[] } }
+  finally { matrixLoading.value = false }
+}
 const resetResults = () => { results.value = targets.value.filter(item => item.enabled !== false).map(item => ({ ...item, group:groupLabels[item.group] || item.group, status:'pending', ip:'', countryCode:'', rtt:-1, note:'' })) }
 const loadTargets = async () => {
   const { data } = await getEgressTargets()
@@ -180,7 +190,7 @@ onMounted(async () => {
   <div class="egress-page">
     <section class="hero-card">
       <div><span class="eyebrow">SPLIT ROUTING INSPECTOR</span><h1>订阅分流与出口检测</h1><p>选择订阅及其中的具体节点，服务端会通过该节点访问各目标并返回真实出口 IP。也可切换为本机模式，检查当前浏览器的分流规则。</p></div>
-      <div class="hero-actions"><el-switch v-model="hideIP" active-text="隐藏 IP" /><el-button @click="targetDrawer = true">检测目标</el-button><el-button type="primary" :loading="running" @click="runCurrent">开始检测</el-button></div>
+      <div class="hero-actions"><el-switch v-model="hideIP" active-text="隐藏 IP" /><el-button @click="openMatrix">质量矩阵</el-button><el-button @click="targetDrawer = true">检测目标</el-button><el-button type="primary" :loading="running" @click="runCurrent">开始检测</el-button></div>
     </section>
 
     <section class="source-card">
@@ -293,6 +303,22 @@ onMounted(async () => {
         <el-table-column label="操作" width="120"><template #default="{ row }"><el-button link type="primary" @click="editTarget(row)">编辑</el-button><el-button link type="danger" @click="removeTarget(row)">删除</el-button></template></el-table-column>
       </el-table>
     </el-drawer>
+    <el-drawer v-model="matrixDrawer" title="节点 × 场景质量矩阵（24h）" size="88%">
+      <el-alert type="info" :closable="false" title="真实目标检测会沉淀为矩阵样本；模板选节点优先使用具体目标历史，其次同场景历史，最后回退 TCP 总质量。" />
+      <el-table v-loading="matrixLoading" :data="matrixData.nodes || []" size="small" height="calc(100vh - 180px)" class="matrix-table">
+        <el-table-column prop="name" label="节点" fixed min-width="190" />
+        <el-table-column v-for="scene in matrixScenes" :key="scene" :label="groupLabels[scene] || scene" min-width="150">
+          <template #default="{ row }">
+            <div v-if="matrixStat(row, scene)?.sampleCount" class="matrix-cell">
+              <b>{{ matrixStat(row, scene).score }} 分</b>
+              <span>{{ matrixStat(row, scene).availability }}% · {{ matrixStat(row, scene).averageRtt >= 0 ? matrixStat(row, scene).averageRtt + 'ms' : '--' }}</span>
+              <small>{{ matrixStat(row, scene).sampleCount }} 样本 · 置信 {{ matrixStat(row, scene).confidence }}%</small>
+            </div>
+            <span v-else class="matrix-empty">暂无样本</span>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-drawer>
   </div>
 </template>
 
@@ -306,4 +332,5 @@ onMounted(async () => {
 .template-selectors{grid-template-columns:minmax(260px,420px) 1fr}.template-selectors :deep(.el-alert){margin:0}
 .explain-query{display:grid;grid-template-columns:2fr 1.4fr 150px 120px;gap:10px;margin-bottom:14px}.explain-flow{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:14px;margin-bottom:14px;border:1px solid var(--el-border-color-lighter);border-radius:12px;background:var(--el-fill-color-extra-light)}.explain-flow span{padding:6px 9px;border-radius:8px;background:var(--el-bg-color);font-size:12px}.explain-flow .selected{color:var(--el-color-success);font-weight:700}.explain-flow b{color:var(--el-text-color-placeholder)}.explain-meta{margin-bottom:14px}.subhead{display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px}.subhead small{color:var(--el-text-color-secondary)}@media(max-width:900px){.explain-query{grid-template-columns:1fr 1fr}}@media(max-width:600px){.explain-query{grid-template-columns:1fr}}
 .target-admin-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}.target-admin-actions{display:flex;justify-content:flex-end;gap:8px;margin-bottom:16px}.target-admin-table{margin-top:8px}@media(max-width:720px){.target-admin-form{grid-template-columns:1fr}}
+.matrix-table{margin-top:14px}.matrix-cell{display:flex;flex-direction:column;gap:2px}.matrix-cell b{font-size:13px}.matrix-cell span,.matrix-cell small,.matrix-empty{color:var(--el-text-color-secondary);font-size:10px}
 </style>

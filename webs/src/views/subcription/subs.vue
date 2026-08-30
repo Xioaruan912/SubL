@@ -1,6 +1,6 @@
 <script setup lang='ts'>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { getSubs, getSubPreviewNodes, previewSubPipeline, AddSub, DelSub, UpdateSub, ResetToken, SetExpire } from "@/api/subcription/subs"
+import { getSubs, getSubPreviewNodes, previewSubPipeline, startSubscriptionBuild, getSubscriptionArtifacts, rollbackSubscriptionArtifact, AddSub, DelSub, UpdateSub, ResetToken, SetExpire } from "@/api/subcription/subs"
 import { getTemp } from "@/api/subcription/temp"
 import { getNodes, getNodeOverview, GetGroupFull } from "@/api/subcription/node"
 import QrcodeVue from 'qrcode.vue'
@@ -105,10 +105,30 @@ const qrTitle = ref('')
 const qrDialog = ref(false)
 const templist = ref<Temp[]>([])
 const editingSubId = ref(0)
+const artifactDrawer = ref(false)
+const artifactLoading = ref(false)
+const artifactSub = ref<Sub | null>(null)
+const artifactClient = ref('clash')
+const artifactItems = ref<any[]>([])
+const artifactPointers = ref<any[]>([])
 const pipeline = reactive({ include: '', exclude: '', renamePattern: '', renameReplacement: '', protocols: [] as string[], sort: 'original', dedupe: true, maxNodes: 0 })
 const pipelinePreview = ref<any>(null)
 const pipelineLoading = ref(false)
 const pipelineJSON = () => JSON.stringify(pipeline)
+const buildSubscription = async (sub:Sub) => {
+  const client = await ElMessageBox.prompt('输入客户端：clash / surge / loon / v2ray', `构建 ${sub.Name}`, { inputValue:'clash', inputPattern:/^(clash|surge|loon|v2ray)$/i, inputErrorMessage:'仅支持 clash/surge/loon/v2ray' })
+  const { data } = await startSubscriptionBuild({ subscriptionId:sub.ID, client:client.value.toLowerCase() })
+  ElMessage.success(`构建任务已创建 #${data?.taskId || ''}，可在任务中心查看`)
+}
+const loadArtifacts = async () => {
+  if (!artifactSub.value) return
+  artifactLoading.value = true
+  try { const { data } = await getSubscriptionArtifacts(artifactSub.value.ID, artifactClient.value); artifactItems.value = data?.items || []; artifactPointers.value = data?.pointers || [] }
+  finally { artifactLoading.value = false }
+}
+const openArtifacts = async (sub:Sub) => { artifactSub.value = sub; artifactDrawer.value = true; await loadArtifacts() }
+const lkgId = computed(() => artifactPointers.value.find((p:any) => p.client === artifactClient.value)?.lastKnownGoodArtifactId || 0)
+const setLkg = async (artifact:any) => { await ElMessageBox.confirm(`将产物 #${artifact.id} 设为 ${artifactClient.value} 的 Last Known Good？`, '切换可用版本', { type:'warning' }); await rollbackSubscriptionArtifact(artifact.id); ElMessage.success('Last Known Good 已切换'); await loadArtifacts() }
 const resetPipeline = (raw = '') => {
   const value = { include: '', exclude: '', renamePattern: '', renameReplacement: '', protocols: [], sort: 'original', dedupe: true, maxNodes: 0 }
   try { Object.assign(value, JSON.parse(raw || '{}')) } catch { /* use defaults */ }
@@ -480,6 +500,8 @@ const saveExpire = async () => {
 
         <!-- 操作 -->
         <div class="card-actions">
+          <el-button link type="success" size="small" @click="buildSubscription(sub)">构建</el-button>
+          <el-button link type="primary" size="small" @click="openArtifacts(sub)">版本</el-button>
           <el-button link type="warning" size="small" @click="handleReset(sub)">重置链接</el-button>
           <el-button link type="primary" size="small" @click="openDrawer(sub)">详情</el-button>
           <el-button link type="primary" size="small" @click="handleEdit(sub)">编辑</el-button>
@@ -738,6 +760,18 @@ const saveExpire = async () => {
           <el-table-column prop="Date" label="最近时间" />
         </el-table>
       </div>
+    </el-drawer>
+    <el-drawer v-model="artifactDrawer" :title="`${artifactSub?.Name || ''} · 订阅产物版本`" size="820px">
+      <div class="artifact-toolbar"><el-select v-model="artifactClient" style="width:160px" @change="loadArtifacts"><el-option label="Clash" value="clash"/><el-option label="Surge" value="surge"/><el-option label="Loon" value="loon"/><el-option label="V2Ray" value="v2ray"/></el-select><el-tag type="success" effect="plain">LKG #{{ lkgId || '--' }}</el-tag><el-button :loading="artifactLoading" @click="loadArtifacts">刷新</el-button></div>
+      <el-alert type="info" :closable="false" title="产物内容不可变；这里只切换 Last Known Good 指针。实时订阅生成失败或校验失败时会自动回退到该版本。" />
+      <el-table v-loading="artifactLoading" :data="artifactItems" size="small" class="artifact-table">
+        <el-table-column prop="id" label="#" width="70" />
+        <el-table-column label="状态" width="130"><template #default="{row}"><el-tag :type="row.validationStatus === 'valid' ? 'success' : 'danger'" size="small">{{ row.validationStatus }}</el-tag><small class="artifact-test">{{ row.testStatus }}</small></template></el-table-column>
+        <el-table-column label="输入摘要" min-width="180"><template #default="{row}"><span class="mono">{{ row.inputDigest?.slice(0,12) }}</span><small>{{ row.templateName || '无模板' }}</small></template></el-table-column>
+        <el-table-column label="产物" min-width="170"><template #default="{row}"><span>{{ row.byteSize }} B</span><small class="mono">{{ row.contentChecksum?.slice(0,12) }}</small></template></el-table-column>
+        <el-table-column label="时间" min-width="160"><template #default="{row}">{{ new Date(row.createdAt).toLocaleString() }}</template></el-table-column>
+        <el-table-column label="操作" width="120"><template #default="{row}"><el-tag v-if="row.id === lkgId" type="success" size="small">当前 LKG</el-tag><el-button v-else-if="row.validationStatus === 'valid'" link type="primary" @click="setLkg(row)">设为 LKG</el-button></template></el-table-column>
+      </el-table>
     </el-drawer>
   </div>
 </template>

@@ -15,6 +15,7 @@ func Nodes(r *gin.Engine) {
 		NodesGroup.GET("/overview", api.NodeOverview)
 		NodesGroup.GET("/quality/history", api.NodeQualityHistory)
 		NodesGroup.GET("/quality/summary", api.NodeQualitySummary)
+		NodesGroup.GET("/quality/matrix", api.NodeQualityMatrix)
 		NodesGroup.GET("/health/events", api.NodeHealthEvents)
 		NodesGroup.GET("/recommendations", api.NodeRecommendations)
 		NodesGroup.GET("/alerts", api.GetAlertSetting)

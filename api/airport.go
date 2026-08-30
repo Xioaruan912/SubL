@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"time"
@@ -35,7 +36,7 @@ func AirportAdd(c *gin.Context) {
 		c.JSON(400, gin.H{"msg": "名称和URL不能为空"})
 		return
 	}
-	
+
 	now := time.Now()
 	a.LastSync = &now
 
@@ -57,19 +58,19 @@ func AirportUpdate(c *gin.Context) {
 		c.JSON(400, gin.H{"msg": "ID不能为空"})
 		return
 	}
-	
+
 	var existing models.Airport
 	existing.ID = a.ID
 	if err := existing.Find(); err != nil {
 		c.JSON(404, gin.H{"msg": "机场不存在"})
 		return
 	}
-	
+
 	existing.Name = a.Name
 	existing.URL = a.URL
 	existing.AutoCleanup = a.AutoCleanup
 	existing.IsDedicated = a.IsDedicated
-	
+
 	if err := existing.Update(); err != nil {
 		c.JSON(500, gin.H{"msg": "更新失败: " + err.Error()})
 		return
@@ -127,7 +128,7 @@ func AirportDelete(c *gin.Context) {
 			_ = models.DB.Delete(&gn).Error
 		}
 	}
-	
+
 	InvalidateOverview() // 刷新缓存
 
 	c.JSON(200, gin.H{"code": "00000", "msg": "删除成功"})
@@ -229,14 +230,27 @@ func AirportSync(c *gin.Context) {
 			return
 		}
 	}
-	
+
 	a := models.Airport{ID: body.ID}
 	if err := a.Find(); err != nil {
 		c.JSON(404, gin.H{"msg": "机场不存在"})
 		return
 	}
 
-	go SyncAirportNodeTask(a.ID)
+	task, taskCtx, taskErr := createTaskRun(context.Background(), "airport-sync", "机场同步 · "+a.Name, airportSyncTaskRequest{AirportID: a.ID}, nil)
+	if taskErr != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "创建任务记录失败: " + taskErr.Error()})
+		return
+	}
+	go func() {
+		updateTaskProgress(task.ID, 15, "正在拉取机场订阅")
+		err := SyncAirportNodeTask(a.ID)
+		if taskCtx.Err() == context.Canceled {
+			markTaskCancelled(task.ID)
+			return
+		}
+		finishTaskRun(task.ID, err, nil)
+	}()
 
-	c.JSON(200, gin.H{"code": "00000", "msg": "已在后台启动同步和测活任务，请稍后刷新查看最新数据。"})
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"taskId": task.ID}, "msg": "已在后台启动同步和测活任务，请在任务中心查看进度。"})
 }

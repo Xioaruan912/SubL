@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,12 +26,16 @@ type splitRule struct {
 	Index  int
 }
 type planNode struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	CountryCode string `json:"countryCode"`
-	Score       int    `json:"score"`
-	AverageRtt  int    `json:"averageRtt"`
-	Link        string `json:"-"`
+	ID            int     `json:"id"`
+	Name          string  `json:"name"`
+	CountryCode   string  `json:"countryCode"`
+	Score         int     `json:"score"`
+	AverageRtt    int     `json:"averageRtt"`
+	Availability  float64 `json:"availability"`
+	Confidence    int     `json:"confidence"`
+	QualitySource string  `json:"qualitySource"`
+	RankScore     int     `json:"rankScore"`
+	Link          string  `json:"-"`
 }
 type egressPlanItem struct {
 	Key             string                  `json:"key"`
@@ -259,7 +264,12 @@ func countryFromText(value string) string {
 	return ""
 }
 
-func choosePlanNode(nodes []models.Node, expected string, stats map[int]models.NodeQualityStats) ([]planNode, int) {
+type planQualityMatrix struct {
+	Targets map[int]map[string]models.TargetQualityStats
+	Scenes  map[int]map[string]models.TargetQualityStats
+}
+
+func choosePlanNode(nodes []models.Node, expected string, stats map[int]models.NodeQualityStats, matrix planQualityMatrix, targetKey, scene string) ([]planNode, int) {
 	all := make([]planNode, 0, len(nodes))
 	filtered := make([]planNode, 0, len(nodes))
 	for _, n := range nodes {
@@ -269,7 +279,21 @@ func choosePlanNode(nodes []models.Node, expected string, stats map[int]models.N
 			cc = strings.ToUpper(node.LookupCountry(host))
 		}
 		st := stats[n.ID]
-		item := planNode{ID: n.ID, Name: n.Name, CountryCode: cc, Score: st.Score, AverageRtt: st.AverageRtt, Link: n.Link}
+		score, averageRtt, availability, confidence, source := st.Score, st.AverageRtt, st.Availability, st.Confidence, "tcp"
+		if perNode := matrix.Targets[n.ID]; perNode != nil {
+			if targetStat, ok := perNode[targetKey]; ok && targetStat.SampleCount > 0 {
+				score, averageRtt, availability, confidence, source = targetStat.Score, targetStat.AverageRtt, targetStat.Availability, targetStat.Confidence, "target"
+			}
+		}
+		if source == "tcp" {
+			if perNode := matrix.Scenes[n.ID]; perNode != nil {
+				if sceneStat, ok := perNode[scene]; ok && sceneStat.SampleCount > 0 {
+					score, averageRtt, availability, confidence, source = sceneStat.Score, sceneStat.AverageRtt, sceneStat.Availability, sceneStat.Confidence, "scene"
+				}
+			}
+		}
+		rankScore := (score*8 + confidence*2) / 10
+		item := planNode{ID: n.ID, Name: n.Name, CountryCode: cc, Score: score, AverageRtt: averageRtt, Availability: availability, Confidence: confidence, QualitySource: source, RankScore: rankScore, Link: n.Link}
 		all = append(all, item)
 		if expected == "" || cc == expected {
 			filtered = append(filtered, item)
@@ -279,8 +303,11 @@ func choosePlanNode(nodes []models.Node, expected string, stats map[int]models.N
 		filtered = all
 	}
 	sort.SliceStable(filtered, func(i, j int) bool {
-		if filtered[i].Score != filtered[j].Score {
-			return filtered[i].Score > filtered[j].Score
+		if filtered[i].RankScore != filtered[j].RankScore {
+			return filtered[i].RankScore > filtered[j].RankScore
+		}
+		if filtered[i].Availability != filtered[j].Availability {
+			return filtered[i].Availability > filtered[j].Availability
 		}
 		if filtered[i].AverageRtt < 0 {
 			return false
@@ -290,7 +317,7 @@ func choosePlanNode(nodes []models.Node, expected string, stats map[int]models.N
 	return filtered, len(filtered)
 }
 
-func buildEgressPlan(ctx context.Context, sub *models.Subcription, templateName, content string, stats map[int]models.NodeQualityStats, targets []node.EgressTarget, run egressTestRunner) egressPlanResponse {
+func buildEgressPlan(ctx context.Context, sub *models.Subcription, templateName, content string, stats map[int]models.NodeQualityStats, matrix planQualityMatrix, targets []node.EgressTarget, run egressTestRunner) egressPlanResponse {
 	response := egressPlanResponse{
 		SubscriptionID:   sub.ID,
 		SubscriptionName: sub.Name,
@@ -313,7 +340,7 @@ func buildEgressPlan(ctx context.Context, sub *models.Subcription, templateName,
 		if len(rules) == 0 {
 			item.MatchedRule = "未读取模板，未应用模板规则"
 		}
-		candidates, count := choosePlanNode(sub.Nodes, item.ExpectedCountry, stats)
+		candidates, count := choosePlanNode(sub.Nodes, item.ExpectedCountry, stats, matrix, target.Key, target.Group)
 		item.CandidateCount = count
 		if len(candidates) == 0 {
 			response.Warnings = append(response.Warnings, target.Name+" 没有可用节点")
@@ -358,14 +385,38 @@ func buildEgressPlan(ctx context.Context, sub *models.Subcription, templateName,
 // a quality-ranked node for each AI destination and testing through it.
 func SubscriptionEgressPlan(c *gin.Context) {
 	id := c.Query("id")
-	var sub models.Subcription
-	if err := models.DB.First(&sub, id).Error; err != nil {
-		c.JSON(404, gin.H{"code": "40400", "msg": "订阅不存在"})
+	subID, parseErr := strconv.Atoi(id)
+	if parseErr != nil || subID <= 0 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "订阅 id 格式错误"})
 		return
 	}
-	if err := mergeGroupNodes(&sub); err != nil {
+	task, trackedCtx, taskErr := createTaskRun(c.Request.Context(), "subscription-egress", "订阅模板分流验证", subscriptionEgressTaskRequest{SubscriptionID: subID}, nil)
+	if taskErr != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "创建任务记录失败: " + taskErr.Error()})
+		return
+	}
+	updateTaskProgress(task.ID, 20, "正在解析模板并选择目标节点")
+	response, err := runSubscriptionEgressPlanTask(trackedCtx, subID)
+	if err != nil {
+		if trackedCtx.Err() == context.Canceled {
+			markTaskCancelled(task.ID)
+		} else {
+			finishTaskRun(task.ID, err, nil)
+		}
 		c.JSON(500, gin.H{"code": "50000", "msg": err.Error()})
 		return
+	}
+	finishTaskRun(task.ID, nil, response)
+	c.JSON(200, gin.H{"code": "00000", "data": response, "msg": "模板分流验证完成"})
+}
+
+func runSubscriptionEgressPlanTask(ctx context.Context, subID int) (egressPlanResponse, error) {
+	var sub models.Subcription
+	if err := models.DB.First(&sub, subID).Error; err != nil {
+		return egressPlanResponse{}, fmt.Errorf("订阅不存在: %w", err)
+	}
+	if err := mergeGroupNodes(&sub); err != nil {
+		return egressPlanResponse{}, err
 	}
 	filename, content, err := templateContent(&sub)
 	templateName := filename
@@ -375,12 +426,18 @@ func SubscriptionEgressPlan(c *gin.Context) {
 		templateName = "未读取到本地模板"
 	}
 	stats, _ := models.GetNodeQualityStats(time.Now().Add(-24 * time.Hour))
+	targetStats, _ := models.GetNodeTargetQualityStats(time.Now().Add(-24 * time.Hour))
+	sceneStats, _ := models.GetNodeSceneQualityStats(time.Now().Add(-24 * time.Hour))
 	targets, targetErr := enabledNodeEgressTargets()
 	if targetErr != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "读取分流检测目标失败: " + targetErr.Error()})
-		return
+		return egressPlanResponse{}, fmt.Errorf("读取分流检测目标失败: %w", targetErr)
 	}
-	response := buildEgressPlan(c.Request.Context(), &sub, templateName, content, stats, targets, node.RunEgressTestTargets)
+	response := buildEgressPlan(ctx, &sub, templateName, content, stats, planQualityMatrix{Targets: targetStats, Scenes: sceneStats}, targets, node.RunEgressTestTargets)
+	for _, item := range response.Items {
+		if item.SelectedNode != nil && item.Result != nil {
+			_ = recordEgressQuality(item.SelectedNode.ID, &node.EgressResult{Results: []node.EgressCheckResult{*item.Result}})
+		}
+	}
 	response.Warnings = append(initialWarnings, response.Warnings...)
-	c.JSON(200, gin.H{"code": "00000", "data": response, "msg": "模板分流验证完成"})
+	return response, nil
 }

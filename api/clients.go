@@ -142,16 +142,16 @@ func GetClient(c *gin.Context) {
 		// 判断是否带客户端参数
 		switch ClientIndex {
 		case "clash":
-			GetClash(c)
+			serveSubscriptionClient(c, sub.ID, "clash")
 			return
 		case "surge":
-			GetSurge(c)
+			serveSubscriptionClient(c, sub.ID, "surge")
 			return
 		case "loon":
-			GetLoon(c)
+			serveSubscriptionClient(c, sub.ID, "loon")
 			return
 		case "v2ray":
-			GetV2ray(c)
+			serveSubscriptionClient(c, sub.ID, "v2ray")
 			return
 		}
 		// 自动识别客户端
@@ -163,18 +163,18 @@ func GetClient(c *gin.Context) {
 						if strings.Contains(strings.ToLower(UserAgent), strings.ToLower(client)) {
 							switch client {
 							case "clash":
-								GetClash(c)
+								serveSubscriptionClient(c, sub.ID, "clash")
 								return
 							case "surge":
-								GetSurge(c)
+								serveSubscriptionClient(c, sub.ID, "surge")
 								return
 							case "loon":
-								GetLoon(c)
+								serveSubscriptionClient(c, sub.ID, "loon")
 								return
 							}
 						}
 					}
-					GetV2ray(c)
+					serveSubscriptionClient(c, sub.ID, "v2ray")
 				}
 			}
 		}
@@ -249,10 +249,8 @@ func GetClash(c *gin.Context) {
 
 	urls := []string{}
 
-	log.Println("订阅名:", sub.Nodes)
+	log.Printf("[Subscription] 构建 Clash 订阅: %s，节点数: %d\n", sub.Name, len(sub.Nodes))
 	for _, v := range sub.Nodes {
-		log.Println("节点信息:", v)
-		log.Println("节点链接:", v.Link)
 		switch {
 		// 如果包含多条节点
 		case strings.Contains(v.Link, ","):
@@ -276,7 +274,7 @@ func GetClash(c *gin.Context) {
 			urls = append(urls, v.Link)
 		}
 	}
-	log.Println("urls", urls)
+	log.Printf("[Subscription] Clash 转换输入节点数: %d\n", len(urls))
 	var configs node.SqlConfig
 	err = json.Unmarshal([]byte(sub.Config), &configs)
 	if err != nil {

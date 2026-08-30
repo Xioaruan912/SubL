@@ -1,15 +1,73 @@
 package api
 
 import (
+	"fmt"
 	"log"
 	"ppeelink/middlewares"
 	"ppeelink/models"
 	"ppeelink/utils"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 )
+
+type loginAttempt struct {
+	Failures     int
+	First        time.Time
+	BlockedUntil time.Time
+}
+
+var loginAttempts = struct {
+	sync.Mutex
+	Items map[string]loginAttempt
+}{Items: map[string]loginAttempt{}}
+
+const loginWindow = 10 * time.Minute
+const loginBlock = 15 * time.Minute
+const loginMaxFailures = 5
+
+func loginAttemptKey(c *gin.Context, username string) string {
+	return c.ClientIP() + "|" + strings.ToLower(strings.TrimSpace(username))
+}
+func loginBlocked(key string) (bool, time.Duration) {
+	loginAttempts.Lock()
+	defer loginAttempts.Unlock()
+	item, ok := loginAttempts.Items[key]
+	if !ok {
+		return false, 0
+	}
+	now := time.Now()
+	if !item.BlockedUntil.IsZero() && now.Before(item.BlockedUntil) {
+		return true, time.Until(item.BlockedUntil)
+	}
+	if now.Sub(item.First) > loginWindow {
+		delete(loginAttempts.Items, key)
+		return false, 0
+	}
+	return false, 0
+}
+func recordLoginFailure(key string) {
+	loginAttempts.Lock()
+	defer loginAttempts.Unlock()
+	now := time.Now()
+	item := loginAttempts.Items[key]
+	if item.First.IsZero() || now.Sub(item.First) > loginWindow {
+		item = loginAttempt{First: now}
+	}
+	item.Failures++
+	if item.Failures >= loginMaxFailures {
+		item.BlockedUntil = now.Add(loginBlock)
+	}
+	loginAttempts.Items[key] = item
+}
+func clearLoginFailures(key string) {
+	loginAttempts.Lock()
+	delete(loginAttempts.Items, key)
+	loginAttempts.Unlock()
+}
 
 // 获取token
 func GetToken(username string) (string, error) {
@@ -54,6 +112,11 @@ func UserLogin(c *gin.Context) {
 	password := c.PostForm("password")
 	captchaCode := c.PostForm("captchaCode")
 	captchaKey := c.PostForm("captchaKey")
+	attemptKey := loginAttemptKey(c, username)
+	if blocked, remaining := loginBlocked(attemptKey); blocked {
+		c.JSON(429, gin.H{"code": "42900", "msg": fmt.Sprintf("登录失败次数过多，请约 %d 分钟后重试", int(remaining.Minutes())+1)})
+		return
+	}
 	// 验证验证码
 	if !utils.VerifyCaptcha(captchaKey, captchaCode) {
 		log.Println("验证码错误")
@@ -65,12 +128,14 @@ func UserLogin(c *gin.Context) {
 	user := &models.User{Username: username, Password: password}
 	err := user.Verify()
 	if err != nil {
+		recordLoginFailure(attemptKey)
 		log.Println("账号或者密码错误")
 		c.JSON(400, gin.H{
 			"msg": "账号或者密码错误",
 		})
 		return
 	}
+	clearLoginFailures(attemptKey)
 	// 生成token
 	token, err := GetToken(username)
 	if err != nil {
