@@ -159,8 +159,9 @@ async function openImport(items: RuleItem[]) {
 async function submitImport() {
   if (!importForm.value.template || !importForm.value.policy.trim()) return;
   importLoading.value = true;
+  errorText.value = "";
   try {
-    await applyRulesToTemplate({
+    const res: any = await applyRulesToTemplate({
       ruleIds: importItems.value.map(i => i.externalId),
       template: importForm.value.template,
       policy: importForm.value.policy,
@@ -169,6 +170,10 @@ async function submitImport() {
       conflictPolicy: importForm.value.conflictPolicy,
       proxy: importForm.value.proxy,
     });
+    const importedCount = Array.isArray(res?.data?.results) ? res.data.results.length : importItems.value.length;
+    const warnings = Array.isArray(res?.data?.warnings) ? res.data.warnings : [];
+    ElMessage.success(`${res?.msg || "规则导入完成"}：${importedCount} 条规则已写入 ${importForm.value.template}`);
+    if (warnings.length) ElMessage.warning(`导入完成，但有 ${warnings.length} 条警告，请检查模板内容`);
     importOpen.value = false;
     selectedIds.value = [];
   } catch (e: any) {
