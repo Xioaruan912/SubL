@@ -1,8 +1,8 @@
 <div align="center">
-  <img src="webs/src/assets/logo.png" width="150" height="150" alt="SubLinkX Logo" />
-  <h1>SubLinkX</h1>
+  <img src="webs/src/assets/logo.png" width="150" height="150" alt="PPEELink Logo" />
+  <h1>PPEELink</h1>
   <p><strong>Proxy subscription management, routing diagnostics, node quality analytics, and safe publishing.</strong></p>
-  <p>SubLinkX does more than generate subscriptions: it explains how traffic will route, verifies whether nodes really work, checks client compatibility, and decides whether a configuration is safe to publish.</p>
+  <p>PPEELink does more than generate subscriptions: it explains how traffic will route, verifies whether nodes really work, checks client compatibility, and decides whether a configuration is safe to publish.</p>
 </div>
 
 <div align="center">
@@ -18,9 +18,9 @@
 
 ---
 
-## What SubLinkX Is
+## What PPEELink Is
 
-SubLinkX is built for self-hosted proxy nodes, airport subscriptions, and complex Clash/Mihomo routing templates. Its goal is to turn a traditional subscription converter into a configuration validation, debugging, publishing, and rollback platform.
+PPEELink is built for self-hosted proxy nodes, airport subscriptions, and complex Clash/Mihomo routing templates. Its goal is to turn a traditional subscription converter into a configuration validation, debugging, publishing, and rollback platform.
 
 Typical workflow:
 
@@ -48,7 +48,7 @@ Backend: **Go + Gin + GORM + SQLite**. Real node checks are powered by **sing-bo
 
 ### Safe Publish
 
-Select a subscription, template, and target client. SubLinkX builds a candidate configuration first and validates it before changing the live binding:
+Select a subscription, template, and target client. PPEELink builds a candidate configuration first and validates it before changing the live binding:
 
 - syntax and structure validation
 - proxy-group, node, rule, and provider reference checks
@@ -64,7 +64,7 @@ Failures keep the previous template binding and LKG intact.
 
 ### Routing Explainer
 
-Given a domain, IP, port, and TCP/UDP context, SubLinkX explains the first-match routing path:
+Given a domain, IP, port, and TCP/UDP context, PPEELink explains the first-match routing path:
 
 ```text
 gemini.google.com
@@ -81,7 +81,7 @@ Persistent routing regression cases can define expected policies, forbidden poli
 
 ### Node × Target Quality Matrix
 
-SubLinkX records quality as:
+PPEELink records quality as:
 
 ```text
 Node × Target × Scene × Success/Failure × RTT
@@ -130,7 +130,7 @@ Tasks expose progress, duration, errors, cancellation, retry, and history. Inter
 
 Background builds create immutable artifacts containing input/template/rule checksums, artifact SHA, validation reports, routing checks, and timestamps.
 
-Validated artifacts can become **Last Known Good**. If live generation or an external source fails, SubLinkX can fall back to a previously verified artifact.
+Validated artifacts can become **Last Known Good**. If live generation or an external source fails, PPEELink can fall back to a previously verified artifact.
 
 ### Configurable Egress Targets
 
@@ -154,7 +154,7 @@ Expected countries are never hardcoded into targets; region expectations are inf
 - hashed API Tokens with `read`, `write`, `admin` scopes and expiration
 - admin-only protection for high-risk publishing, deployment, restore, and audit operations
 - sensitive logging redaction
-- explicit trusted-proxy configuration through `SUBLINKX_TRUSTED_PROXIES`
+- explicit trusted-proxy IP / CIDR configuration when the service is placed behind a reverse proxy
 - audit logs without request bodies or credentials
 - sanitized configuration export
 - public `/status` page with aggregate availability and incident timeline, without exposing node addresses or secrets
@@ -168,24 +168,25 @@ Current generated outputs include:
 - Loon
 - V2Ray / Base64 universal node subscription
 
-Compatibility diagnostics cover more clients than the generated-output list, allowing SubLinkX to warn about whether the same nodes can be represented safely in sing-box or Quantumult X.
+Compatibility diagnostics cover more clients than the generated-output list, allowing PPEELink to warn about whether the same nodes can be represented safely in sing-box or Quantumult X.
 
 ## Node Testing Philosophy
 
-SubLinkX does not treat “TCP port reachable” as “node usable”. It tracks separate dimensions including TCP reachability, 24h/7d/30d availability, average/P95 latency, jitter, consecutive failures, unlock observations, target-specific proxy requests, and real egress information when available.
+PPEELink does not treat “TCP port reachable” as “node usable”. It tracks separate dimensions including TCP reachability, 24h/7d/30d availability, average/P95 latency, jitter, consecutive failures, unlock observations, target-specific proxy requests, and real egress information when available.
 
 ## Preview
 
-![SubLinkX Preview 1](webs/src/assets/1.png)
-![SubLinkX Preview 2](webs/src/assets/2.png)
+The repository's old `webs/src/assets/1.png` and `2.png` no longer represent the current interface, so they are intentionally not shown as current PPEELink screenshots.
 
-> Some screenshots may lag behind the latest UI. The running version is authoritative.
+The current console includes the dashboard and node map, node grouping and global hiding, TCP/unlock testing, routing diagnostics, the node × scenario quality matrix, template preflight/regression tooling, the rule center, safe publishing and LKG artifacts, persistent background tasks, operations/audit tooling, and a public status page.
+
+> New screenshots should only be added when they match the current UI.
 
 ## Linux Installation
 
 ### One-command source build
 
-SubLinkX is built with `with_utls` and `with_quic` for Reality, Hysteria2, TUIC, and related capabilities.
+PPEELink is built with `with_utls` and `with_quic` for Reality, Hysteria2, TUIC, and related capabilities.
 
 ```bash
 curl -s -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
@@ -219,18 +220,26 @@ Password: 123456
 
 ### Docker
 
-```bash
-docker build -t sublinkx .
+The multi-stage `Dockerfile` builds both the Vue frontend and Go backend. The runtime image uses `/app`, listens on `8000` by default, and persists `/app/db`, `/app/template`, and `/app/logs`.
 
-docker run --name sublinkx \
+```bash
+docker build -t ppeelink:latest .
+
+mkdir -p ./ppeelink-data/{db,template,logs}
+
+docker run -d \
+  --name ppeelink \
+  --restart unless-stopped \
   -p 8000:8000 \
-  -v $PWD/db:/app/db \
-  -v $PWD/template:/app/template \
-  -v $PWD/logs:/app/logs \
-  -d sublinkx
+  -v "$(pwd)/ppeelink-data/db:/app/db" \
+  -v "$(pwd)/ppeelink-data/template:/app/template" \
+  -v "$(pwd)/ppeelink-data/logs:/app/logs" \
+  ppeelink:latest
 ```
 
-Back up at least `db/` and `template/` before upgrades.
+Open `http://SERVER_IP:8000` after startup. Check runtime state with `docker ps --filter name=ppeelink` and `docker logs -f ppeelink`.
+
+Back up at least `ppeelink-data/db/` and `ppeelink-data/template/` before upgrades. If the internal application listen port is changed, update the Docker `-p` mapping as well.
 
 ## Development & Build
 
@@ -276,4 +285,4 @@ db/           Runtime SQLite/config/cache data
 
 ## Acknowledgements
 
-Thanks to [gooaclok819/sublinkX](https://github.com/gooaclok819/sublinkX) for the early project foundation and ideas. SubLinkX has since been continuously expanded and reworked around node-quality analytics, routing explanation, Rule Providers, persistent tasks, artifact rollback, safe publishing, security auditing, and operations.
+Thanks to [gooaclok819/sublinkX](https://github.com/gooaclok819/sublinkX) for the early project foundation and ideas. PPEELink has since been continuously expanded and reworked around node-quality analytics, routing explanation, Rule Providers, persistent tasks, artifact rollback, safe publishing, security auditing, and operations.

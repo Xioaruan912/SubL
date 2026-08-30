@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="webs/src/assets/logo.png" width="150" height="150" alt="SubLinkX Logo" />
-  <h1>SubLinkX</h1>
+  <img src="webs/src/assets/logo.png" width="150" height="150" alt="PPEELink Logo" />
+  <h1>PPEELink</h1>
   <p><strong>代理订阅管理、规则调试、节点质量分析与安全发布平台</strong></p>
   <p>不只是生成订阅，而是在发布前告诉你：配置会怎么走、节点能不能用、目标客户端是否兼容，以及这次修改是否值得上线。</p>
 </div>
@@ -20,7 +20,7 @@
 
 ## 项目定位
 
-SubLinkX 面向自建代理节点、机场订阅和复杂 Clash/Mihomo 分流模板，目标是把传统的“订阅转换面板”升级成一套可验证、可解释、可回滚的代理配置发布系统。
+PPEELink 面向自建代理节点、机场订阅和复杂 Clash/Mihomo 分流模板，目标是把传统的“订阅转换面板”升级成一套可验证、可解释、可回滚的代理配置发布系统。
 
 典型工作流：
 
@@ -86,7 +86,7 @@ gemini.google.com
 
 ### 3. 节点 × 测试目标质量矩阵
 
-节点不再只有一个笼统的总分。SubLinkX 会记录真实的：
+节点不再只有一个笼统的总分。PPEELink 会记录真实的：
 
 ```text
 节点 × 目标网站 × 场景 × 成功/失败 × RTT
@@ -194,7 +194,7 @@ gemini.google.com
 - API Token 仅保存 SHA-256 摘要，支持 `read` / `write` / `admin` 权限和有效期
 - 安全发布、系统部署、备份恢复、审计等高风险操作要求 admin scope
 - 节点链接、订阅源、密码、Token、Webhook 等敏感日志脱敏
-- 默认不信任任意反向代理；仅通过 `SUBLINKX_TRUSTED_PROXIES` 显式配置可信代理
+- 默认不信任任意反向代理；只有管理员显式配置可信代理 IP / CIDR 后才接受代理转发的客户端地址
 - 管理操作审计记录操作者、认证类型、IP、方法、路径、状态和时间，不保存请求体或敏感凭据
 - 安全配置导出默认排除密码、JWT Secret、API Token、订阅 Token、节点链接、机场 URL 和 Webhook
 - `/status` 提供不泄露节点地址的公开只读状态页和事故时间线
@@ -212,7 +212,7 @@ gemini.google.com
 
 ## 节点检测
 
-SubLinkX 不把“TCP 端口能连通”等同于“节点可用”。系统可以分别记录：
+PPEELink 不把“TCP 端口能连通”等同于“节点可用”。系统可以分别记录：
 
 - TCP 可达性与 RTT
 - 24h / 7d / 30d 可用率
@@ -225,16 +225,25 @@ SubLinkX 不把“TCP 端口能连通”等同于“节点可用”。系统可�
 
 ## 项目预览
 
-![SubLinkX Preview 1](webs/src/assets/1.png)
-![SubLinkX Preview 2](webs/src/assets/2.png)
+仓库原有的 `webs/src/assets/1.png`、`2.png` 已经是旧版界面，README 不再把它们作为当前项目截图展示。
 
-> 部分截图可能落后于最新 UI，以实际运行版本为准。
+当前 Web 控制台主要包括：
+
+- 首页节点地图、健康状态与场景推荐
+- 节点分组、质量详情、TCP / 解锁检测与全局隐藏
+- 分流检测、规则解释器与节点 × 场景质量矩阵
+- Clash / Surge / Loon 模板编辑、发布前预检与分流回归
+- 规则中心、Rule Provider 更新影响预览与回滚
+- 订阅产物版本、Last Known Good 与一键安全发布
+- 后台任务中心、运维中心、审计日志与公开状态页
+
+> 后续只加入与当前版本一致的新截图，避免继续展示已经失效的旧 UI。
 
 ## Linux 安装
 
 ### 一键安装（源码构建）
 
-SubLinkX 使用 `with_utls` 与 `with_quic` 编译标签，以支持 Reality、Hysteria2、TUIC 等能力。
+PPEELink 使用 `with_utls` 与 `with_quic` 编译标签，以支持 Reality、Hysteria2、TUIC 等能力。
 
 ```bash
 curl -s -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
@@ -268,20 +277,39 @@ ppeelink
 
 ### Docker
 
-仓库包含多阶段 `Dockerfile`：
+仓库包含多阶段 `Dockerfile`。构建阶段会编译 Vue 前端与 Go 后端；运行阶段工作目录为 `/app`，程序默认监听 `8000`，运行数据位于 `/app/db`、`/app/template`、`/app/logs`。
+
+推荐使用独立的数据目录运行：
 
 ```bash
-docker build -t sublinkx .
+docker build -t ppeelink:latest .
 
-docker run --name sublinkx \
+mkdir -p ./ppeelink-data/{db,template,logs}
+
+docker run -d \
+  --name ppeelink \
+  --restart unless-stopped \
   -p 8000:8000 \
-  -v $PWD/db:/app/db \
-  -v $PWD/template:/app/template \
-  -v $PWD/logs:/app/logs \
-  -d sublinkx
+  -v "$(pwd)/ppeelink-data/db:/app/db" \
+  -v "$(pwd)/ppeelink-data/template:/app/template" \
+  -v "$(pwd)/ppeelink-data/logs:/app/logs" \
+  ppeelink:latest
 ```
 
-升级前建议至少备份 `db/` 与 `template/`。
+启动后访问：
+
+```text
+http://服务器IP:8000
+```
+
+查看运行状态：
+
+```bash
+docker ps --filter name=ppeelink
+docker logs -f ppeelink
+```
+
+升级前至少备份 `ppeelink-data/db/` 与 `ppeelink-data/template/`。如果之后修改了程序内部监听端口，Docker 的 `-p` 映射也需要同步修改。
 
 ## 开发与构建
 
@@ -330,4 +358,4 @@ db/           SQLite、运行配置和规则缓存（运行时数据）
 
 ## 致谢
 
-感谢 [gooaclok819/sublinkX](https://github.com/gooaclok819/sublinkX) 早期项目提供的基础思路与代码参考。SubLinkX 在后续开发中围绕节点质量、规则解释、Rule Provider、任务中心、版本回滚、安全发布、安全审计与运维体系进行了持续扩展与重构。
+感谢 [gooaclok819/sublinkX](https://github.com/gooaclok819/sublinkX) 早期项目提供的基础思路与代码参考。PPEELink 在后续开发中围绕节点质量、规则解释、Rule Provider、任务中心、版本回滚、安全发布、安全审计与运维体系进行了持续扩展与重构。
