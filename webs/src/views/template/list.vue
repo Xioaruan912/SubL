@@ -95,11 +95,36 @@ const handleEdit = (row: Temp) => {
 }
 
 const editorLanguage = computed(() => /\.ya?ml$/i.test(Tempname.value) ? 'yaml' : 'ini')
+const loonOutline = (text: string) => {
+  const items: { key: string; line: number; level: number }[] = []
+  let inSection = false
+  text.split(/\r?\n/).forEach((raw, index) => {
+    const line = raw.trim()
+    if (!line || line.startsWith('#') || line.startsWith(';')) return
+    const section = line.match(/^\[([^\]]+)\]$/)
+    if (section) {
+      items.push({ key: `[${section[1].trim()}]`, line: index + 1, level: 0 })
+      inSection = true
+      return
+    }
+    if (!inSection) return
+    let key = ''
+    const eq = line.indexOf('=')
+    if (eq > 0) key = line.slice(0, eq).trim()
+    else {
+      const parts = line.split(',').map(v => v.trim())
+      if (parts.length >= 2 && parts[0] && parts[1]) key = `${parts[0]} · ${parts[1]}`
+      else key = line.split(/\s+/)[0] || ''
+    }
+    if (key) items.push({ key: key.length > 72 ? `${key.slice(0, 69)}...` : key, line: index + 1, level: 1 })
+  })
+  return items
+}
 const runValidation = async () => {
   validating.value = true
   try {
     const { data } = await ValidateTemp({ filename: Tempname.value, text: TempText.value })
-    outline.value = data?.outline || []
+    outline.value = /\.conf$/i.test(Tempname.value) ? loonOutline(TempText.value) : (data?.outline || [])
     validationErrors.value = data?.errors || []
     if (!validationErrors.value.length) ElMessage.success('模板语法校验通过')
   } finally { validating.value = false }
