@@ -1,0 +1,7 @@
+allowBuilds:
+  '@parcel/watcher': true
+  bufferutil: true
+  es5-ext: true
+  esbuild: true
+  utf-8-validate: true
+  vue-demi: true

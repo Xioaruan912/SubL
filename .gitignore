@@ -32,6 +32,6 @@ webs/dist/*
 webs/node_modules/
 
 # Tooling
-pnpm-workspace.yaml
+/pnpm-workspace.yaml
 coverage/
 *.log

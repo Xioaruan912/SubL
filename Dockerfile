@@ -1,7 +1,7 @@
-FROM node:22-alpine AS frontend
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
 WORKDIR /app/webs
 RUN corepack enable
-COPY webs/package.json webs/pnpm-lock.yaml ./
+COPY webs/package.json webs/pnpm-lock.yaml webs/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY webs/ ./
 RUN pnpm build
