@@ -240,6 +240,19 @@ const hideSelectedNodes = async () => {
   for (const id of ids) await SetNodeVisibility(id, true)
   clearCardSelect(); await loadAll(); ElMessage.success('选中节点已全局隐藏')
 }
+const hideTableSelectedNodes = async () => {
+  const ids = multipleSelection.value.map((item:any) => Number(item.id)).filter((id:number) => id > 0)
+  if (!ids.length) { ElMessage.warning('请选择要隐藏的节点'); return }
+  await ElMessageBox.confirm(`将选中的 ${ids.length} 个节点全局隐藏？节点数据不会删除，可在「分组 → 管理」中恢复。`, '隐藏节点', { type:'warning' })
+  for (const id of ids) await SetNodeVisibility(id, true)
+  await loadAll(); ElMessage.success('选中节点已全局隐藏')
+}
+const hideGroupByName = async (name:string) => {
+  const group = groupDetails.value.find(g => g.name === name)
+  if (!group) return
+  await ElMessageBox.confirm(`隐藏分组「${group.name}」后，该组节点会在 SubLinkX 全局隐藏，但数据仍保留。继续？`, '隐藏整个分组', { type:'warning' })
+  await toggleGroupHidden(group)
+}
 
 const triggerLocalPing = async () => {
   localTesting.value = true
@@ -412,7 +425,10 @@ onMounted(loadAll)
               @click="activeGroup = g.id"
             >
               <span class="truncate pr-2">{{ g.label }}</span>
-              <span class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full text-gray-600 dark:text-gray-300">{{ g.count }}</span>
+              <span class="group-tree-actions">
+                <el-button link type="warning" size="small" class="group-hide-btn" @click.stop="hideGroupByName(g.id)">隐藏</el-button>
+                <span class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full text-gray-600 dark:text-gray-300">{{ g.count }}</span>
+              </span>
             </div>
           </div>
         </div>
@@ -437,7 +453,7 @@ onMounted(loadAll)
               </el-button>
               <el-button size="small" @click="clearCardSelect" :disabled="!selectedCount">取消选择</el-button>
               <el-button v-if="activeGroup !== '全部'" size="small" type="warning" @click="cardSelectUnbind" :disabled="!selectedCount">移出分组</el-button>
-              <el-button v-if="activeGroup !== '全部'" size="small" @click="hideSelectedNodes" :disabled="!selectedCount">隐藏选中</el-button>
+              <el-button size="small" type="warning" plain @click="hideSelectedNodes" :disabled="!selectedCount">隐藏选中</el-button>
               <el-button v-if="activeGroup !== '全部'" size="small" type="warning" plain @click="hideActiveGroup">隐藏本组</el-button>
               <el-button size="small" type="danger" @click="cardSelectDel" :disabled="!selectedCount">删除选中({{ selectedCount }})</el-button>
             </template>
@@ -484,7 +500,7 @@ onMounted(loadAll)
                     <el-button link type="success" size="small" @click="openTcp(n)">链路TCP</el-button>
                     <el-button link type="primary" size="small" @click="handleEditNode(n)">编辑</el-button>
                     <el-button link type="primary" size="small" @click="copyInfo(n)">复制</el-button>
-                    <el-button v-if="activeGroup !== '全部'" link type="warning" size="small" @click="hideVisibleNode(n.id)">隐藏</el-button>
+                    <el-button link type="warning" size="small" @click="hideVisibleNode(n.id)">隐藏</el-button>
                     <el-button link type="danger" size="small" @click="handleDel(n)">删除</el-button>
                   </div>
                 </div>
@@ -528,10 +544,11 @@ onMounted(loadAll)
                   <span v-if="!(row.groups || []).length" class="muted">未分组</span>
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="180">
+              <el-table-column label="操作" width="230">
                 <template #default="{ row }">
                   <el-button link type="primary" size="small" @click="handleEditNode(row)">编辑</el-button>
                   <el-button link type="primary" size="small" @click="copyInfo(row)">复制</el-button>
+                  <el-button link type="warning" size="small" @click="hideVisibleNode(row.id)">隐藏</el-button>
                   <el-button link type="danger" size="small" @click="handleDel(row)">删除</el-button>
                 </template>
               </el-table-column>
@@ -540,6 +557,7 @@ onMounted(loadAll)
               <el-button size="small" @click="selectAll">全选</el-button>
               <el-button size="small" @click="selectClear">取消</el-button>
               <el-button size="small" type="primary" @click="selectCopy">复制选中</el-button>
+              <el-button size="small" type="warning" plain @click="hideTableSelectedNodes" :disabled="!multipleSelection.length">隐藏选中</el-button>
               <el-button size="small" type="danger" @click="selectDel">删除选中</el-button>
             </div>
           </template>
@@ -712,6 +730,7 @@ onMounted(loadAll)
 .group-filter-active { color:var(--ui-accent-strong); background:var(--ui-accent-soft); font-weight:700; box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ui-accent) 18%,transparent); }
 .group-filter-idle { color:var(--ui-text-secondary); transition:background 140ms ease,color 140ms ease,transform 140ms ease; }
 .group-filter-idle:hover { color:var(--ui-text); background:var(--ui-hover); transform:translateX(2px); }
+.group-tree-actions{display:flex;align-items:center;gap:5px;flex-shrink:0}.group-hide-btn{font-size:11px;padding:0 2px!important}
 .node-card-actions { flex-wrap: wrap; row-gap: 2px; margin-top: 8px; min-width: 0; }
 .node-card-actions .el-button { margin-left: 0 !important; padding: 3px 5px; }
 .quality-strip { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:var(--el-text-color-secondary); font-size:11px; }
