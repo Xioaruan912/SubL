@@ -161,6 +161,14 @@ func executeStoredTask(task *models.TaskRun) {
 	case "system-deploy":
 		updateTaskProgress(task.ID, 10, "正在执行管理员预配置的发布脚本")
 		result, err = runConfiguredDeployTask(ctx)
+	case "quality-matrix-sample":
+		var req qualityMatrixSampleRequest
+		err = json.Unmarshal([]byte(task.RequestJSON), &req)
+		if err == nil {
+			result, err = collectQualityMatrixSamples(ctx, req.Mode, func(p int, message string) {
+				updateTaskProgress(task.ID, p, message)
+			})
+		}
 	default:
 		err = fmt.Errorf("任务类型不支持重试: %s", task.Type)
 	}
@@ -261,6 +269,19 @@ func StartSafePublishTask(c *gin.Context) {
 
 func StartSystemDeployTask(c *gin.Context) {
 	startTrackedTask(c, "system-deploy", "GitHub/VPS 发布", systemDeployTaskRequest{})
+}
+
+func StartQualityMatrixSampleTask(c *gin.Context) {
+	mode := strings.ToLower(strings.TrimSpace(c.DefaultQuery("mode", "scene")))
+	if mode != "scene" && mode != "full" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "mode 仅支持 scene/full"})
+		return
+	}
+	name := "质量矩阵场景采样"
+	if mode == "full" {
+		name = "质量矩阵完整采样"
+	}
+	startTrackedTask(c, "quality-matrix-sample", name, qualityMatrixSampleRequest{Mode: mode})
 }
 
 func buildSubscriptionOutput(subscriptionID int, client string) ([]byte, error) {

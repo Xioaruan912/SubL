@@ -48,7 +48,18 @@ func StartCronTasks() {
 		return
 	}
 
+	_, err = c.AddFunc("0 20 */6 * * *", func() {
+		if err := api.RunScheduledQualityMatrixSample(); err != nil {
+			log.Println("[Cron] 质量矩阵场景采样失败:", err)
+		}
+	})
+	if err != nil {
+		log.Println("[Cron] 添加质量矩阵采样任务失败:", err)
+		return
+	}
+
 	c.Start()
+	api.EnsureInitialQualityMatrixSample()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
@@ -56,5 +67,5 @@ func StartCronTasks() {
 			log.Println("[RuleCenter] 启动同步失败，保留现有缓存:", err)
 		}
 	}()
-	log.Println("[Cron] 机场每日同步、规则中心每日同步与节点每10分钟质量检测已启动")
+	log.Println("[Cron] 机场/规则同步、节点每10分钟 TCP 质量与每6小时目标场景采样已启动")
 }

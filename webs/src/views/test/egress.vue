@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { countryFlag } from '@/utils/flag'
 import { getSubs, getSubPreviewNodes, subscriptionEgressPlan, subscriptionRuleExplain } from '@/api/subcription/subs'
 import { EgressTest, deleteEgressTarget, getEgressTargets, getNodeOverview, getNodeQualityMatrix, saveEgressTarget } from '@/api/subcription/node'
+import { startQualityMatrixSample } from '@/api/task'
 
 defineOptions({ name: 'EgressTest' })
 
@@ -35,6 +36,7 @@ const explainResult = ref<any | null>(null)
 const targetDrawer = ref(false)
 const matrixDrawer = ref(false)
 const matrixLoading = ref(false)
+const matrixSampling = ref(false)
 const matrixData = ref<any>({ targets:[], nodes:[] })
 const targetSaving = ref(false)
 const targetForm = ref<Target>({ key:'', name:'', domain:'', group:'ai', icon:'•', path:'/cdn-cgi/trace', method:'GET', expectedStatus:'200-399', responseContains:'', requireEgressIp:true, timeoutSeconds:7, retries:0, enabled:true, sortOrder:100 })
@@ -48,6 +50,15 @@ const openMatrix = async () => {
   matrixDrawer.value = true; matrixLoading.value = true
   try { const { data } = await getNodeQualityMatrix(24); matrixData.value = data || { targets:[], nodes:[] } }
   finally { matrixLoading.value = false }
+}
+const sampleMatrix = async (mode:'scene'|'full') => {
+  if (matrixSampling.value) return
+  if (mode === 'full') await ElMessageBox.confirm('完整采样会对每个当前在线节点检测全部启用目标，耗时和网络请求都明显高于场景采样。继续？','完整质量采样',{type:'warning'})
+  matrixSampling.value = true
+  try {
+    const { data } = await startQualityMatrixSample(mode)
+    ElMessage.success(`采样任务已创建 #${data?.taskId || ''}，可在任务中心查看进度`)
+  } finally { matrixSampling.value = false }
 }
 const resetResults = () => { results.value = targets.value.filter(item => item.enabled !== false).map(item => ({ ...item, group:groupLabels[item.group] || item.group, status:'pending', ip:'', countryCode:'', rtt:-1, note:'' })) }
 const loadTargets = async () => {
@@ -305,6 +316,7 @@ onMounted(async () => {
     </el-drawer>
     <el-drawer v-model="matrixDrawer" title="节点 × 场景质量矩阵（24h）" size="88%">
       <el-alert type="info" :closable="false" title="真实目标检测会沉淀为矩阵样本；模板选节点优先使用具体目标历史，其次同场景历史，最后回退 TCP 总质量。" />
+      <div class="matrix-actions"><span>自动：每 6 小时对在线节点轮换采样每个场景的代表目标。</span><el-button :loading="matrixSampling" @click="sampleMatrix('scene')">立即场景采样</el-button><el-button :loading="matrixSampling" @click="sampleMatrix('full')">完整采样 16 个目标</el-button><el-button @click="openMatrix">刷新矩阵</el-button></div>
       <el-table v-loading="matrixLoading" :data="matrixData.nodes || []" size="small" height="calc(100vh - 180px)" class="matrix-table">
         <el-table-column prop="name" label="节点" fixed min-width="190" />
         <el-table-column v-for="scene in matrixScenes" :key="scene" :label="groupLabels[scene] || scene" min-width="150">
@@ -333,4 +345,5 @@ onMounted(async () => {
 .explain-query{display:grid;grid-template-columns:2fr 1.4fr 150px 120px;gap:10px;margin-bottom:14px}.explain-flow{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:14px;margin-bottom:14px;border:1px solid var(--el-border-color-lighter);border-radius:12px;background:var(--el-fill-color-extra-light)}.explain-flow span{padding:6px 9px;border-radius:8px;background:var(--el-bg-color);font-size:12px}.explain-flow .selected{color:var(--el-color-success);font-weight:700}.explain-flow b{color:var(--el-text-color-placeholder)}.explain-meta{margin-bottom:14px}.subhead{display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px}.subhead small{color:var(--el-text-color-secondary)}@media(max-width:900px){.explain-query{grid-template-columns:1fr 1fr}}@media(max-width:600px){.explain-query{grid-template-columns:1fr}}
 .target-admin-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}.target-admin-actions{display:flex;justify-content:flex-end;gap:8px;margin-bottom:16px}.target-admin-table{margin-top:8px}@media(max-width:720px){.target-admin-form{grid-template-columns:1fr}}
 .matrix-table{margin-top:14px}.matrix-cell{display:flex;flex-direction:column;gap:2px}.matrix-cell b{font-size:13px}.matrix-cell span,.matrix-cell small,.matrix-empty{color:var(--el-text-color-secondary);font-size:10px}
+.matrix-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:12px}.matrix-actions span{margin-right:auto;color:var(--el-text-color-secondary);font-size:11px}
 </style>
