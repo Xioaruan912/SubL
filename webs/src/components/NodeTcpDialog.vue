@@ -257,7 +257,7 @@ const startTest = async () => {
   try {
     const res = await fetch(import.meta.env.VITE_APP_BASE_API + "/api/v1/nodes/chinaping/stream", {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: "Bearer " + getToken() },
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: getToken() },
       body: payload.toString(),
       signal: abortCtrl.value.signal,
     });
