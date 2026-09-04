@@ -18,7 +18,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-//go:embed webs/dist/*
+// Include Vite-generated assets whose names may begin with "_" or ".".
+// The default embed matcher excludes those files when walking directories,
+// which can otherwise produce runtime 404s for chunks such as
+// _plugin-vue_export-helper.*.js.
+//go:embed all:webs/dist/*
 var embeddedFiles embed.FS
 
 //go:embed template
