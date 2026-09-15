@@ -3,12 +3,16 @@ package api
 import (
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"ppeelink/client"
 	"ppeelink/models"
+	"ppeelink/utils"
 
 	"github.com/gin-gonic/gin"
 )
+
+var clientCheckRunning atomic.Bool
 
 // ClientList 返回客户端下载中心列表
 // GET /api/v1/clients/list
@@ -27,8 +31,14 @@ func ClientList(c *gin.Context) {
 // ClientCheck 手动触发检查更新
 // POST /api/v1/clients/check
 func ClientCheck(c *gin.Context) {
+	if !clientCheckRunning.CompareAndSwap(false, true) {
+		c.JSON(200, gin.H{"code": "00000", "msg": "检查更新正在进行中"})
+		return
+	}
 	// 后台异步执行，避免请求阻塞（下载可能耗时长）
 	go func() {
+		defer clientCheckRunning.Store(false)
+		defer utils.RecoverPanic("client-check")
 		_ = client.CheckAll()
 	}()
 	c.JSON(200, gin.H{"code": "00000", "msg": "检查更新已启动"})

@@ -359,7 +359,7 @@ func NodeAdd(c *gin.Context) {
 		Name: name,
 		Link: link,
 	}
-	if link == "" && !strings.Contains(link, "://") {
+	if link == "" || !strings.Contains(link, "://") {
 		c.JSON(400, gin.H{
 			"msg": "link不能为空或者格式不正确,请检查链接是否包含协议头,例如 http:// 或 https://",
 		})

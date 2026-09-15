@@ -21,11 +21,12 @@ import (
 	"gorm.io/gorm"
 	"ppeelink/models"
 	"ppeelink/node"
+	"ppeelink/utils"
 )
 
 const cacheRoot = "db/rules-cache"
 
-var httpClient = &http.Client{Timeout: 12 * time.Second}
+var httpClient = utils.SafeHTTPClient(12 * time.Second)
 var syncMu sync.Mutex
 var warmRunning sync.Map
 

@@ -7,6 +7,7 @@ import (
 
 	"ppeelink/models"
 	"ppeelink/node"
+	"ppeelink/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -91,6 +92,7 @@ func CollectNodeQuality() ([]NodeOverviewItem, error) {
 		wg.Add(1)
 		go func(i int, n models.Node) {
 			defer wg.Done()
+			defer utils.RecoverPanic("node-overview")
 			item := NodeOverviewItem{
 				ID: n.ID, Name: n.Name, Link: n.Link,
 				Rtt:    -1,

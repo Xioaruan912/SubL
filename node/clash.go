@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"regexp"
 	"strconv"
@@ -356,7 +355,7 @@ func DecodeClash(proxys []Proxy, yamlfile string) ([]byte, error) {
 	var data []byte
 	var err error
 	if strings.Contains(yamlfile, "://") {
-		resp, err := http.Get(yamlfile)
+		resp, err := remoteFetchClient.Get(yamlfile)
 		if err != nil {
 			log.Println("http.Get error", err)
 			return nil, err

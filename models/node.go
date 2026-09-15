@@ -49,9 +49,8 @@ func (gn *GroupNode) Add() error {
 		return result.Error // 如果查询出错，返回错误
 	}
 	if result.RowsAffected > 0 { // 如果查询到分组已存在
-		// log.Println("分组已存在")
-		return nil // 不返回错误存在就跳过
-
+		*gn = existingGroup // 回填已存在的分组信息（含 ID）
+		return nil
 	}
 	return DB.FirstOrCreate(gn, GroupNode{Name: gn.Name}).Error
 }
@@ -85,17 +84,13 @@ func (n *Node) UnbindGroup(groupName string) error {
 
 // 更新分组信息
 func (gn *GroupNode) Update(NewGn *GroupNode) error {
-	// 读取分组数据
-	var FirstGn GroupNode
-	result := DB.Model(gn).Where("id = ? or name = ?", NewGn.ID, NewGn.Name).First(&FirstGn)
-	if result.Error != nil {
-		log.Println(result.Error)
-		return result.Error
-	}
-	if result.RowsAffected > 0 {
+	// 仅当其它分组已占用新名称时才拒绝
+	var existed GroupNode
+	result := DB.Where("name = ? AND id <> ?", NewGn.Name, gn.ID).First(&existed)
+	if result.Error == nil && existed.ID != 0 {
 		return errors.New("分组已存在")
 	}
-	return DB.Model(gn).Where("id = ? or name = ?", gn.ID, gn.Name).Updates(&NewGn).Error
+	return DB.Model(gn).Where("id = ?", gn.ID).Updates(map[string]any{"name": NewGn.Name, "hidden": NewGn.Hidden}).Error
 }
 
 // 删除分组

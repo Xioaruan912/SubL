@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"ppeelink/utils"
 	"strings"
 	"sync"
 	"time"
@@ -217,6 +218,7 @@ func runEgressTest(ctx context.Context, link string, timeout time.Duration, targ
 		wg.Add(1)
 		go func(index int, target EgressTarget) {
 			defer wg.Done()
+			defer utils.RecoverPanic("egress-test")
 			select {
 			case sem <- struct{}{}:
 			case <-ctx.Done():

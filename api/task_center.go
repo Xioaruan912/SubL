@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -98,6 +100,12 @@ func executeStoredTask(task *models.TaskRun) {
 	ctx, cancel := context.WithCancel(context.Background())
 	taskCancels.Store(task.ID, cancel)
 	defer cancel()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[panic] task %d(%s): %v\n%s", task.ID, task.Type, r, debug.Stack())
+			finishTaskRun(task.ID, fmt.Errorf("任务异常中断: %v", r), nil)
+		}
+	}()
 	now := time.Now()
 	_ = models.DB.Model(task).Updates(map[string]any{"status": "running", "progress": 5, "started_at": &now, "message": "正在执行"}).Error
 	var result any

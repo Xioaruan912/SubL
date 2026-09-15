@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 	"ppeelink/models"
 	"ppeelink/node"
+	"ppeelink/utils"
 )
 
 type safePublishRequest struct {
@@ -91,7 +92,7 @@ func subscriptionURLsForPublish(ctx context.Context, sub *models.Subcription) ([
 		return nil, err
 	}
 	urls := []string{}
-	client := &http.Client{Timeout: 20 * time.Second}
+	client := utils.SafeHTTPClient(20 * time.Second)
 	for _, item := range sub.Nodes {
 		link := strings.TrimSpace(item.Link)
 		if link == "" {

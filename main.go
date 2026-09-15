@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net/http"
 	"os"
 	"ppeelink/client"
 	"ppeelink/middlewares"
@@ -104,7 +105,6 @@ func main() {
 	// 解析setting命令标志
 	case "setting":
 		settingCmd.Parse(args[2:])
-		fmt.Println(username, password)
 		settings.ResetUser(username, password)
 		return
 	case "run":
@@ -120,6 +120,8 @@ func main() {
 }
 
 func Run(port int) {
+	// 加载 JWT 密钥（必须在配置初始化之后，避免读到空密钥）
+	middlewares.InitSecret()
 	// 初始化gin框架
 	r := gin.Default()
 	// Do not trust arbitrary X-Forwarded-For by default. Operators behind a
@@ -147,6 +149,18 @@ func Run(port int) {
 		log.Println(err)
 	}
 	r.Any("/static/*filepath", middlewares.StaticFS(staticFiles))
+	// 站点图标与根路径 HEAD 探测（避免浏览器/监控产生 400/404 噪声）
+	r.GET("/favicon.ico", func(c *gin.Context) {
+		data, err := fs.ReadFile(staticFiles, "favicon.ico")
+		if err != nil {
+			c.Status(http.StatusNoContent)
+			return
+		}
+		c.Data(http.StatusOK, "image/x-icon", data)
+	})
+	r.HEAD("/", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
 	// 设置模板路径
 	r.GET("/", func(c *gin.Context) {
 		data, err := fs.ReadFile(staticFiles, "index.html")

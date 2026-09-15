@@ -96,7 +96,11 @@ func DecodeTrojanURL(s string) (Trojan, error) {
 	// 有些情况是 trojan://[Base64]
 	u, err := url.Parse(s)
 	if err != nil || u.Host == "" {
-		s = "trojan://" + Base64Decode(strings.Split(s, "://")[1])
+		parts := strings.SplitN(s, "://", 2)
+		if len(parts) != 2 {
+			return Trojan{}, fmt.Errorf("非trojan协议: %s", s)
+		}
+		s = "trojan://" + Base64Decode(parts[1])
 		u, err = url.Parse(s)
 		if err != nil {
 			return Trojan{}, fmt.Errorf("url parse error: %v", err)

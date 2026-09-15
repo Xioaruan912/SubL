@@ -9,6 +9,7 @@ import (
 
 	"ppeelink/models"
 	"ppeelink/node"
+	"ppeelink/utils"
 )
 
 type qualityMatrixSampleRequest struct {
@@ -110,6 +111,7 @@ func collectQualityMatrixSamples(ctx context.Context, mode string, progress func
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer utils.RecoverPanic("quality-matrix-worker")
 			for item := range jobs {
 				if ctx.Err() != nil {
 					return
@@ -141,6 +143,7 @@ func collectQualityMatrixSamples(ctx context.Context, mode string, progress func
 		}()
 	}
 	go func() {
+		defer utils.RecoverPanic("quality-matrix-feed")
 		defer close(jobs)
 		for _, item := range online {
 			select {
@@ -150,7 +153,7 @@ func collectQualityMatrixSamples(ctx context.Context, mode string, progress func
 			}
 		}
 	}()
-	go func() { wg.Wait(); close(outcomes) }()
+	go func() { defer utils.RecoverPanic("quality-matrix-wait"); wg.Wait(); close(outcomes) }()
 	done := 0
 	for o := range outcomes {
 		done++
@@ -186,6 +189,7 @@ func EnsureInitialQualityMatrixSample() {
 		return
 	}
 	go func() {
+		defer utils.RecoverPanic("quality-matrix-initial")
 		time.Sleep(15 * time.Second)
 		_ = RunScheduledQualityMatrixSample()
 	}()

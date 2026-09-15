@@ -2,6 +2,7 @@ package node
 
 import (
 	"net"
+	"ppeelink/utils"
 	"sync"
 	"time"
 )
@@ -42,6 +43,7 @@ func MultiTCPPing(addrs []PingTarget, timeout time.Duration) []PingResult {
 		wg.Add(1)
 		go func(i int, t PingTarget) {
 			defer wg.Done()
+			defer utils.RecoverPanic("multi-tcp-ping")
 			rtt := TCPPing(t.Addr, timeout)
 			results[i] = PingResult{Target: t, Ok: rtt >= 0}
 			if rtt >= 0 {

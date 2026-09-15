@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"regexp"
 	"strings"
@@ -139,7 +138,7 @@ func DecodeSurge(proxys, groups []string, file string) (string, error) {
 	var surge []byte
 	var err error
 	if strings.Contains(file, "://") {
-		resp, err := http.Get(file)
+		resp, err := remoteFetchClient.Get(file)
 		if err != nil {
 			log.Println("http.Get error", err)
 			return "", err

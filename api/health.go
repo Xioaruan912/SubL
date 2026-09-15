@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ppeelink/models"
+	"ppeelink/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -43,6 +44,7 @@ func notifyHealthEvent(setting models.AlertSetting, event models.NodeHealthEvent
 	}
 	payload, _ := json.Marshal(map[string]interface{}{"event": event.Type, "node": event.NodeName, "message": event.Message, "time": event.CreatedAt})
 	go func() {
+		defer utils.RecoverPanic("health-webhook")
 		req, err := http.NewRequest("POST", setting.WebhookURL, bytes.NewReader(payload))
 		if err != nil {
 			return
@@ -62,7 +64,7 @@ func processNodeHealthEvents(items []NodeOverviewItem) {
 		var recent []models.NodeQualitySample
 		models.DB.Where("node_id = ?", item.ID).Order("checked_at desc").Limit(setting.FailureThreshold).Find(&recent)
 		var last models.NodeHealthEvent
-		models.DB.Where("node_id = ?", item.ID).Order("id desc").First(&last)
+		models.DB.Where("node_id = ?", item.ID).Order("id desc").Limit(1).Find(&last)
 		allFailed := len(recent) >= setting.FailureThreshold
 		for _, sample := range recent {
 			if sample.Success {

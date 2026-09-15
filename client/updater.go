@@ -13,7 +13,11 @@ import (
 	"time"
 
 	"ppeelink/models"
+	"ppeelink/utils"
 )
+
+// clientDownloadClient 用于下载客户端安装包，带超时与出站防护。
+var clientDownloadClient = utils.SafeHTTPClient(30 * time.Minute)
 
 // ClientPlatform 单平台定义
 type ClientPlatform struct {
@@ -171,12 +175,17 @@ func checkPlatform(src ClientSource, plat ClientPlatform, rel *ghRelease) {
 
 	// 落库
 	fileName := fmt.Sprintf("%s_%s.%s", src.Name, plat.Key, extOf(assetName))
-	_ = os.Rename(filepath.Join(downloadDir, tmpName(src.Name, plat.Key)), filepath.Join(downloadDir, fileName))
+	if err := os.Rename(filepath.Join(downloadDir, tmpName(src.Name, plat.Key)), filepath.Join(downloadDir, fileName)); err != nil {
+		_ = rec.SetStatus("failed", "重命名失败: "+err.Error())
+		return
+	}
 	rec2 := &models.ClientVersion{
 		Client: src.Name, Platform: plat.Key, Version: rel.TagName,
 		FileName: fileName, Size: assetSize, Status: "ready", UpdatedAt: time.Now().Unix(),
 	}
-	_ = rec2.Save()
+	if err := rec2.Save(); err != nil {
+		log.Printf("[client] 记录版本失败: %v", err)
+	}
 	// 清理同客户端同平台的其它旧文件
 	cleanOld(src.Name, plat.Key, fileName)
 	log.Printf("[client] %s %s 更新到 %s (%dMB)", src.Name, plat.Key, rel.TagName, assetSize/1024/1024)
@@ -184,7 +193,7 @@ func checkPlatform(src ClientSource, plat ClientPlatform, rel *ghRelease) {
 
 // download 下载到临时文件（支持 302 重定向，流式写入）
 func download(name, platform, url string, size int64) error {
-	resp, err := http.Get(url)
+	resp, err := clientDownloadClient.Get(url)
 	if err != nil {
 		return fmt.Errorf("下载失败: %v", err)
 	}
@@ -263,6 +272,7 @@ func CheckAll() error {
 // Start 启动定时检查：启动立即执行 + 每 24h
 func Start() {
 	go func() {
+		defer utils.RecoverPanic("client-updater")
 		// 延迟 5s 等数据库就绪
 		time.Sleep(5 * time.Second)
 		_ = CheckAll()
@@ -274,7 +284,11 @@ func Start() {
 }
 
 // LastChecked 上次检查时间
-func LastChecked() time.Time { return lastChecked }
+func LastChecked() time.Time {
+	mu.Lock()
+	defer mu.Unlock()
+	return lastChecked
+}
 
 // StatusList 返回前端列表数据
 func StatusList() []map[string]any {

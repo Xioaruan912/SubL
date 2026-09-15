@@ -25,17 +25,21 @@ service.interceptors.request.use(
 // 响应拦截器
 service.interceptors.response.use(
   (response: AxiosResponse) => {
-    const { code, msg } = response.data;
-    if (code === "00000") {
-      return response.data;
-    }
-    // 响应数据为二进制流处理(Excel导出)
-    if (response.data instanceof ArrayBuffer) {
+    const data = response.data;
+    // 二进制流（下载/导出）直接返回
+    if (data instanceof ArrayBuffer || data instanceof Blob) {
       return response;
     }
-
-    ElMessage.error(msg || "系统出错");
-    return Promise.reject(new Error(msg || "Error"));
+    // 后端约定：带 code 的响应以 "00000" 为成功
+    if (data && typeof data === "object" && "code" in data) {
+      if (data.code === "00000") {
+        return data;
+      }
+      ElMessage.error(data.msg || "系统出错");
+      return Promise.reject(new Error(data.msg || "Error"));
+    }
+    // 无 code 字段的 2xx 响应按成功处理
+    return data;
   },
   (error: any) => {
     if (error.response.data) {

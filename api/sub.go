@@ -12,6 +12,7 @@ import (
 
 	"ppeelink/models"
 	"ppeelink/node"
+	"ppeelink/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,7 +22,7 @@ import (
 // longer prevents a subscription from being refreshed.
 func fetchSubscriptionSource(raw string) ([]byte, string, error) {
 	parts := strings.FieldsFunc(raw, func(r rune) bool { return r == '\n' || r == ',' })
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := utils.SafeHTTPClient(15 * time.Second)
 	var lastErr error
 	for _, source := range parts {
 		source = strings.TrimSpace(source)

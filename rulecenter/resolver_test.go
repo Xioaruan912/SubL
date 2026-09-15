@@ -62,6 +62,7 @@ func TestResolveProviderRulesLocalFileAndPathSafety(t *testing.T) {
 }
 
 func TestResolveProviderRulesRemoteCacheFallback(t *testing.T) {
+	t.Setenv("SUBLINKX_ALLOW_PRIVATE_FETCH", "1")
 	setupResolverTestDir(t)
 	setupEmptyRuleDB(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -80,6 +81,7 @@ func TestResolveProviderRulesRemoteCacheFallback(t *testing.T) {
 }
 
 func TestResolveProviderRulesHonorsContextTimeout(t *testing.T) {
+	t.Setenv("SUBLINKX_ALLOW_PRIVATE_FETCH", "1")
 	setupResolverTestDir(t)
 	setupEmptyRuleDB(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

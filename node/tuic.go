@@ -20,6 +20,34 @@ type Tuic struct {
 	Disable_sni        int
 }
 
+// Tuic 编码
+func EncodeTuicURL(t Tuic) string {
+	if t.Name == "" {
+		t.Name = fmt.Sprintf("%s:%d", t.Host, t.Port)
+	}
+	u := url.URL{
+		Scheme:   "tuic",
+		User:     url.UserPassword(t.Uuid, t.Password),
+		Host:     fmt.Sprintf("%s:%d", t.Host, t.Port),
+		Fragment: t.Name,
+	}
+	q := u.Query()
+	q.Set("Congestion_control", t.Congestion_control)
+	q.Set("sni", t.Sni)
+	q.Set("alpn", strings.Join(t.Alpn, ","))
+	q.Set("Udp_relay_mode", t.Udp_relay_mode)
+	if t.Disable_sni != 0 {
+		q.Set("Disable_sni", strconv.Itoa(t.Disable_sni))
+	}
+	for k, v := range q {
+		if v[0] == "" {
+			delete(q, k)
+		}
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
 // Tuic 解码
 func DecodeTuicURL(s string) (Tuic, error) {
 	u, err := url.Parse(s)

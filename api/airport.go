@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"ppeelink/models"
+	"ppeelink/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -243,6 +244,7 @@ func AirportSync(c *gin.Context) {
 		return
 	}
 	go func() {
+		defer utils.RecoverPanic("airport-sync-task")
 		updateTaskProgress(task.ID, 15, "正在拉取机场订阅")
 		err := SyncAirportNodeTask(a.ID)
 		if taskCtx.Err() == context.Canceled {

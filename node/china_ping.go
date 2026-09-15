@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"ppeelink/utils"
 	"strconv"
 	"sync"
 	"time"
@@ -96,6 +97,7 @@ func RunChinaPing(ctx context.Context, cfg UnlockTestConfig, provinces, isps []s
 		wg.Add(1)
 		go func(i int, t ChinaTarget) {
 			defer wg.Done()
+			defer utils.RecoverPanic("china-ping")
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			rtt := tcpPingStableVia(ctx, contextDialer, net.JoinHostPort(t.IP, strconv.Itoa(t.Port)), timeout)
@@ -107,7 +109,7 @@ func RunChinaPing(ctx context.Context, cfg UnlockTestConfig, provinces, isps []s
 	}
 	// ctx 取消（停止/右上角停止）时立即返回释放锁
 	waitCh := make(chan struct{})
-	go func() { wg.Wait(); close(waitCh) }()
+	go func() { defer utils.RecoverPanic("china-ping-wait"); wg.Wait(); close(waitCh) }()
 	select {
 	case <-waitCh:
 	case <-ctx.Done():
@@ -198,12 +200,14 @@ func RunChinaPingStream(ctx context.Context, cfg UnlockTestConfig, provinces, is
 	sem := make(chan struct{}, 24)
 	for _, prov := range provOrder {
 		go func(prov string, provTargets []ChinaTarget) {
+			defer utils.RecoverPanic("china-ping-province")
 			results := make([]ChinaPingTarget, len(provTargets))
 			var wg sync.WaitGroup
 			for i, t := range provTargets {
 				wg.Add(1)
 				go func(i int, t ChinaTarget) {
 					defer wg.Done()
+					defer utils.RecoverPanic("china-ping-province-target")
 					select {
 					case sem <- struct{}{}:
 					case <-ctx.Done():

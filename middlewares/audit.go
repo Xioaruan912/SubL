@@ -32,6 +32,9 @@ func AuditTrail(c *gin.Context) {
 		return
 	}
 	c.Next()
+	if c.Writer.Status() == http.StatusNotFound {
+		return
+	}
 	actor, _ := c.Get("username")
 	actorText, _ := actor.(string)
 	if actorText == "" {

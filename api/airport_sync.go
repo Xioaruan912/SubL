@@ -12,7 +12,60 @@ import (
 
 	"ppeelink/models"
 	"ppeelink/node"
+	"ppeelink/utils"
+
+	"gorm.io/gorm"
 )
+
+// nodesFromSubscriptionBody parses a subscription body in any of the formats
+// airports commonly return: Clash/Mihomo YAML, a base64 encoded link list, or
+// a plain newline/comma separated link list. It returns the parsed nodes and
+// the detected format label for diagnostics.
+func nodesFromSubscriptionBody(body []byte) ([]models.Node, string, error) {
+	if node.IsClashConfig(body) {
+		clashNodes, err := node.ParseClashToNodes(body)
+		if err != nil {
+			return nil, "clash-yaml", err
+		}
+		nodesList := make([]models.Node, 0, len(clashNodes))
+		for _, cn := range clashNodes {
+			nodesList = append(nodesList, models.Node{Name: cn.Name, Link: cn.Link})
+		}
+		return nodesList, "clash-yaml", nil
+	}
+
+	text := string(body)
+	format := "link-list"
+	if decoded := node.Base64Decode(text); decoded != "" && decoded != text {
+		text = decoded
+		format = "base64-link-list"
+	}
+
+	lines := strings.FieldsFunc(text, func(r rune) bool { return r == '\n' || r == '\r' || r == ',' })
+	valid := make([]models.Node, 0, len(lines))
+	skipped := 0
+	for _, link := range lines {
+		link = strings.TrimSpace(link)
+		if link == "" {
+			continue
+		}
+		if !strings.Contains(link, "://") {
+			skipped++
+			continue
+		}
+		n := models.Node{Link: link}
+		parsed, err := DocodeNodeName(&n)
+		if err != nil || parsed.Name == "" {
+			skipped++
+			continue
+		}
+		valid = append(valid, parsed)
+	}
+	if len(valid) == 0 {
+		return nil, format, fmt.Errorf("源返回 %d 行内容，未解析出有效节点（跳过 %d 行），请检查机场订阅地址是否正确", len(lines), skipped)
+	}
+	return valid, format, nil
+}
 
 func SyncAllAirports() {
 	log.Println("[Cron] 开始每日凌晨3点的机场同步和测活任务...")
@@ -45,7 +98,7 @@ func SyncAirportNodeTask(airportID int) error {
 		return err
 	}
 	req.Header.Set("User-Agent", "v2rayNG/1.8.5")
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := utils.SafeHTTPClient(30 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("[Sync] 机场 %s 请求失败: %v\n", a.Name, err)
@@ -54,34 +107,12 @@ func SyncAirportNodeTask(airportID int) error {
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 
-	// 解码并解析所有节点
-	var urls []string
-	decodedStr := node.Base64Decode(string(body))
-	if decodedStr == string(body) || decodedStr == "" {
-		// 没有被 Base64 decode，尝试原生按行切分
-		urls = strings.Split(string(body), "\n")
-	} else {
-		urls = strings.Split(decodedStr, "\n")
+	validNodes, format, parseErr := nodesFromSubscriptionBody(body)
+	if parseErr != nil {
+		log.Printf("[Sync] 机场 %s 解析失败(格式:%s): %v\n", a.Name, format, parseErr)
+		return fmt.Errorf("机场 %s 解析失败(格式:%s): %w", a.Name, format, parseErr)
 	}
-
-	var validNodes []models.Node
-	for _, link := range urls {
-		link = strings.TrimSpace(link)
-		if link == "" || !strings.Contains(link, "://") {
-			continue
-		}
-		n := models.Node{Link: link}
-		n, err = DocodeNodeName(&n)
-		if err != nil || n.Name == "" {
-			continue
-		}
-		validNodes = append(validNodes, n)
-	}
-
-	if len(validNodes) == 0 {
-		log.Printf("[Sync] 机场 %s 未获取到有效节点\n", a.Name)
-		return fmt.Errorf("机场 %s 未获取到有效节点", a.Name)
-	}
+	log.Printf("[Sync] 机场 %s 解析成功，格式:%s，节点数:%d\n", a.Name, format, len(validNodes))
 
 	// 并发测活
 	log.Printf("[Sync] 机场 %s 获取到 %d 个节点，开始并发测活 (AutoCleanup: %v)\n", a.Name, len(validNodes), a.AutoCleanup)
@@ -95,6 +126,7 @@ func SyncAirportNodeTask(airportID int) error {
 		wg.Add(1)
 		go func(nd models.Node) {
 			defer wg.Done()
+			defer utils.RecoverPanic("airport-node-probe")
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
@@ -133,34 +165,45 @@ func SyncAirportNodeTask(airportID int) error {
 
 	log.Printf("[Sync] 机场 %s 测活完毕，最终存活/保留节点数: %d\n", a.Name, len(aliveNodes))
 
-	// 清理该分组原本的所有节点
-	var gn models.GroupNode
-	models.DB.Where("name = ?", a.Name).First(&gn)
-	if gn.ID != 0 {
-		models.DB.Model(&gn).Association("Nodes").Clear()
-	} else {
-		gn = models.GroupNode{Name: a.Name}
-		gn.Add()
+	if len(aliveNodes) == 0 {
+		return fmt.Errorf("机场 %s 解析到 %d 个节点但全部测活失败，已保留原分组绑定，未清空", a.Name, len(validNodes))
 	}
 
-	// 存入存活节点，并绑定分组
-	for _, n := range aliveNodes {
-		var dbNode models.Node
-		models.DB.Where("name = ? AND link = ?", n.Name, n.Link).First(&dbNode)
-		if dbNode.ID == 0 {
-			n.Add()
-			models.DB.Where("name = ? AND link = ?", n.Name, n.Link).First(&dbNode)
+	// 事务内清空该分组并写入存活节点，避免清空成功但写入失败导致订阅整体失效
+	err = models.DB.Transaction(func(tx *gorm.DB) error {
+		var gn models.GroupNode
+		tx.Where("name = ?", a.Name).First(&gn)
+		if gn.ID != 0 {
+			if err := tx.Model(&gn).Association("Nodes").Clear(); err != nil {
+				return err
+			}
+		} else {
+			gn = models.GroupNode{Name: a.Name}
+			if err := tx.Create(&gn).Error; err != nil {
+				return err
+			}
 		}
-		if dbNode.ID != 0 {
-			dbNode.UpdateGroup([]models.GroupNode{{Name: a.Name}})
+		for _, n := range aliveNodes {
+			var dbNode models.Node
+			tx.Where("name = ? AND link = ?", n.Name, n.Link).First(&dbNode)
+			if dbNode.ID == 0 {
+				if err := tx.Create(&n).Error; err != nil {
+					return err
+				}
+				dbNode = n
+			}
+			if err := tx.Model(&dbNode).Association("GroupNodes").Append(&gn); err != nil {
+				return err
+			}
 		}
+		now := time.Now()
+		a.LastSync = &now
+		a.NodeCount = len(aliveNodes)
+		return tx.Save(&a).Error
+	})
+	if err != nil {
+		return fmt.Errorf("机场 %s 落库失败: %w", a.Name, err)
 	}
-
-	// 更新机场的最新状态
-	now := time.Now()
-	a.LastSync = &now
-	a.NodeCount = len(aliveNodes)
-	a.Update()
 
 	InvalidateOverview() // 机场同步增删节点，使概览缓存失效
 

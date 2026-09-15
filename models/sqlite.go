@@ -3,6 +3,7 @@ package models
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -12,28 +13,30 @@ var DB *gorm.DB
 var isInitialized bool
 
 func InitSqlite() {
-	// 检查目录是否创建
-	_, err := os.Stat("./db")
-	if err != nil {
-		if os.IsNotExist(err) {
-			os.Mkdir("./db", os.ModePerm)
-		}
-	}
-	// 连接数据库
-	db, err := gorm.Open(sqlite.Open("./db/ppeelink.db"), &gorm.Config{})
-	if err != nil {
-		log.Println("连接数据库失败")
-	}
-	DB = db
-	// 检查是否已经初始化
 	if isInitialized {
 		log.Println("数据库已经初始化，无需重复初始化")
 		return
 	}
+	// 确保数据库目录存在
+	if err := os.MkdirAll("./db", 0o755); err != nil {
+		log.Println("创建数据库目录失败:", err)
+	}
+	// WAL + busy_timeout 缓解并发写入导致的 SQLITE_BUSY
+	dsn := "./db/ppeelink.db?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("连接数据库失败: %v", err)
+	}
+	DB = db
+	if sqlDB, dbErr := db.DB(); dbErr == nil {
+		sqlDB.SetMaxOpenConns(8)
+		sqlDB.SetMaxIdleConns(4)
+		sqlDB.SetConnMaxLifetime(time.Hour)
+	}
 	err = db.AutoMigrate(&User{}, &Subcription{}, &SubLogs{}, &GroupNode{}, &Node{}, &ClientVersion{}, &Airport{},
 		&NodeQualitySample{}, &NodeTargetQualitySample{}, &NodeHealthEvent{}, &AlertSetting{}, &UnlockObservation{}, &TemplateVersion{}, &RuleSource{}, &RuleCatalog{}, &RuleCacheSnapshot{}, &EgressTarget{}, &TaskRun{}, &SubscriptionArtifact{}, &SubscriptionArtifactPointer{}, &APIToken{}, &RoutingRegressionCase{}, &AuditLog{})
 	if err != nil {
-		log.Println("数据表迁移失败")
+		log.Println("数据表迁移失败:", err)
 	}
 	_ = RecoverInterruptedTasks()
 	if err := EnsureDefaultEgressTargets(); err != nil {

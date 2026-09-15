@@ -5,86 +5,80 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"ppeelink/models"
+	"ppeelink/utils"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
+// GetIp 记录订阅访问者 IP。归属地查询与落库放到后台执行，避免拖慢订阅下载。
 func GetIp(c *gin.Context) {
 	c.Next()
-	func() {
-		subname, _ := c.Get("subname")
+	subname, ok := c.Get("subname")
+	if !ok {
+		return
+	}
+	name, ok := subname.(string)
+	if !ok || name == "" {
+		log.Println("无法获取订阅名称")
+		return
+	}
+	go recordSubscriberIP(c.ClientIP(), name)
+}
 
-		ip := c.ClientIP()
-		resp, err := http.Get(fmt.Sprintf("https://whois.pconline.com.cn/ipJson.jsp?ip=%s&json=true", ip))
-		if err != nil {
-			log.Println("获取IP信息失败:", err)
-			return
-		}
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(resp.Body)
-		utf8Body, _ := simplifiedchinese.GBK.NewDecoder().Bytes(body)
-		type IpInfo struct {
-			Addr string `json:"addr"`
-			Ip   string `json:"ip"`
-		}
-		ipinfo := IpInfo{}
-		err = json.Unmarshal(utf8Body, &ipinfo)
-		if err != nil {
-			log.Println("解析IP信息失败:", err)
-			return
-		}
-
-		var sub models.Subcription
-		if subnameStr, ok := subname.(string); ok {
-			sub.Name = subnameStr
-		} else {
-			log.Println("无法获取订阅名称")
-			return
-		}
-
-		err = sub.Find() // 查找订阅以获取 SubcriptionID
-		if err != nil {
-			log.Println("查找订阅失败:", err)
-			return
-		}
-
-		var iplog models.SubLogs
-		iplog.IP = ip
-		// 查找是否存在该 IP 记录
-		err = iplog.Find(sub.ID) // 这里 `iplog.Find` 内部会根据 `iplog.IP` 和 `sub.ID` 查找
-		log.Println("查找IP日志记录结果:", err)
-
-		// 如果没有找到记录，则创建新记录
-		if err != nil {
-			log.Println("未找到现有IP日志，将创建新记录。")
-			newIplog := models.SubLogs{
-				IP:            ip,
-				Addr:          ipinfo.Addr,
-				SubcriptionID: sub.ID,
-				Date:          time.Now().Format("2006-01-02 15:04:05"),
-				Count:         1,
-			}
-			err = newIplog.Add() // 使用 iplogs.go 中的 Add 方法
-			if err != nil {
-				log.Println("添加IP日志记录失败:", err)
-				return
-			}
-			log.Println("成功添加新的IP日志记录。")
-		} else {
-			// 如果找到了记录，则更新访问次数和日期
-			log.Println("找到现有IP日志，将更新记录。")
-			iplog.Count++
-			iplog.Date = time.Now().Format("2006-01-02 15:04:05")
-			err = iplog.Update() // 使用 iplogs.go 中的 Update 方法
-			if err != nil {
-				log.Println("更新IP日志记录失败:", err)
-				return
-			}
-			log.Println("成功更新IP日志记录。")
+func recordSubscriberIP(ip, subname string) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("记录订阅IP异常:", r)
 		}
 	}()
+
+	client := utils.SafeHTTPClient(5 * time.Second)
+	resp, err := client.Get(fmt.Sprintf("https://whois.pconline.com.cn/ipJson.jsp?ip=%s&json=true", ip))
+	if err != nil {
+		log.Println("获取IP信息失败:", err)
+		return
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	utf8Body, _ := simplifiedchinese.GBK.NewDecoder().Bytes(body)
+	type IpInfo struct {
+		Addr string `json:"addr"`
+		Ip   string `json:"ip"`
+	}
+	ipinfo := IpInfo{}
+	if err := json.Unmarshal(utf8Body, &ipinfo); err != nil {
+		log.Println("解析IP信息失败:", err)
+		return
+	}
+
+	var sub models.Subcription
+	sub.Name = subname
+	if err := sub.Find(); err != nil {
+		log.Println("查找订阅失败:", err)
+		return
+	}
+
+	var iplog models.SubLogs
+	iplog.IP = ip
+	if err := iplog.Find(sub.ID); err != nil {
+		newIplog := models.SubLogs{
+			IP:            ip,
+			Addr:          ipinfo.Addr,
+			SubcriptionID: sub.ID,
+			Date:          time.Now().Format("2006-01-02 15:04:05"),
+			Count:         1,
+		}
+		if err := newIplog.Add(); err != nil {
+			log.Println("添加IP日志记录失败:", err)
+		}
+		return
+	}
+	iplog.Count++
+	iplog.Date = time.Now().Format("2006-01-02 15:04:05")
+	if err := iplog.Update(); err != nil {
+		log.Println("更新IP日志记录失败:", err)
+	}
 }

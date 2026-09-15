@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"net/url"
 	"ppeelink/models"
 	"ppeelink/node"
+	"ppeelink/utils"
 	"strings"
 	"time"
 
@@ -23,6 +23,64 @@ func Md5(src string) string {
 	m.Write([]byte(src))
 	res := hex.EncodeToString(m.Sum(nil))
 	return res
+}
+
+// expandNodeLink 将一个存储的节点链接展开为一到多个分享链接。
+// 支持逗号分隔的多链接、远程订阅/转换地址（base64/明文链接列表或 Clash YAML）以及普通链接。
+func expandNodeLink(link string) []string {
+	link = strings.TrimSpace(link)
+	switch {
+	case link == "":
+		return nil
+	case strings.Contains(link, ","):
+		parts := strings.Split(link, ",")
+		out := make([]string, 0, len(parts))
+		for _, p := range parts {
+			if p = strings.TrimSpace(p); p != "" {
+				out = append(out, p)
+			}
+		}
+		return out
+	case strings.HasPrefix(link, "http://") || strings.HasPrefix(link, "https://"):
+		return fetchAndExpandRemote(link)
+	default:
+		return []string{link}
+	}
+}
+
+func fetchAndExpandRemote(rawURL string) []string {
+	client := utils.SafeHTTPClient(20 * time.Second)
+	resp, err := client.Get(rawURL)
+	if err != nil {
+		log.Printf("[Subscription] 拉取转换源失败: %v", err)
+		return nil
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+	if node.IsClashConfig(body) {
+		clashNodes, err := node.ParseClashToNodes(body)
+		if err != nil {
+			log.Printf("[Subscription] 解析 Clash 转换源失败: %v", err)
+			return nil
+		}
+		out := make([]string, 0, len(clashNodes))
+		for _, cn := range clashNodes {
+			out = append(out, cn.Link)
+		}
+		return out
+	}
+	decoded := node.Base64Decode(string(body))
+	if strings.TrimSpace(decoded) == "" {
+		decoded = string(body)
+	}
+	lines := strings.FieldsFunc(decoded, func(r rune) bool { return r == '\n' || r == '\r' })
+	out := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if l = strings.TrimSpace(l); l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // mergeGroupNodes 将订阅引用的分组节点合并进 sub.Nodes（去重，分组节点在后）
@@ -207,26 +265,8 @@ func GetV2ray(c *gin.Context) {
 	}
 	baselist := ""
 	for _, v := range sub.Nodes {
-		switch {
-		// 如果包含多条节点
-		case strings.Contains(v.Link, ","):
-			links := strings.Split(v.Link, ",")
-			baselist += strings.Join(links, "\n") + "\n"
-			continue
-		//如果是订阅转换
-		case strings.Contains(v.Link, "http://") || strings.Contains(v.Link, "https://"):
-			resp, err := http.Get(v.Link)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			defer resp.Body.Close()
-			body, _ := io.ReadAll(resp.Body)
-			nodes := node.Base64Decode(string(body))
-			baselist += nodes + "\n"
-		// 默认
-		default:
-			baselist += v.Link + "\n"
+		for _, link := range expandNodeLink(v.Link) {
+			baselist += link + "\n"
 		}
 	}
 	c.Set("subname", subName(c))
@@ -262,20 +302,8 @@ func GetClash(c *gin.Context) {
 			urls = append(urls, links...)
 			continue
 		//如果是订阅转换
-		case strings.Contains(v.Link, "http://") || strings.Contains(v.Link, "https://"):
-			resp, err := http.Get(v.Link)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			defer resp.Body.Close()
-			body, _ := io.ReadAll(resp.Body)
-			nodes := node.Base64Decode(string(body))
-			links := strings.Split(nodes, "\n")
-			urls = append(urls, links...)
-		// 默认
 		default:
-			urls = append(urls, v.Link)
+			urls = append(urls, expandNodeLink(v.Link)...)
 		}
 	}
 	log.Printf("[Subscription] Clash 转换输入节点数: %d\n", len(urls))
@@ -320,20 +348,8 @@ func GetSurge(c *gin.Context) {
 			urls = append(urls, links...)
 			continue
 		//如果是订阅转换
-		case strings.Contains(v.Link, "http://") || strings.Contains(v.Link, "https://"):
-			resp, err := http.Get(v.Link)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			defer resp.Body.Close()
-			body, _ := io.ReadAll(resp.Body)
-			nodes := node.Base64Decode(string(body))
-			links := strings.Split(nodes, "\n")
-			urls = append(urls, links...)
-		// 默认
 		default:
-			urls = append(urls, v.Link)
+			urls = append(urls, expandNodeLink(v.Link)...)
 		}
 	}
 
@@ -389,20 +405,8 @@ func GetLoon(c *gin.Context) {
 			urls = append(urls, links...)
 			continue
 		// 如果是订阅转换
-		case strings.Contains(v.Link, "http://") || strings.Contains(v.Link, "https://"):
-			resp, err := http.Get(v.Link)
-			if err != nil {
-				log.Println(err)
-				return
-			}
-			defer resp.Body.Close()
-			body, _ := io.ReadAll(resp.Body)
-			nodes := node.Base64Decode(string(body))
-			links := strings.Split(nodes, "\n")
-			urls = append(urls, links...)
-		// 默认
 		default:
-			urls = append(urls, v.Link)
+			urls = append(urls, expandNodeLink(v.Link)...)
 		}
 	}
 

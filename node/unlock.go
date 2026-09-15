@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"ppeelink/utils"
 	"strings"
 	"sync"
 	"time"
@@ -210,6 +211,7 @@ func RunUnlockTest(ctx context.Context, cfg UnlockTestConfig) (*UnlockResult, er
 		wg.Add(1)
 		go func(i int, svc UnlockService) {
 			defer wg.Done()
+			defer utils.RecoverPanic("unlock-check")
 			select {
 			case sem <- struct{}{}:
 			case <-ctx.Done():
@@ -231,7 +233,7 @@ func RunUnlockTest(ctx context.Context, cfg UnlockTestConfig) (*UnlockResult, er
 		}(i, svc)
 	}
 	waitCh := make(chan struct{})
-	go func() { wg.Wait(); close(waitCh) }()
+	go func() { defer utils.RecoverPanic("unlock-wait"); wg.Wait(); close(waitCh) }()
 	select {
 	case <-waitCh:
 	case <-ctx.Done():

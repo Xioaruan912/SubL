@@ -4,9 +4,15 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"ppeelink/utils"
 	"regexp"
 	"strings"
+	"time"
 )
+
+// remoteFetchClient is a shared, SSRF-guarded, time-bounded client used when a
+// node/template references a remote config file by URL.
+var remoteFetchClient = utils.SafeHTTPClient(20 * time.Second)
 
 type SqlConfig struct {
 	Clash string `json:"clash"`

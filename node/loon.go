@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"regexp"
 	"strings"
@@ -148,7 +147,7 @@ func DecodeLoon(proxys []string, file string) (string, error) {
 	var raw []byte
 	var err error
 	if strings.Contains(file, "://") {
-		resp, err := http.Get(file)
+		resp, err := remoteFetchClient.Get(file)
 		if err != nil {
 			log.Println("http.Get error", err)
 			return "", err

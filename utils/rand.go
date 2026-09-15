@@ -1,19 +1,26 @@
 package utils
 
 import (
-	"math/rand"
+	"crypto/rand"
+	"math/big"
 )
 
-// RandString 生成随机字符串
+const randCharset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
+
+// RandString 使用加密安全随机源生成指定长度的随机字符串。
 func RandString(number int) string {
-	str := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
-	// 用 []byte 直接构造字符串
-	n := rand.Intn(number) + 1 // 防止生成空字符串，范围是1到31
-	randomString := make([]byte, n)
-	for i := 0; i < n; i++ {
-		randomIndex := rand.Intn(len(str))
-		randomString[i] = str[randomIndex]
+	if number <= 0 {
+		number = 32
 	}
-	Secret := string(randomString)
-	return Secret
+	max := big.NewInt(int64(len(randCharset)))
+	out := make([]byte, number)
+	for i := range out {
+		n, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			out[i] = randCharset[0]
+			continue
+		}
+		out[i] = randCharset[n.Int64()]
+	}
+	return string(out)
 }
