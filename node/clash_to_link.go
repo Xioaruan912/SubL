@@ -200,6 +200,38 @@ func clashProxyLink(typ, name, server string, port int, p map[string]interface{}
 		}
 		return EncodeTuicURL(t), nil
 
+	case "anytls":
+		return EncodeAnyTLSURL(AnyTLS{
+			Password: stringVal(p, "password"),
+			Host:     server,
+			Port:     port,
+			Sni:      defaultString(stringVal(p, "sni"), stringVal(p, "servername")),
+			Insecure: boolInt(boolVal(p, "skip-cert-verify")),
+			Fp:       stringVal(p, "client-fingerprint"),
+			Name:     name,
+		}), nil
+
+	case "socks5":
+		return EncodeSocksURL(Socks{
+			Type:     "socks5",
+			Username: stringVal(p, "username"),
+			Password: stringVal(p, "password"),
+			Host:     server,
+			Port:     port,
+			Name:     name,
+		}), nil
+
+	case "http":
+		return EncodeSocksURL(Socks{
+			Type:     "http",
+			Username: stringVal(p, "username"),
+			Password: stringVal(p, "password"),
+			Host:     server,
+			Port:     port,
+			Tls:      boolVal(p, "tls"),
+			Name:     name,
+		}), nil
+
 	default:
 		return "", fmt.Errorf("不支持的节点类型: %s", typ)
 	}

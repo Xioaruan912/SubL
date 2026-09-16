@@ -150,6 +150,18 @@ func TestClashVlessRealityFields(t *testing.T) {
 	}
 }
 
+func TestClashSocks5ToLink(t *testing.T) {
+	p, err := ClashProxyToLink(map[string]interface{}{
+		"type": "socks5", "name": "s", "server": "1.2.3.4", "port": 1080, "username": "u", "password": "p",
+	})
+	if err != nil {
+		t.Fatalf("socks5 convert: %v", err)
+	}
+	if !strings.HasPrefix(p.Link, "socks5://") {
+		t.Fatalf("unexpected link: %s", p.Link)
+	}
+}
+
 func TestParseClashNoProxies(t *testing.T) {
 	if _, err := ParseClashToNodes([]byte("proxies: []\n")); err == nil {
 		t.Fatal("expected error for empty proxies")

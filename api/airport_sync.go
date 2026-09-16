@@ -29,7 +29,13 @@ func nodesFromSubscriptionBody(body []byte) ([]models.Node, string, error) {
 		}
 		nodesList := make([]models.Node, 0, len(clashNodes))
 		for _, cn := range clashNodes {
+			if isPlaceholderNodeName(cn.Name) {
+				continue
+			}
 			nodesList = append(nodesList, models.Node{Name: cn.Name, Link: cn.Link})
+		}
+		if len(nodesList) == 0 {
+			return nil, "clash-yaml", fmt.Errorf("Clash YAML 只包含占位/信息节点，无可同步节点")
 		}
 		return nodesList, "clash-yaml", nil
 	}
@@ -49,6 +55,11 @@ func nodesFromSubscriptionBody(body []byte) ([]models.Node, string, error) {
 		if link == "" {
 			continue
 		}
+		// http(s) 是订阅转换地址而非节点，交给订阅下发时展开
+		if strings.HasPrefix(link, "http://") || strings.HasPrefix(link, "https://") {
+			skipped++
+			continue
+		}
 		if !strings.Contains(link, "://") {
 			skipped++
 			continue
@@ -59,12 +70,27 @@ func nodesFromSubscriptionBody(body []byte) ([]models.Node, string, error) {
 			skipped++
 			continue
 		}
+		if isPlaceholderNodeName(parsed.Name) {
+			skipped++
+			continue
+		}
 		valid = append(valid, parsed)
 	}
 	if len(valid) == 0 {
 		return nil, format, fmt.Errorf("源返回 %d 行内容，未解析出有效节点（跳过 %d 行），请检查机场订阅地址是否正确", len(lines), skipped)
 	}
 	return valid, format, nil
+}
+
+// isPlaceholderNodeName 判断节点名是否为机场信息/占位节点（官网、到期、订阅已取消等）。
+func isPlaceholderNodeName(name string) bool {
+	lower := strings.ToLower(name)
+	for _, term := range defaultPlaceholderTerms {
+		if term != "" && strings.Contains(lower, strings.ToLower(term)) {
+			return true
+		}
+	}
+	return false
 }
 
 func SyncAllAirports() {

@@ -19,9 +19,11 @@ func TestParseMemberIDs(t *testing.T) {
 	}
 }
 
-func TestParseMultiplierExport(t *testing.T) {
-	// 占位：确保 newNodeSpec 相关常量可用（编译期覆盖）
-	if parseMemberIDs("1")[0] != 1 {
-		t.Fatal("unexpected")
+func TestIsPlaceholderNodeName(t *testing.T) {
+	if !isPlaceholderNodeName("订阅已取消，请打开订阅共享重新选择") {
+		t.Fatal("expected cancelled-subscription node to be a placeholder")
+	}
+	if isPlaceholderNodeName("香港 01") {
+		t.Fatal("normal node must not be treated as placeholder")
 	}
 }
