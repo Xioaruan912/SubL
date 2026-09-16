@@ -2,11 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"ppeelink/models"
 	"ppeelink/node"
+
+	"github.com/gin-gonic/gin"
 )
 
 func TestApplySubscriptionPipeline(t *testing.T) {
@@ -36,6 +39,32 @@ func TestApplySubscriptionPipelineRejectsBadRegex(t *testing.T) {
 	_, err := ApplySubscriptionPipeline(nil, `{"include":"["}`)
 	if err == nil {
 		t.Fatal("expected invalid regex error")
+	}
+}
+
+func TestPipelineWithOverrides(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest("GET", "/c/?token=x&filter=香港|日本&type=vless,ss&emoji=true&maxNodes=5&rename=^A&renameTo=B", nil)
+	out := pipelineWithOverrides("", c)
+	var cfg SubscriptionPipeline
+	if err := json.Unmarshal([]byte(out), &cfg); err != nil {
+		t.Fatalf("bad json: %v", err)
+	}
+	if cfg.Include != "香港|日本" || len(cfg.Protocols) != 2 || cfg.MaxNodes != 5 || !cfg.Emoji || cfg.RenamePattern != "^A" || cfg.RenameReplacement != "B" {
+		t.Fatalf("unexpected override: %#v", cfg)
+	}
+}
+
+func TestPipelineWithOverridesNoQuery(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest("GET", "/c/?token=x", nil)
+	base := `{"include":"keep"}`
+	if got := pipelineWithOverrides(base, c); got != base {
+		t.Fatalf("base should be unchanged, got %q", got)
 	}
 }
 

@@ -179,6 +179,18 @@ func GetMenus(c *gin.Context) {
 						KeepAlive: true,
 					},
 				},
+				{
+					Path:      "speed",
+					Component: "test/speed",
+					Name:      "SpeedTest",
+					Meta: Meta{
+						Title:     "真实测速",
+						Icon:      "connection",
+						Hidden:    false,
+						Roles:     []string{"ADMIN"},
+						KeepAlive: true,
+					},
+				},
 			},
 		},
 		// 模板管理

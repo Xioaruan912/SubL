@@ -283,6 +283,7 @@ func GetV2ray(c *gin.Context) {
 		return
 	}
 	// 合并引用分组节点（机场同步自动跟进）
+	sub.Pipeline = pipelineWithOverrides(sub.Pipeline, c)
 	if err := mergeGroupNodes(&sub); err != nil {
 		log.Println("合并分组节点失败:", err)
 	}
@@ -310,6 +311,7 @@ func GetClash(c *gin.Context) {
 		return
 	}
 	// 合并引用分组节点（机场同步自动跟进）
+	sub.Pipeline = pipelineWithOverrides(sub.Pipeline, c)
 	if err := mergeGroupNodes(&sub); err != nil {
 		log.Println("合并分组节点失败:", err)
 	}
@@ -346,6 +348,7 @@ func GetSurge(c *gin.Context) {
 		return
 	}
 	// 合并引用分组节点（机场同步自动跟进）
+	sub.Pipeline = pipelineWithOverrides(sub.Pipeline, c)
 	if err := mergeGroupNodes(&sub); err != nil {
 		log.Println("合并分组节点失败:", err)
 	}
@@ -390,6 +393,7 @@ func GetLoon(c *gin.Context) {
 		return
 	}
 	// 合并引用分组节点（机场同步自动跟进）
+	sub.Pipeline = pipelineWithOverrides(sub.Pipeline, c)
 	if err := mergeGroupNodes(&sub); err != nil {
 		log.Println("合并分组节点失败:", err)
 	}
@@ -423,6 +427,7 @@ func GetSingbox(c *gin.Context) {
 		c.Writer.WriteString("找不到这个订阅:" + subName(c))
 		return
 	}
+	sub.Pipeline = pipelineWithOverrides(sub.Pipeline, c)
 	if err := mergeGroupNodes(&sub); err != nil {
 		log.Println("合并分组节点失败:", err)
 	}
@@ -452,6 +457,7 @@ func GetQX(c *gin.Context) {
 		c.Writer.WriteString("找不到这个订阅:" + subName(c))
 		return
 	}
+	sub.Pipeline = pipelineWithOverrides(sub.Pipeline, c)
 	if err := mergeGroupNodes(&sub); err != nil {
 		log.Println("合并分组节点失败:", err)
 	}

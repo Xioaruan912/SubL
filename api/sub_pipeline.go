@@ -445,6 +445,66 @@ func runScriptOperator(items []pipelineItem, code string) ([]pipelineItem, error
 	return out, nil
 }
 
+// pipelineWithOverrides 用订阅 URL 上的查询参数覆盖已保存的处理链，实现
+// 免维护的临时分发（例如 &filter=香港|日本、&type=vless,ss、&emoji=true）。
+func pipelineWithOverrides(base string, c *gin.Context) string {
+	q := c.Request.URL.Query()
+	keys := []string{"include", "exclude", "filter", "rename", "renameTo", "type", "sort", "maxNodes", "emoji"}
+	present := false
+	for _, k := range keys {
+		if q.Get(k) != "" {
+			present = true
+			break
+		}
+	}
+	if !present {
+		return base
+	}
+	var cfg SubscriptionPipeline
+	if strings.TrimSpace(base) != "" {
+		_ = json.Unmarshal([]byte(base), &cfg)
+	}
+	if v := q.Get("include"); v != "" {
+		cfg.Include = v
+	}
+	if v := q.Get("exclude"); v != "" {
+		cfg.Exclude = v
+	}
+	if v := q.Get("filter"); v != "" {
+		cfg.Include = v
+	}
+	if v := q.Get("rename"); v != "" {
+		cfg.RenamePattern = v
+		cfg.RenameReplacement = q.Get("renameTo")
+	}
+	if v := q.Get("type"); v != "" {
+		parts := []string{}
+		for _, p := range strings.Split(v, ",") {
+			if p = strings.ToLower(strings.TrimSpace(p)); p != "" {
+				parts = append(parts, p)
+			}
+		}
+		cfg.Protocols = parts
+	}
+	if v := q.Get("sort"); v != "" {
+		cfg.Sort = v
+	}
+	if v := q.Get("maxNodes"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.MaxNodes = n
+		}
+	}
+	if q.Get("emoji") == "true" {
+		cfg.Emoji = true
+		cfg.EmojiRemoveOld = true
+	}
+	b, err := json.Marshal(cfg)
+	if err != nil {
+		return base
+	}
+	return string(b)
+}
+
 func SubPipelinePreview(c *gin.Context) {
 	id, err := strconv.Atoi(c.PostForm("id"))
 	if err != nil || id <= 0 {

@@ -31,6 +31,7 @@ func Nodes(r *gin.Engine) {
 		NodesGroup.DELETE("/egress-targets", api.EgressTargetDelete)
 		NodesGroup.POST("/chinaping", api.NodeChinaPing)
 		NodesGroup.POST("/chinaping/stream", api.NodeChinaPingStream)
+		NodesGroup.POST("/speedtest/stream", api.NodeSpeedTestStream)
 		NodesGroup.GET("/test/status", api.TestStatus)
 		NodesGroup.POST("/test/cancel", api.TestCancel)
 		NodesGroup.POST("/visibility", api.NodeVisibility) // 全局隐藏/恢复单个节点
