@@ -3,8 +3,33 @@ package node
 import (
 	"fmt"
 	"net"
+	"regexp"
+	"strconv"
 	"strings"
 )
+
+var (
+	multiplierPrefixRe = regexp.MustCompile(`(?i)(?:x|倍率|倍)\s*([0-9]+(?:\.[0-9]+)?)`)
+	multiplierSuffixRe = regexp.MustCompile(`(?i)([0-9]+(?:\.[0-9]+)?)\s*(?:x|倍率|倍)`)
+)
+
+// ParseMultiplier 从节点名中解析倍率（如 "x2"、"2倍"、"1.5x"），未识别返回 0。
+func ParseMultiplier(name string) float64 {
+	if name == "" {
+		return 0
+	}
+	if m := multiplierPrefixRe.FindStringSubmatch(name); m != nil {
+		if v, err := strconv.ParseFloat(m[1], 64); err == nil && v > 0 {
+			return v
+		}
+	}
+	if m := multiplierSuffixRe.FindStringSubmatch(name); m != nil {
+		if v, err := strconv.ParseFloat(m[1], 64); err == nil && v > 0 {
+			return v
+		}
+	}
+	return 0
+}
 
 // NodeFlags carries per-node build overrides that are not always representable
 // inside a share link (udp / tfo / skip-cert-verify). They are persisted on
@@ -101,6 +126,31 @@ func ParseOutbound(link string) (Outbound, error) {
 		v, err = DecodeTuicURL(link)
 		p.Spec = v
 		p.Name, p.Server, p.Port = v.Name, v.Host, v.Port
+	case "anytls":
+		var v AnyTLS
+		v, err = DecodeAnyTLSURL(link)
+		p.Spec = v
+		p.Name, p.Server, p.Port = v.Name, v.Host, v.Port
+	case "snell":
+		var v Snell
+		v, err = DecodeSnellURL(link)
+		p.Spec = v
+		p.Name, p.Server, p.Port = v.Name, v.Host, v.Port
+	case "socks5", "socks5h", "http", "https":
+		var v Socks
+		v, err = DecodeSocksURL(link)
+		p.Spec = v
+		p.Name, p.Server, p.Port = v.Name, v.Host, v.Port
+	case "ssh":
+		var v SSH
+		v, err = DecodeSSHURL(link)
+		p.Spec = v
+		p.Name, p.Server, p.Port = v.Name, v.Host, v.Port
+	case "wireguard", "wg":
+		var v WireGuard
+		v, err = DecodeWireGuardURL(link)
+		p.Spec = v
+		p.Name, p.Server, p.Port = v.Name, v.Host, v.Port
 	default:
 		p.Server, p.Port = ExtractServerHost(link)
 		return p, fmt.Errorf("暂不支持的协议: %s", scheme)
@@ -147,6 +197,21 @@ func (p Outbound) ToLink() string {
 	case Tuic:
 		v.Name, v.Host, v.Port = name, p.Server, p.Port
 		return EncodeTuicURL(v)
+	case AnyTLS:
+		v.Name, v.Host, v.Port = name, p.Server, p.Port
+		return EncodeAnyTLSURL(v)
+	case Snell:
+		v.Name, v.Host, v.Port = name, p.Server, p.Port
+		return EncodeSnellURL(v)
+	case Socks:
+		v.Name, v.Host, v.Port = name, p.Server, p.Port
+		return EncodeSocksURL(v)
+	case SSH:
+		v.Name, v.Host, v.Port = name, p.Server, p.Port
+		return EncodeSSHURL(v)
+	case WireGuard:
+		v.Name, v.Host, v.Port = name, p.Server, p.Port
+		return EncodeWireGuardURL(v)
 	default:
 		return p.Link
 	}

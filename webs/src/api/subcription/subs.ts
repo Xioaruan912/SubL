@@ -77,3 +77,11 @@ export function SetExpire(data: any){
     },
   });
 }
+
+export function getImportLinks(id: number){
+  return request({ url: "/api/v1/subcription/import-links", method: "get", params: { id } });
+}
+
+export function createShortLink(data: any){
+  return request({ url: "/api/v1/shortlinks/create", method: "post", data });
+}

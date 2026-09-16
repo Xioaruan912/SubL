@@ -32,6 +32,7 @@ type NodeOverviewItem struct {
 	Confidence          int       `json:"confidence"`
 	SampleCount         int       `json:"sampleCount"`
 	LastTestedAt        time.Time `json:"lastTestedAt"`
+	Multiplier          float64   `json:"multiplier"`
 }
 
 // overview 缓存（60s）
@@ -95,8 +96,9 @@ func CollectNodeQuality() ([]NodeOverviewItem, error) {
 			defer utils.RecoverPanic("node-overview")
 			item := NodeOverviewItem{
 				ID: n.ID, Name: n.Name, Link: n.Link,
-				Rtt:    -1,
-				Groups: make([]string, 0),
+				Rtt:        -1,
+				Groups:     make([]string, 0),
+				Multiplier: node.ParseMultiplier(n.Name),
 			}
 			for _, g := range n.GroupNodes {
 				item.Groups = append(item.Groups, g.Name)
@@ -196,6 +198,20 @@ func NodeQualitySummary(c *gin.Context) {
 		"total": total, "healthy": healthy, "warning": warning,
 		"offline": offline, "averageScore": averageScore,
 	}, "msg": "节点质量汇总"})
+}
+
+// NodeQualityTrend 返回按小时聚合的质量趋势（用于观察晚高峰表现）。
+func NodeQualityTrend(c *gin.Context) {
+	hours := 168
+	if v, err := strconv.Atoi(c.DefaultQuery("hours", "168")); err == nil && v >= 1 && v <= 720 {
+		hours = v
+	}
+	points, err := models.GetQualityHourlyTrend(time.Now().Add(-time.Duration(hours) * time.Hour))
+	if err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "读取质量趋势失败"})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": points, "msg": "质量时段趋势"})
 }
 
 // itoa 简易整数转字符串

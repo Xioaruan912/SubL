@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/url"
 	"ppeelink/models"
 	"ppeelink/node"
 	"strconv"
@@ -15,72 +14,15 @@ import (
 )
 
 func DocodeNodeName(nd *models.Node) (models.Node, error) { // 解码节点名称
-	if nd.Name == "" {
-		u, err := url.Parse(nd.Link)
-		if err != nil {
-			log.Println(err)
-			return *nd, err
-		}
-		switch {
-		case u.Scheme == "ss":
-			ss, err := node.DecodeSSURL(nd.Link)
-			if err != nil {
-				log.Println(err)
-				return *nd, err
-			}
-			nd.Name = ss.Name
-		case u.Scheme == "ssr":
-			ssr, err := node.DecodeSSRURL(nd.Link)
-			if err != nil {
-				log.Println(err)
-				return *nd, err
-			}
-			nd.Name = ssr.Qurey.Remarks
-		case u.Scheme == "trojan":
-			trojan, err := node.DecodeTrojanURL(nd.Link)
-			if err != nil {
-				log.Println(err)
-				return *nd, err
-			}
-			nd.Name = trojan.Name
-		case u.Scheme == "vmess":
-			vmess, err := node.DecodeVMESSURL(nd.Link)
-			if err != nil {
-				log.Println(err)
-				return *nd, err
-			}
-			nd.Name = vmess.Ps
-
-		case u.Scheme == "vless":
-			vless, err := node.DecodeVLESSURL(nd.Link)
-			if err != nil {
-				log.Println(err)
-				return *nd, err
-			}
-			nd.Name = vless.Name
-		case u.Scheme == "hy" || u.Scheme == "hysteria":
-			hy, err := node.DecodeHYURL(nd.Link)
-			if err != nil {
-				log.Println(err)
-				return *nd, err
-			}
-			nd.Name = hy.Name
-		case u.Scheme == "hy2" || u.Scheme == "hysteria2":
-			hy2, err := node.DecodeHY2URL(nd.Link)
-			if err != nil {
-				log.Println(err)
-				return *nd, err
-			}
-			nd.Name = hy2.Name
-		case u.Scheme == "tuic":
-			tuic, err := node.DecodeTuicURL(nd.Link)
-			if err != nil {
-				log.Println(err)
-				return *nd, err
-			}
-			nd.Name = tuic.Name
-		}
+	if nd.Name != "" {
+		return *nd, nil
 	}
+	p, err := node.ParseOutbound(nd.Link)
+	if err != nil {
+		log.Println(err)
+		return *nd, err
+	}
+	nd.Name = p.Name
 	return *nd, nil
 }
 func NodeUpdadte(c *gin.Context) {

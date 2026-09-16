@@ -72,6 +72,21 @@ func TestFlagEmojiAndCountryName(t *testing.T) {
 	}
 }
 
+func TestParseMultiplier(t *testing.T) {
+	cases := map[string]float64{
+		"HK-01 x2":       2,
+		"JP 1.5倍":        1.5,
+		"US-3x":          3,
+		"新加坡 倍率2":       2,
+		"普通节点":         0,
+	}
+	for name, want := range cases {
+		if got := ParseMultiplier(name); got != want {
+			t.Fatalf("ParseMultiplier(%q)=%v want %v", name, got, want)
+		}
+	}
+}
+
 func TestResolveDomainIPPassthrough(t *testing.T) {
 	if ip, ok := ResolveDomain("1.2.3.4"); ok || ip != "1.2.3.4" {
 		t.Fatalf("IP should pass through, got %q ok=%v", ip, ok)

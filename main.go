@@ -189,6 +189,7 @@ func Run(port int) {
 	routers.Status(r)        // 公共只读状态页
 	routers.Regression(r)    // 分流回归用例与模板命中差异
 	routers.Audit(r)         // 管理操作审计
+	routers.ShortLinks(r)    // 内部短链与一键导入
 	// 客户端下载目录 + 定时检查更新（启动即查 + 每 24h）
 	os.MkdirAll("downloads", 0o755)
 	client.Start()

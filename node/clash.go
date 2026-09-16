@@ -45,6 +45,16 @@ type Proxy struct {
 	Congestion_control string                 `yaml:"congestion_control,omitempty"`
 	Udp_relay_mode     string                 `yaml:"udp_relay_mode,omitempty"`
 	Disable_sni        bool                   `yaml:"disable_sni,omitempty"`
+	Username           string                 `yaml:"username,omitempty"`
+	Psk                string                 `yaml:"psk,omitempty"`
+	Version            string                 `yaml:"version,omitempty"`
+	Obfs_opts          map[string]interface{} `yaml:"obfs-opts,omitempty"`
+	Ip                 string                 `yaml:"ip,omitempty"`
+	Private_key        string                 `yaml:"private-key,omitempty"`
+	Public_key         string                 `yaml:"public-key,omitempty"`
+	Mtu                int                    `yaml:"mtu,omitempty"`
+	Reserved           []int                  `yaml:"reserved,omitempty"`
+	Dns                []string               `yaml:"dns,omitempty"`
 }
 
 type ProxyGroup struct {
@@ -355,6 +365,66 @@ func EncodeClashWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig S
 				Skip_cert_verify:   cert,
 			}
 			proxys = append(proxys, tuicproxy)
+		case Scheme == "anytls":
+			a, err := DecodeAnyTLSURL(link)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			scv := cert
+			if a.Insecure != 0 {
+				scv = true
+			}
+			proxys = append(proxys, Proxy{Name: a.Name, Type: "anytls", Server: a.Host, Port: a.Port, Password: a.Password, Sni: a.Sni, Client_fingerprint: a.Fp, Skip_cert_verify: scv, Udp: udp})
+		case Scheme == "snell":
+			s, err := DecodeSnellURL(link)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			proxy := Proxy{Name: s.Name, Type: "snell", Server: s.Host, Port: s.Port, Psk: s.Psk, Version: s.Version, Udp: udp}
+			if proxy.Version == "" {
+				proxy.Version = "4"
+			}
+			if s.Obfs != "" {
+				proxy.Obfs_opts = map[string]interface{}{"mode": s.Obfs, "host": s.ObfsHost}
+			}
+			proxys = append(proxys, proxy)
+		case Scheme == "socks5" || Scheme == "socks5h" || Scheme == "http" || Scheme == "https":
+			s, err := DecodeSocksURL(link)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			proxy := Proxy{Name: s.Name, Server: s.Host, Port: s.Port, Username: s.Username, Password: s.Password, Udp: udp}
+			if s.Type == "http" {
+				proxy.Type = "http"
+			} else {
+				proxy.Type = "socks5"
+			}
+			if s.Tls {
+				proxy.Tls = true
+				proxy.Skip_cert_verify = cert
+			}
+			proxys = append(proxys, proxy)
+		case Scheme == "ssh":
+			s, err := DecodeSSHURL(link)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			proxys = append(proxys, Proxy{Name: s.Name, Type: "ssh", Server: s.Host, Port: s.Port, Username: s.User, Password: s.Password, Udp: udp})
+		case Scheme == "wireguard" || Scheme == "wg":
+			w, err := DecodeWireGuardURL(link)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			proxy := Proxy{Name: w.Name, Type: "wireguard", Server: w.Host, Port: w.Port, Private_key: w.PrivateKey, Public_key: w.PublicKey, Ip: w.Address, Mtu: w.Mtu, Udp: true, Dns: []string{"1.1.1.1", "8.8.8.8"}}
+			if w.Reserved != "" {
+				proxy.Reserved = parseIntList(w.Reserved)
+			}
+			proxys = append(proxys, proxy)
 		}
 		if tfo && len(proxys) > before {
 			proxys[len(proxys)-1].Tfo = true

@@ -13,5 +13,6 @@ func Regression(r *gin.Engine) {
 		g.DELETE("/delete", api.RoutingRegressionDelete)
 		g.POST("/evaluate", api.RoutingRegressionEvaluate)
 		g.POST("/compare", api.RoutingRegressionCompare)
+		g.POST("/hit-stats", api.RoutingRegressionHitStats)
 	}
 }

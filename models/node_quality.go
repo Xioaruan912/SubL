@@ -119,6 +119,26 @@ func CleanupNodeQuality(before time.Time) error {
 	return DB.Where("checked_at < ?", before).Delete(&NodeQualitySample{}).Error
 }
 
+// QualityTrendPoint 是按「一天中的小时」聚合的质量趋势点，用于观察晚高峰表现。
+type QualityTrendPoint struct {
+	Hour      string  `json:"hour"`
+	Samples   int     `json:"samples"`
+	Successes int     `json:"successes"`
+	AvgRtt    float64 `json:"avgRtt"`
+}
+
+// GetQualityHourlyTrend 聚合 [since, now] 内按小时（00-23）分组的可用率与平均延迟。
+func GetQualityHourlyTrend(since time.Time) ([]QualityTrendPoint, error) {
+	var points []QualityTrendPoint
+	err := DB.Model(&NodeQualitySample{}).
+		Select("substr(checked_at, 12, 2) AS hour, count(*) AS samples, sum(CASE WHEN success THEN 1 ELSE 0 END) AS successes, avg(CASE WHEN success THEN rtt ELSE NULL END) AS avg_rtt").
+		Where("checked_at >= ?", since).
+		Group("substr(checked_at, 12, 2)").
+		Order("hour").
+		Scan(&points).Error
+	return points, err
+}
+
 func clamp(v, low, high float64) float64 {
 	if v < low {
 		return low

@@ -294,7 +294,9 @@ func StartQualityMatrixSampleTask(c *gin.Context) {
 
 func buildSubscriptionOutput(subscriptionID int, client string) ([]byte, error) {
 	client = strings.ToLower(strings.TrimSpace(client))
-	if client != "clash" && client != "surge" && client != "loon" && client != "v2ray" {
+	switch client {
+	case "clash", "surge", "loon", "v2ray", "singbox", "qx", "shadowrocket":
+	default:
 		return nil, fmt.Errorf("不支持的客户端: %s", client)
 	}
 	var sub models.Subcription
@@ -312,8 +314,12 @@ func buildSubscriptionOutput(subscriptionID int, client string) ([]byte, error) 
 		GetSurge(c)
 	case "loon":
 		GetLoon(c)
-	case "v2ray":
+	case "v2ray", "shadowrocket":
 		GetV2ray(c)
+	case "singbox":
+		GetSingbox(c)
+	case "qx":
+		GetQX(c)
 	}
 	body := recorder.Body.Bytes()
 	if len(body) == 0 {

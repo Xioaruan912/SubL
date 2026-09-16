@@ -212,3 +212,39 @@ func RoutingRegressionCompare(c *gin.Context) {
 	diff, beforeResults, afterResults := compareRoutingTemplates(ctx, filename, before, after, cases)
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"diff": diff, "before": beforeResults, "after": afterResults}, "msg": "模板分流差异"})
 }
+
+// RoutingRegressionHitStats 统计回归用例域名命中的策略与规则次数。
+func RoutingRegressionHitStats(c *gin.Context) {
+	filename := strings.TrimSpace(c.PostForm("filename"))
+	content := c.PostForm("text")
+	if content == "" && filename != "" {
+		if path, err := safeFilePath(filename); err == nil {
+			if body, readErr := os.ReadFile(path); readErr == nil {
+				content = string(body)
+			}
+		}
+	}
+	if content == "" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "模板文件名或内容不能为空"})
+		return
+	}
+	cases, err := activeRegressionCases()
+	if err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "读取回归用例失败"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+	defer cancel()
+	_, report := evaluateRoutingRegression(ctx, filename, content, cases)
+	policyHits := map[string]int{}
+	ruleHits := map[string]int{}
+	for _, route := range report.Routes {
+		if route.Policy != "" {
+			policyHits[route.Policy]++
+		}
+		if route.MatchedRule != "" {
+			ruleHits[route.MatchedRule]++
+		}
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"policies": policyHits, "rules": ruleHits, "routes": report.Routes}, "msg": "规则命中统计"})
+}

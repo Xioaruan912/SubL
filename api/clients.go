@@ -203,15 +203,9 @@ func GetClient(c *gin.Context) {
 	Sub := new(models.Subcription)
 	// 获取所有订阅
 	list, _ := Sub.List()
-	// 按令牌匹配：优先随机 token，兼容旧的 md5(订阅名) 链接
+	// 仅按随机 token 匹配，不再兼容可猜测的 md5(订阅名)
 	for _, sub := range list {
-		matched := false
-		if sub.Token != "" && strings.EqualFold(sub.Token, token) {
-			matched = true
-		} else if strings.ToLower(Md5(sub.Name)) == strings.ToLower(token) {
-			matched = true
-		}
-		if !matched {
+		if sub.Token == "" || !strings.EqualFold(sub.Token, token) {
 			continue
 		}
 		// 过期校验
@@ -221,48 +215,57 @@ func GetClient(c *gin.Context) {
 		}
 		// 记录订阅名供后续子函数使用
 		c.Set("subname", sub.Name)
-		// 判断是否带客户端参数
-		switch ClientIndex {
-		case "clash":
-			serveSubscriptionClient(c, sub.ID, "clash")
-			return
-		case "surge":
-			serveSubscriptionClient(c, sub.ID, "surge")
-			return
-		case "loon":
-			serveSubscriptionClient(c, sub.ID, "loon")
-			return
-		case "v2ray":
-			serveSubscriptionClient(c, sub.ID, "v2ray")
+		if resolved := normalizeClient(ClientIndex); resolved != "" {
+			serveSubscriptionClient(c, sub.ID, resolved)
 			return
 		}
-		// 自动识别客户端
-		ClientList := []string{"clash", "surge", "loon"}
-		for k, v := range c.Request.Header {
-			if k == "User-Agent" {
-				for _, UserAgent := range v {
-					for _, client := range ClientList {
-						if strings.Contains(strings.ToLower(UserAgent), strings.ToLower(client)) {
-							switch client {
-							case "clash":
-								serveSubscriptionClient(c, sub.ID, "clash")
-								return
-							case "surge":
-								serveSubscriptionClient(c, sub.ID, "surge")
-								return
-							case "loon":
-								serveSubscriptionClient(c, sub.ID, "loon")
-								return
-							}
-						}
-					}
-					serveSubscriptionClient(c, sub.ID, "v2ray")
-				}
-			}
-		}
+		serveSubscriptionClient(c, sub.ID, clientFromUserAgent(c.Request.UserAgent()))
 		return
 	}
 	c.Writer.WriteString("无效的订阅令牌")
+}
+
+// normalizeClient 将客户端标识归一化为内部名称，无法识别时返回空串。
+func normalizeClient(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "clash", "mihomo", "clashmeta", "clash.meta":
+		return "clash"
+	case "surge":
+		return "surge"
+	case "loon":
+		return "loon"
+	case "v2ray", "v2rayng", "v2raytun":
+		return "v2ray"
+	case "singbox", "sing-box", "sing_box":
+		return "singbox"
+	case "qx", "quantumultx", "quantumult", "quantumult x":
+		return "qx"
+	case "shadowrocket", "srocket", "sr":
+		return "shadowrocket"
+	default:
+		return ""
+	}
+}
+
+// clientFromUserAgent 根据 User-Agent 猜测客户端，默认 V2Ray。
+func clientFromUserAgent(ua string) string {
+	lower := strings.ToLower(ua)
+	switch {
+	case strings.Contains(lower, "mihomo") || strings.Contains(lower, "clash"):
+		return "clash"
+	case strings.Contains(lower, "surge"):
+		return "surge"
+	case strings.Contains(lower, "loon"):
+		return "loon"
+	case strings.Contains(lower, "sing-box") || strings.Contains(lower, "singbox"):
+		return "singbox"
+	case strings.Contains(lower, "quantumult"):
+		return "qx"
+	case strings.Contains(lower, "shadowrocket"):
+		return "shadowrocket"
+	default:
+		return "v2ray"
+	}
 }
 func GetV2ray(c *gin.Context) {
 	var sub models.Subcription
@@ -410,4 +413,62 @@ func GetLoon(c *gin.Context) {
 	c.Writer.Header().Set("Content-Disposition", "inline; filename*=utf-8''"+encodedFilename)
 	c.Writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	c.Writer.WriteString(loonText)
+}
+
+// GetSingbox 输出 sing-box 客户端配置（JSON）。
+func GetSingbox(c *gin.Context) {
+	var sub models.Subcription
+	sub.Name = subName(c)
+	if err := sub.Find(); err != nil {
+		c.Writer.WriteString("找不到这个订阅:" + subName(c))
+		return
+	}
+	if err := mergeGroupNodes(&sub); err != nil {
+		log.Println("合并分组节点失败:", err)
+	}
+	urls, _ := collectNodeInputs(sub.Nodes)
+	var configs node.SqlConfig
+	if err := json.Unmarshal([]byte(sub.Config), &configs); err != nil {
+		c.Writer.WriteString("配置读取错误")
+		return
+	}
+	text, err := node.EncodeSingbox(urls, configs)
+	if err != nil {
+		c.Writer.WriteString(err.Error())
+		return
+	}
+	c.Set("subname", subName(c))
+	filename := fmt.Sprintf("%s.json", subName(c))
+	c.Writer.Header().Set("Content-Disposition", "inline; filename*=utf-8''"+url.QueryEscape(filename))
+	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+	c.Writer.WriteString(text)
+}
+
+// GetQX 输出 Quantumult X 节点列表。
+func GetQX(c *gin.Context) {
+	var sub models.Subcription
+	sub.Name = subName(c)
+	if err := sub.Find(); err != nil {
+		c.Writer.WriteString("找不到这个订阅:" + subName(c))
+		return
+	}
+	if err := mergeGroupNodes(&sub); err != nil {
+		log.Println("合并分组节点失败:", err)
+	}
+	urls, _ := collectNodeInputs(sub.Nodes)
+	var configs node.SqlConfig
+	if err := json.Unmarshal([]byte(sub.Config), &configs); err != nil {
+		c.Writer.WriteString("配置读取错误")
+		return
+	}
+	text, err := node.EncodeQX(urls, configs)
+	if err != nil {
+		c.Writer.WriteString(err.Error())
+		return
+	}
+	c.Set("subname", subName(c))
+	filename := fmt.Sprintf("%s.conf", subName(c))
+	c.Writer.Header().Set("Content-Disposition", "inline; filename*=utf-8''"+url.QueryEscape(filename))
+	c.Writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	c.Writer.WriteString(text)
 }

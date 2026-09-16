@@ -34,6 +34,7 @@ type SubscriptionPipeline struct {
 	ExcludePlaceholder bool        `json:"excludePlaceholder"`
 	PlaceholderTerms   []string    `json:"placeholderTerms"`
 	DeletePattern      string      `json:"deletePattern"`
+	MaxMultiplier      *float64    `json:"maxMultiplier"`
 	SetUDP             *bool       `json:"setUdp"`
 	SetTFO             *bool       `json:"setTfo"`
 	SetSkipCertVerify  *bool       `json:"setSkipCertVerify"`
@@ -120,8 +121,8 @@ func nodesToItems(nodes []models.Node) []pipelineItem {
 			p = node.Outbound{Link: n.Link, Name: n.Name, Type: protocolOf(n.Link)}
 			p.Server, p.Port = node.ExtractServerHost(n.Link)
 		}
-		if p.Name == "" {
-			p.Name = n.Name
+		if n.Name != "" {
+			p.Name = n.Name // 以存储的节点名为准，避免解析结果覆盖用户命名
 		}
 		if f := decodeNodeFlags(n.Flags); !f.Empty() {
 			p.UDP, p.TFO, p.SkipCertVerify = f.UDP, f.TFO, f.SkipCertVerify
@@ -211,6 +212,12 @@ func ApplySubscriptionPipeline(nodes []models.Node, raw string) (PipelinePreview
 		if del != nil && del.MatchString(name) {
 			preview.Rejected["命中删除规则"]++
 			continue
+		}
+		if cfg.MaxMultiplier != nil && *cfg.MaxMultiplier > 0 {
+			if m := node.ParseMultiplier(name); m > *cfg.MaxMultiplier {
+				preview.Rejected["倍率超限"]++
+				continue
+			}
 		}
 		key := dedupeKey(it.P)
 		if cfg.Dedupe && seen[key] {

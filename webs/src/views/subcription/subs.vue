@@ -1,6 +1,6 @@
 <script setup lang='ts'>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { getSubs, getSubPreviewNodes, previewSubPipeline, startSubscriptionBuild, getSubscriptionArtifacts, rollbackSubscriptionArtifact, safePublishSubscription, AddSub, DelSub, UpdateSub, ResetToken, SetExpire } from "@/api/subcription/subs"
+import { getSubs, getSubPreviewNodes, previewSubPipeline, startSubscriptionBuild, getSubscriptionArtifacts, rollbackSubscriptionArtifact, safePublishSubscription, AddSub, DelSub, UpdateSub, ResetToken, SetExpire, getImportLinks, createShortLink } from "@/api/subcription/subs"
 import { getTemp } from "@/api/subcription/temp"
 import { getNodes, getNodeOverview, GetGroupFull } from "@/api/subcription/node"
 import QrcodeVue from 'qrcode.vue'
@@ -123,6 +123,7 @@ const pipeline = reactive({
   setUdp: '' as '' | 'on' | 'off',
   setTfo: '' as '' | 'on' | 'off',
   setSkipCertVerify: '' as '' | 'on' | 'off',
+  maxMultiplier: 0,
   script: '',
 })
 const emojiRulesText = ref('')
@@ -146,6 +147,7 @@ const pipelineJSON = () => {
   if (pipeline.setUdp) payload.setUdp = pipeline.setUdp === 'on'
   if (pipeline.setTfo) payload.setTfo = pipeline.setTfo === 'on'
   if (pipeline.setSkipCertVerify) payload.setSkipCertVerify = pipeline.setSkipCertVerify === 'on'
+  if (pipeline.maxMultiplier > 0) payload.maxMultiplier = pipeline.maxMultiplier
   if (pipeline.script.trim()) payload.script = pipeline.script
   const rules = parseEmojiRules(emojiRulesText.value)
   if (rules.length) payload.emojiRules = rules
@@ -179,11 +181,31 @@ const runSafePublish = async () => {
     publishDialog.value = false
   } finally { publishLoading.value = false }
 }
+const importDialog = ref(false)
+const importSub = ref<Sub | null>(null)
+const importData = ref<any>(null)
+const importLoading = ref(false)
+const openImport = async (sub: Sub) => {
+  importSub.value = sub
+  importData.value = null
+  importDialog.value = true
+  importLoading.value = true
+  try { const { data } = await getImportLinks(sub.ID); importData.value = data } finally { importLoading.value = false }
+}
+const copyText = async (text: string) => {
+  if (!text) return
+  try { await navigator.clipboard.writeText(text); ElMessage.success('已复制') } catch { ElMessage.warning('复制失败，请手动复制') }
+}
+const makeShortLink = async (target: string) => {
+  const { data } = await createShortLink({ target, remark: importSub.value?.Name || '' })
+  if (data?.url) { ElMessage.success('短链：' + data.url); copyText(data.url) }
+}
+
 const resetPipeline = (raw = '') => {
   const defaults: any = {
     include: '', exclude: '', renamePattern: '', renameReplacement: '', protocols: [], sort: 'original',
     dedupe: true, maxNodes: 0, excludePlaceholder: false, deletePattern: '', regexSort: '', resolveDomain: false,
-    emoji: false, emojiRemoveOld: true,
+    emoji: false, emojiRemoveOld: true, maxMultiplier: 0,
   }
   let parsed: any = {}
   try { parsed = JSON.parse(raw || '{}') } catch { /* use defaults */ }
@@ -562,6 +584,7 @@ const saveExpire = async () => {
         <!-- 操作 -->
         <div class="card-actions">
           <el-button link type="success" size="small" @click="openSafePublish(sub)">安全发布</el-button>
+          <el-button link type="primary" size="small" @click="openImport(sub)">导入链接</el-button>
           <el-button link type="success" size="small" @click="buildSubscription(sub)">构建</el-button>
           <el-button link type="primary" size="small" @click="openArtifacts(sub)">版本</el-button>
           <el-button link type="warning" size="small" @click="handleReset(sub)">重置链接</el-button>
@@ -748,6 +771,7 @@ const saveExpire = async () => {
             <el-col :span="12" :xs="24"><el-form-item label="协议过滤"><el-select v-model="pipeline.protocols" multiple clearable placeholder="全部协议" class="full"><el-option v-for="p in ['ss','ssr','vmess','vless','trojan','hysteria2','tuic']" :key="p" :label="p" :value="p" /></el-select></el-form-item></el-col>
             <el-col :span="8" :xs="16"><el-form-item label="排序"><el-select v-model="pipeline.sort" class="full"><el-option label="保留原顺序" value="original"/><el-option label="名称" value="name"/><el-option label="国家/地区" value="country"/><el-option label="低延迟优先" value="latency"/><el-option label="质量分优先" value="quality"/></el-select></el-form-item></el-col>
             <el-col :span="4" :xs="8"><el-form-item label="最多节点"><el-input-number v-model="pipeline.maxNodes" :min="0" :max="9999" controls-position="right" /></el-form-item></el-col>
+            <el-col :span="8" :xs="16"><el-form-item label="倍率上限（0=不限）"><el-input-number v-model="pipeline.maxMultiplier" :min="0" :max="100" :step="0.5" controls-position="right" /></el-form-item></el-col>
             <el-col :span="12" :xs="24"><el-form-item label="正则删除节点"><el-input v-model="pipeline.deletePattern" placeholder="命中即删除，例如 测试|到期" clearable /></el-form-item></el-col>
             <el-col :span="12" :xs="24"><el-form-item label="关键字排序（| 分隔）"><el-input v-model="pipeline.regexSort" placeholder="例如 香港|日本|美国" clearable /></el-form-item></el-col>
             <el-col :span="12" :xs="24"><el-form-item><el-checkbox v-model="pipeline.excludePlaceholder">剔除官网/到期/流量等占位节点</el-checkbox></el-form-item></el-col>
@@ -862,6 +886,27 @@ const saveExpire = async () => {
       </el-form>
       <template #footer><el-button @click="publishDialog=false">取消</el-button><el-button type="primary" :loading="publishLoading" :disabled="!publishForm.template" @click="runSafePublish">开始安全发布</el-button></template>
     </el-dialog>
+    <el-dialog v-model="importDialog" :title="`${importSub?.Name || ''} · 订阅链接与一键导入`" width="680px">
+      <div v-loading="importLoading" style="min-height:120px">
+        <template v-if="importData">
+          <div class="section-title">一键导入</div>
+          <div class="import-actions">
+            <el-button size="small" @click="copyText(importData.imports.clash)">Clash</el-button>
+            <el-button size="small" @click="copyText(importData.imports.surge)">Surge</el-button>
+            <el-button size="small" @click="copyText(importData.imports.loon)">Loon</el-button>
+            <el-button size="small" @click="copyText(importData.imports.shadowrocket)">Shadowrocket</el-button>
+          </div>
+          <div class="section-title" style="margin-top:12px">订阅直链</div>
+          <div v-for="(link, key) in importData.links" :key="key" class="import-row">
+            <el-tag size="small" class="import-tag">{{ key }}</el-tag>
+            <el-input :model-value="link" readonly size="small" />
+            <el-button size="small" @click="copyText(link)">复制</el-button>
+            <el-button size="small" @click="makeShortLink(link)">短链</el-button>
+          </div>
+        </template>
+      </div>
+      <template #footer><el-button @click="importDialog=false">关闭</el-button></template>
+    </el-dialog>
   </div>
 </template>
 
@@ -971,6 +1016,9 @@ html.dark .order-badge { background: var(--el-color-primary-light-3); color: #ff
 .flag-label { color:var(--el-text-color-secondary); font-size:12px; }
 .flag-select { width:110px; }
 .emoji-rules { margin-top:8px; }
+.import-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.import-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.import-tag { width:96px; flex-shrink:0; }
 .reject-stat { margin-right:12px; font-size:12px; }
 @media (max-width: 720px) {
   .subs-page { padding: 6px; }
