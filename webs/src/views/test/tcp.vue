@@ -17,7 +17,7 @@
           :loading="nodesLoading"
           :disabled="nodesLoading"
         >
-          <el-option v-for="n in nodes" :key="n.ID" :label="n.Name" :value="n.ID"><span>{{ n.Name }}</span><small>{{ n.rtt }}ms</small></el-option>
+          <el-option v-for="n in nodes" :key="n.id" :label="n.name" :value="n.id"><span>{{ n.name }}</span><small>{{ n.rtt }}ms</small></el-option>
         </el-select>
 
         <el-select
@@ -111,9 +111,9 @@ defineOptions({
 echarts.use([TooltipComponent, GeoComponent, VisualMapComponent, MapChart, CanvasRenderer]);
 
 interface NodeItem {
-  ID: number;
-  Name: string;
-  Link: string;
+  id: number;
+  name: string;
+  link: string;
   rtt: number;
 }
 interface ChinaTarget {

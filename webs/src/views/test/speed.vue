@@ -16,8 +16,8 @@
           class="node-select"
           :loading="nodesLoading"
         >
-          <el-option v-for="n in nodes" :key="n.ID" :label="n.Name" :value="n.ID">
-            <span>{{ n.Name }}</span><small>{{ n.rtt }}ms</small>
+          <el-option v-for="n in nodes" :key="n.id" :label="n.name" :value="n.id">
+            <span>{{ n.name }}</span><small>{{ n.rtt }}ms</small>
           </el-option>
         </el-select>
         <el-input v-model="target" class="target" placeholder="下载测速地址" />
@@ -78,7 +78,7 @@ defineOptions({ name: "SpeedTest" });
 
 echarts.use([TooltipComponent, GridComponent, LegendComponent, LineChart, CanvasRenderer]);
 
-interface NodeItem { ID: number; Name: string; Link: string; rtt: number }
+interface NodeItem { id: number; name: string; link: string; rtt: number }
 
 const nodes = ref<NodeItem[]>([]);
 const nodesLoading = ref(true);
@@ -120,7 +120,7 @@ const parseSSE = async (res: Response, onEvent: (type: string, data: any) => voi
   }
 };
 
-const selectAll = () => { selectedIds.value = nodes.value.filter((n) => n.rtt >= 0).map((n) => n.ID); };
+const selectAll = () => { selectedIds.value = nodes.value.filter((n) => n.rtt >= 0).map((n) => n.id); };
 
 const startTest = async () => {
   if (!selectedIds.value.length) { ElMessage.warning("请先选择节点"); return; }

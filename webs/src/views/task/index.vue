@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { cancelTask, getTasks, retryTask, startSystemDeployTask } from '@/api/task'
+import { cancelTask, getTasks, retryTask } from '@/api/task'
 
 defineOptions({ name:'TaskCenter' })
 const tasks = ref<any[]>([])
@@ -24,7 +24,6 @@ const statusType = (status:string) => status === 'success' ? 'success' : status 
 const statusName:Record<string,string> = { queued:'排队中', running:'运行中', success:'成功', failed:'失败', cancelled:'已取消' }
 const cancel = async (id:number) => { await cancelTask(id); ElMessage.success('已请求取消'); await load(true) }
 const retry = async (id:number) => { await retryTask(id); ElMessage.success('已创建重试任务'); await load(true) }
-const systemDeploy = async () => { await ElMessageBox.confirm('只会执行服务器管理员预先配置的固定 SUBLINKX_DEPLOY_SCRIPT；Web 请求不能传入命令。继续？','GitHub/VPS 发布',{type:'warning'});const { data }=await startSystemDeployTask();ElMessage.success(`发布任务已创建 #${data?.taskId||''}`);await load(true) }
 const showDetail=(row:any)=>{detailTask.value=row;detailVisible.value=true}
 const prettyResult=(raw:string)=>{try{return JSON.stringify(JSON.parse(raw||'{}'),null,2)}catch{return raw||'--'}}
 
@@ -34,7 +33,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer) })
 
 <template>
   <div class="task-page">
-    <section class="task-hero"><div><span>TASK ORCHESTRATION</span><h1>后台任务中心</h1><p>统一查看节点/分流检测、机场同步、规则同步、模板验证、订阅构建、安全发布与 GitHub/VPS 发布。刷新页面不会丢失历史。</p></div><div><b>{{ active }}</b><small>正在运行</small><el-button @click="systemDeploy">GitHub/VPS 发布</el-button><el-button :loading="loading" @click="load()">刷新</el-button></div></section>
+    <section class="task-hero"><div><span>TASK ORCHESTRATION</span><h1>后台任务中心</h1><p>统一查看节点/分流检测、机场同步、规则同步、模板验证、订阅构建与安全发布。刷新页面不会丢失历史。</p></div><div><b>{{ active }}</b><small>正在运行</small><el-button :loading="loading" @click="load()">刷新</el-button></div></section>
     <section class="task-card">
       <el-table v-loading="loading" :data="tasks" row-key="id" size="small">
         <el-table-column prop="id" label="#" width="72" />

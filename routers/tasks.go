@@ -12,6 +12,5 @@ func Tasks(r *gin.Engine) {
 	g.POST("/retry", api.TaskRetry)
 	g.POST("/template-validate", api.StartTemplateValidationTask)
 	g.POST("/safe-publish", api.StartSafePublishTask)
-	g.POST("/system-deploy", api.StartSystemDeployTask)
 	g.POST("/quality-matrix-sample", api.StartQualityMatrixSampleTask)
 }

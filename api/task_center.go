@@ -41,7 +41,6 @@ type subscriptionBuildTaskRequest struct {
 type templateValidationTaskRequest struct {
 	Filename string `json:"filename"`
 }
-type systemDeployTaskRequest struct{}
 
 func createTaskRun(base context.Context, kind, name string, request any, retryOf *uint) (*models.TaskRun, context.Context, error) {
 	raw, _ := json.Marshal(request)
@@ -166,9 +165,6 @@ func executeStoredTask(task *models.TaskRun) {
 			updateTaskProgress(task.ID, 10, "正在执行一键安全发布")
 			result, err = runSafePublish(ctx, req)
 		}
-	case "system-deploy":
-		updateTaskProgress(task.ID, 10, "正在执行管理员预配置的发布脚本")
-		result, err = runConfiguredDeployTask(ctx)
 	case "quality-matrix-sample":
 		var req qualityMatrixSampleRequest
 		err = json.Unmarshal([]byte(task.RequestJSON), &req)
@@ -273,10 +269,6 @@ func StartSafePublishTask(c *gin.Context) {
 		req.Client = "clash"
 	}
 	startTrackedTask(c, "safe-publish", "一键安全发布", req)
-}
-
-func StartSystemDeployTask(c *gin.Context) {
-	startTrackedTask(c, "system-deploy", "GitHub/VPS 发布", systemDeployTaskRequest{})
 }
 
 func StartQualityMatrixSampleTask(c *gin.Context) {

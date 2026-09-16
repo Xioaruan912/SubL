@@ -114,7 +114,6 @@ func requiredScope(method, path string) string {
 		"/api/v1/rules",
 		"/api/v1/ops/backup/import",
 		"/api/v1/tasks/safe-publish",
-		"/api/v1/tasks/system-deploy",
 	} {
 		if strings.HasPrefix(path, prefix) {
 			return "admin"

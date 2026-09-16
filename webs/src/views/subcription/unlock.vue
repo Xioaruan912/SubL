@@ -18,11 +18,11 @@
         >
           <el-option
             v-for="n in nodes"
-            :key="n.ID"
-            :label="n.Name"
-            :value="n.ID"
+            :key="n.id"
+            :label="n.name"
+            :value="n.id"
           >
-            <span>{{ n.Name }}</span><small>{{ n.rtt }}ms</small>
+            <span>{{ n.name }}</span><small>{{ n.rtt }}ms</small>
           </el-option>
         </el-select>
         <el-button type="primary" :loading="loading" @click="startTest">
@@ -74,9 +74,9 @@ defineOptions({
 });
 
 interface NodeItem {
-  ID: number;
-  Name: string;
-  Link: string;
+  id: number;
+  name: string;
+  link: string;
   rtt: number;
 }
 interface UnlockCheckResult {
