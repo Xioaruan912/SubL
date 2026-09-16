@@ -18,6 +18,19 @@ import (
 // proxy node. It is used as a fallback for rule hosts that reject the VPS's
 // direct egress IP (for example returning HTTP 403).
 func FetchURLThroughNode(ctx context.Context, link, rawURL, userAgent string, timeout time.Duration, maxBytes int64) ([]byte, http.Header, error) {
+	return fetchURLThroughNode(ctx, link, rawURL, userAgent, timeout, maxBytes, true)
+}
+
+// SpeedTestThroughNode downloads up to maxBytes through one node and returns the
+// bytes actually received. Unlike FetchURLThroughNode it truncates instead of
+// failing when the resource is larger than maxBytes, which is what a throughput
+// test needs.
+func SpeedTestThroughNode(ctx context.Context, link, rawURL, userAgent string, timeout time.Duration, maxBytes int64) ([]byte, error) {
+	body, _, err := fetchURLThroughNode(ctx, link, rawURL, userAgent, timeout, maxBytes, false)
+	return body, err
+}
+
+func fetchURLThroughNode(ctx context.Context, link, rawURL, userAgent string, timeout time.Duration, maxBytes int64, strictSize bool) ([]byte, http.Header, error) {
 	if timeout <= 0 {
 		timeout = 12 * time.Second
 	}
@@ -81,7 +94,10 @@ func FetchURLThroughNode(ctx context.Context, link, rawURL, userAgent string, ti
 		return nil, resp.Header, err
 	}
 	if int64(len(body)) > maxBytes {
-		return nil, resp.Header, errors.New("response exceeds size limit")
+		if strictSize {
+			return nil, resp.Header, errors.New("response exceeds size limit")
+		}
+		body = body[:maxBytes]
 	}
 	return body, resp.Header, nil
 }

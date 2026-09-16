@@ -20,7 +20,7 @@
             <span>{{ n.name }}</span><small>{{ n.rtt }}ms</small>
           </el-option>
         </el-select>
-        <el-input v-model="target" class="target" placeholder="下载测速地址" />
+        <el-input v-model="target" class="target" placeholder="下载测速地址（含 bytes 参数时按所选 MB 自动对齐）" />
         <el-input-number v-model="sizeMB" :min="1" :max="100" controls-position="right" class="num" />
         <span class="unit">MB</span>
         <el-input-number v-model="timeoutSec" :min="3" :max="120" controls-position="right" class="num" />
@@ -83,8 +83,8 @@ interface NodeItem { id: number; name: string; link: string; rtt: number }
 const nodes = ref<NodeItem[]>([]);
 const nodesLoading = ref(true);
 const selectedIds = ref<number[]>([]);
-const target = ref("https://speed.cloudflare.com/__down?bytes=5000000");
-const sizeMB = ref(5);
+const target = ref("https://speed.cloudflare.com/__down?bytes=10000000");
+const sizeMB = ref(10);
 const timeoutSec = ref(20);
 const loading = ref(false);
 const results = ref<any[]>([]);

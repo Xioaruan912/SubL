@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"math"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +13,22 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// normalizeSpeedTarget 将目标 URL 中 Cloudflare 风格的 bytes 参数对齐到本次
+// 选择的下载大小，避免“选了 MB 但实际仍按 URL 固定大小”的问题。
+func normalizeSpeedTarget(raw string, size int64) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	q := u.Query()
+	if q.Has("bytes") {
+		q.Set("bytes", strconv.FormatInt(size, 10))
+		u.RawQuery = q.Encode()
+		return u.String()
+	}
+	return raw
+}
 
 const defaultSpeedTestTarget = "https://speed.cloudflare.com/__down?bytes=3000000"
 
@@ -33,6 +50,7 @@ func NodeSpeedTestStream(c *gin.Context) {
 	if v, err := strconv.Atoi(c.PostForm("timeout")); err == nil && v >= 3 && v <= 120 {
 		timeout = time.Duration(v) * time.Second
 	}
+	target = normalizeSpeedTarget(target, maxBytes)
 
 	nodesList, err := speedTestNodes(ids, group)
 	if err != nil {
@@ -108,7 +126,7 @@ func speedTestOne(ctx context.Context, n models.Node, target string, timeout tim
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	start := time.Now()
-	body, _, err := node.FetchURLThroughNode(runCtx, n.Link, target, "SubLinkX-Speedtest/1.0", timeout, maxBytes)
+	body, err := node.SpeedTestThroughNode(runCtx, n.Link, target, "SubLinkX-Speedtest/1.0", timeout, maxBytes)
 	elapsed := time.Since(start).Seconds()
 	if err != nil {
 		res["error"] = err.Error()

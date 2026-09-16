@@ -156,6 +156,18 @@ func GetMenus(c *gin.Context) {
 					Meta:      Meta{Title: "任务中心", Icon: "todolist", Hidden: false, Roles: []string{"ADMIN"}, KeepAlive: true},
 				},
 				{
+					Path:      "speed",
+					Component: "test/speed",
+					Name:      "SpeedTest",
+					Meta: Meta{
+						Title:     "真实测速",
+						Icon:      "monitor",
+						Hidden:    false,
+						Roles:     []string{"ADMIN"},
+						KeepAlive: true,
+					},
+				},
+				{
 					Path:      "egress",
 					Component: "test/egress",
 					Name:      "EgressTest",
@@ -186,18 +198,6 @@ func GetMenus(c *gin.Context) {
 					Meta: Meta{
 						Title:     "tcptest",
 						Icon:      "link",
-						Hidden:    false,
-						Roles:     []string{"ADMIN"},
-						KeepAlive: true,
-					},
-				},
-				{
-					Path:      "speed",
-					Component: "test/speed",
-					Name:      "SpeedTest",
-					Meta: Meta{
-						Title:     "真实测速",
-						Icon:      "connection",
 						Hidden:    false,
 						Roles:     []string{"ADMIN"},
 						KeepAlive: true,
