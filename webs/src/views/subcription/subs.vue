@@ -154,9 +154,9 @@ const pipelineJSON = () => {
   return JSON.stringify(payload)
 }
 const buildSubscription = async (sub:Sub) => {
-  const client = await ElMessageBox.prompt('输入客户端：clash / surge / loon / v2ray', `构建 ${sub.Name}`, { inputValue:'clash', inputPattern:/^(clash|surge|loon|v2ray)$/i, inputErrorMessage:'仅支持 clash/surge/loon/v2ray' })
+  const client = await ElMessageBox.prompt('输入客户端：clash / surge / loon / v2ray / singbox / qx / shadowrocket', `生成产物 · ${sub.Name}`, { inputValue:'clash', inputPattern:/^(clash|surge|loon|v2ray|singbox|qx|shadowrocket)$/i, inputErrorMessage:'仅支持 clash/surge/loon/v2ray/singbox/qx/shadowrocket' })
   const { data } = await startSubscriptionBuild({ subscriptionId:sub.ID, client:client.value.toLowerCase() })
-  ElMessage.success(`构建任务已创建 #${data?.taskId || ''}，可在任务中心查看`)
+  ElMessage.success(`生成产物任务已创建 #${data?.taskId || ''}，可在任务中心查看`)
 }
 const loadArtifacts = async () => {
   if (!artifactSub.value) return
@@ -177,7 +177,7 @@ const runSafePublish = async () => {
   publishLoading.value = true
   try {
     const { data } = await safePublishSubscription({ subscriptionId:publishSub.value.ID, client:publishForm.value.client, template:publishForm.value.template })
-    ElMessage.success(`安全发布任务已创建 #${data?.taskId || ''}，全部检查通过后才会切换 LKG`)
+    ElMessage.success(`发布验证任务已创建 #${data?.taskId || ''}，全部检查通过后才会切换 LKG`)
     publishDialog.value = false
   } finally { publishLoading.value = false }
 }
@@ -199,6 +199,18 @@ const copyText = async (text: string) => {
 const makeShortLink = async (target: string) => {
   const { data } = await createShortLink({ target, remark: importSub.value?.Name || '' })
   if (data?.url) { ElMessage.success('短链：' + data.url); copyText(data.url) }
+}
+
+// 卡片「更多」菜单派发
+const onCardCommand = (cmd: string, sub: Sub) => {
+  switch (cmd) {
+    case 'publish': openSafePublish(sub); break
+    case 'build': buildSubscription(sub); break
+    case 'artifacts': openArtifacts(sub); break
+    case 'reset': handleReset(sub); break
+    case 'edit': handleEdit(sub); break
+    case 'delete': handleDel(sub); break
+  }
 }
 
 const resetPipeline = (raw = '') => {
@@ -581,16 +593,35 @@ const saveExpire = async () => {
           </div>
         </div>
 
-        <!-- 操作 -->
+        <!-- 操作：常用 3 个 + 更多菜单 -->
         <div class="card-actions">
-          <el-button link type="success" size="small" @click="openSafePublish(sub)">安全发布</el-button>
-          <el-button link type="primary" size="small" @click="openImport(sub)">导入链接</el-button>
-          <el-button link type="success" size="small" @click="buildSubscription(sub)">构建</el-button>
-          <el-button link type="primary" size="small" @click="openArtifacts(sub)">版本</el-button>
-          <el-button link type="warning" size="small" @click="handleReset(sub)">重置链接</el-button>
+          <el-button link type="primary" size="small" @click="openImport(sub)">分享</el-button>
           <el-button link type="primary" size="small" @click="openDrawer(sub)">详情</el-button>
-          <el-button link type="primary" size="small" @click="handleEdit(sub)">编辑</el-button>
-          <el-button link type="danger" size="small" @click="handleDel(sub)">删除</el-button>
+          <el-dropdown trigger="click" placement="bottom-end" @command="(cmd: string) => onCardCommand(cmd, sub)">
+            <el-button link type="info" size="small">更多 ▾</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="publish">
+                  <div class="more-item"><span class="more-title">发布验证</span><span class="more-desc">预检 + 回归 + 实测通过后上线</span></div>
+                </el-dropdown-item>
+                <el-dropdown-item command="build">
+                  <div class="more-item"><span class="more-title">生成产物</span><span class="more-desc">保存一份不可变快照用于对比/回滚</span></div>
+                </el-dropdown-item>
+                <el-dropdown-item command="artifacts">
+                  <div class="more-item"><span class="more-title">版本与回滚</span><span class="more-desc">查看历史产物并切换 Last Known Good</span></div>
+                </el-dropdown-item>
+                <el-dropdown-item command="reset" divided>
+                  <div class="more-item"><span class="more-title">重置订阅链接</span><span class="more-desc">重新生成令牌，旧链接立即失效</span></div>
+                </el-dropdown-item>
+                <el-dropdown-item command="edit">
+                  <div class="more-item"><span class="more-title">编辑</span><span class="more-desc">修改名称、节点与模板</span></div>
+                </el-dropdown-item>
+                <el-dropdown-item command="delete" divided>
+                  <div class="more-item more-danger"><span class="more-title">删除</span><span class="more-desc">删除该订阅</span></div>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
       </el-card>
       </div>
@@ -866,7 +897,7 @@ const saveExpire = async () => {
         </el-table>
       </div>
     </el-drawer>
-    <el-drawer v-model="artifactDrawer" :title="`${artifactSub?.Name || ''} · 订阅产物版本`" size="820px">
+    <el-drawer v-model="artifactDrawer" :title="`${artifactSub?.Name || ''} · 版本与回滚`" size="820px">
       <div class="artifact-toolbar"><el-select v-model="artifactClient" style="width:160px" @change="loadArtifacts"><el-option label="Clash" value="clash"/><el-option label="Surge" value="surge"/><el-option label="Loon" value="loon"/><el-option label="V2Ray" value="v2ray"/></el-select><el-tag type="success" effect="plain">LKG #{{ lkgId || '--' }}</el-tag><el-button :loading="artifactLoading" @click="loadArtifacts">刷新</el-button></div>
       <el-alert type="info" :closable="false" title="产物内容不可变；这里只切换 Last Known Good 指针。实时订阅生成失败或校验失败时会自动回退到该版本。" />
       <el-table v-loading="artifactLoading" :data="artifactItems" size="small" class="artifact-table">
@@ -878,15 +909,15 @@ const saveExpire = async () => {
         <el-table-column label="操作" width="120"><template #default="{row}"><el-tag v-if="row.id === lkgId" type="success" size="small">当前 LKG</el-tag><el-button v-else-if="row.validationStatus === 'valid'" link type="primary" @click="setLkg(row)">设为 LKG</el-button></template></el-table-column>
       </el-table>
     </el-drawer>
-    <el-dialog v-model="publishDialog" :title="`${publishSub?.Name || ''} · 一键安全发布`" width="560px">
+    <el-dialog v-model="publishDialog" :title="`${publishSub?.Name || ''} · 发布验证`" width="560px">
       <el-alert type="info" :closable="false" title="模板预检 → 协议兼容 → 分流回归 → 生成候选产物 → 节点/真实出口验证 → 与当前 LKG 对比；全部通过才发布。" />
       <el-form label-position="top" class="publish-form">
         <el-form-item label="目标客户端"><el-select v-model="publishForm.client" style="width:100%" @change="publishForm.template=''" ><el-option label="Clash/Mihomo" value="clash"/><el-option label="Surge" value="surge"/><el-option label="Loon" value="loon"/></el-select></el-form-item>
         <el-form-item label="模板"><el-select v-model="publishForm.template" filterable style="width:100%"><el-option v-for="t in templist.filter(t => publishForm.client === 'clash' ? /\.ya?ml$/i.test(t.file) : /\.conf$/i.test(t.file))" :key="t.file" :label="t.file" :value="t.file"/></el-select></el-form-item>
       </el-form>
-      <template #footer><el-button @click="publishDialog=false">取消</el-button><el-button type="primary" :loading="publishLoading" :disabled="!publishForm.template" @click="runSafePublish">开始安全发布</el-button></template>
+      <template #footer><el-button @click="publishDialog=false">取消</el-button><el-button type="primary" :loading="publishLoading" :disabled="!publishForm.template" @click="runSafePublish">开始发布验证</el-button></template>
     </el-dialog>
-    <el-dialog v-model="importDialog" :title="`${importSub?.Name || ''} · 订阅链接与一键导入`" width="680px">
+    <el-dialog v-model="importDialog" :title="`${importSub?.Name || ''} · 分享与导入`" width="680px">
       <div v-loading="importLoading" style="min-height:120px">
         <template v-if="importData">
           <div class="section-title">一键导入</div>
@@ -1050,4 +1081,13 @@ html.dark .order-badge { background: var(--el-color-primary-light-3); color: #ff
   .artifact-toolbar :deep(.el-button) { margin-left: 0; }
   .cfg-item { align-items: flex-start; }
 }
+</style>
+
+<!-- 「更多」下拉菜单为 teleport 到 body，需非 scoped 样式 -->
+<style>
+.sub-more-item,
+.more-item { display: flex; flex-direction: column; line-height: 1.25; padding: 2px 0; }
+.more-title { font-size: 13px; }
+.more-desc { font-size: 11px; color: var(--el-text-color-secondary); }
+.more-danger .more-title { color: var(--el-color-danger); }
 </style>
