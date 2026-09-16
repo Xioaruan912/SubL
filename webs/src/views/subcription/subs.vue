@@ -115,10 +115,42 @@ const publishDialog = ref(false)
 const publishSub = ref<Sub | null>(null)
 const publishForm = ref({ client:'clash', template:'' })
 const publishLoading = ref(false)
-const pipeline = reactive({ include: '', exclude: '', renamePattern: '', renameReplacement: '', protocols: [] as string[], sort: 'original', dedupe: true, maxNodes: 0 })
+const pipeline = reactive({
+  include: '', exclude: '', renamePattern: '', renameReplacement: '',
+  protocols: [] as string[], sort: 'original', dedupe: true, maxNodes: 0,
+  excludePlaceholder: false, deletePattern: '', regexSort: '', resolveDomain: false,
+  emoji: false, emojiRemoveOld: true,
+  setUdp: '' as '' | 'on' | 'off',
+  setTfo: '' as '' | 'on' | 'off',
+  setSkipCertVerify: '' as '' | 'on' | 'off',
+  script: '',
+})
+const emojiRulesText = ref('')
 const pipelinePreview = ref<any>(null)
 const pipelineLoading = ref(false)
-const pipelineJSON = () => JSON.stringify(pipeline)
+const parseEmojiRules = (text: string) => text.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+  const i = l.indexOf('=')
+  if (i < 0) return null
+  return { match: l.slice(0, i).trim(), emoji: l.slice(i + 1).trim() }
+}).filter((r): r is { match: string; emoji: string } => !!r && !!r.match && !!r.emoji)
+const pipelineJSON = () => {
+  const payload: any = {
+    include: pipeline.include, exclude: pipeline.exclude,
+    renamePattern: pipeline.renamePattern, renameReplacement: pipeline.renameReplacement,
+    protocols: pipeline.protocols, sort: pipeline.sort, dedupe: pipeline.dedupe,
+    maxNodes: pipeline.maxNodes, emoji: pipeline.emoji, emojiRemoveOld: pipeline.emojiRemoveOld,
+    excludePlaceholder: pipeline.excludePlaceholder,
+    deletePattern: pipeline.deletePattern, regexSort: pipeline.regexSort,
+    resolveDomain: pipeline.resolveDomain,
+  }
+  if (pipeline.setUdp) payload.setUdp = pipeline.setUdp === 'on'
+  if (pipeline.setTfo) payload.setTfo = pipeline.setTfo === 'on'
+  if (pipeline.setSkipCertVerify) payload.setSkipCertVerify = pipeline.setSkipCertVerify === 'on'
+  if (pipeline.script.trim()) payload.script = pipeline.script
+  const rules = parseEmojiRules(emojiRulesText.value)
+  if (rules.length) payload.emojiRules = rules
+  return JSON.stringify(payload)
+}
 const buildSubscription = async (sub:Sub) => {
   const client = await ElMessageBox.prompt('输入客户端：clash / surge / loon / v2ray', `构建 ${sub.Name}`, { inputValue:'clash', inputPattern:/^(clash|surge|loon|v2ray)$/i, inputErrorMessage:'仅支持 clash/surge/loon/v2ray' })
   const { data } = await startSubscriptionBuild({ subscriptionId:sub.ID, client:client.value.toLowerCase() })
@@ -148,8 +180,19 @@ const runSafePublish = async () => {
   } finally { publishLoading.value = false }
 }
 const resetPipeline = (raw = '') => {
-  const value = { include: '', exclude: '', renamePattern: '', renameReplacement: '', protocols: [], sort: 'original', dedupe: true, maxNodes: 0 }
-  try { Object.assign(value, JSON.parse(raw || '{}')) } catch { /* use defaults */ }
+  const defaults: any = {
+    include: '', exclude: '', renamePattern: '', renameReplacement: '', protocols: [], sort: 'original',
+    dedupe: true, maxNodes: 0, excludePlaceholder: false, deletePattern: '', regexSort: '', resolveDomain: false,
+    emoji: false, emojiRemoveOld: true,
+  }
+  let parsed: any = {}
+  try { parsed = JSON.parse(raw || '{}') } catch { /* use defaults */ }
+  const value = { ...defaults, ...parsed }
+  value.setUdp = typeof parsed.setUdp === 'boolean' ? (parsed.setUdp ? 'on' : 'off') : ''
+  value.setTfo = typeof parsed.setTfo === 'boolean' ? (parsed.setTfo ? 'on' : 'off') : ''
+  value.setSkipCertVerify = typeof parsed.setSkipCertVerify === 'boolean' ? (parsed.setSkipCertVerify ? 'on' : 'off') : ''
+  if (!value.script) value.script = ''
+  emojiRulesText.value = (parsed.emojiRules || []).map((r: any) => `${r.match}=${r.emoji}`).join('\n')
   Object.assign(pipeline, value); pipelinePreview.value = null
 }
 const runPipelinePreview = async () => {
@@ -692,7 +735,7 @@ const saveExpire = async () => {
           <div class="pipeline-section-head">
             <div>
               <div class="pipeline-title">节点处理 <el-tag size="small" type="info" effect="plain">可选</el-tag></div>
-              <div class="pipeline-desc">在订阅生成前统一做筛选、重命名、去重和排序；不配置时保持当前节点内容。</div>
+              <div class="pipeline-desc">在订阅生成前统一做筛选、占位剔除、国旗、属性覆盖、正则删除、脚本与排序；不配置时保持当前节点内容。</div>
             </div>
             <span class="pipeline-hint">按顺序应用</span>
           </div>
@@ -705,6 +748,25 @@ const saveExpire = async () => {
             <el-col :span="12" :xs="24"><el-form-item label="协议过滤"><el-select v-model="pipeline.protocols" multiple clearable placeholder="全部协议" class="full"><el-option v-for="p in ['ss','ssr','vmess','vless','trojan','hysteria2','tuic']" :key="p" :label="p" :value="p" /></el-select></el-form-item></el-col>
             <el-col :span="8" :xs="16"><el-form-item label="排序"><el-select v-model="pipeline.sort" class="full"><el-option label="保留原顺序" value="original"/><el-option label="名称" value="name"/><el-option label="国家/地区" value="country"/><el-option label="低延迟优先" value="latency"/><el-option label="质量分优先" value="quality"/></el-select></el-form-item></el-col>
             <el-col :span="4" :xs="8"><el-form-item label="最多节点"><el-input-number v-model="pipeline.maxNodes" :min="0" :max="9999" controls-position="right" /></el-form-item></el-col>
+            <el-col :span="12" :xs="24"><el-form-item label="正则删除节点"><el-input v-model="pipeline.deletePattern" placeholder="命中即删除，例如 测试|到期" clearable /></el-form-item></el-col>
+            <el-col :span="12" :xs="24"><el-form-item label="关键字排序（| 分隔）"><el-input v-model="pipeline.regexSort" placeholder="例如 香港|日本|美国" clearable /></el-form-item></el-col>
+            <el-col :span="12" :xs="24"><el-form-item><el-checkbox v-model="pipeline.excludePlaceholder">剔除官网/到期/流量等占位节点</el-checkbox></el-form-item></el-col>
+            <el-col :span="12" :xs="24"><el-form-item><el-checkbox v-model="pipeline.resolveDomain">域名解析为 IP 后再下发</el-checkbox></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="节点属性覆盖">
+              <div class="flag-row">
+                <span class="flag-label">UDP</span><el-select v-model="pipeline.setUdp" clearable placeholder="默认" class="flag-select"><el-option label="开启" value="on" /><el-option label="关闭" value="off" /></el-select>
+                <span class="flag-label">TFO</span><el-select v-model="pipeline.setTfo" clearable placeholder="默认" class="flag-select"><el-option label="开启" value="on" /><el-option label="关闭" value="off" /></el-select>
+                <span class="flag-label">跳过证书校验</span><el-select v-model="pipeline.setSkipCertVerify" clearable placeholder="默认" class="flag-select"><el-option label="开启" value="on" /><el-option label="关闭" value="off" /></el-select>
+              </div>
+            </el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="国旗 Emoji">
+              <div class="flag-row">
+                <el-checkbox v-model="pipeline.emoji">自动补国旗</el-checkbox>
+                <el-checkbox v-model="pipeline.emojiRemoveOld" :disabled="!pipeline.emoji">先移除旧国旗</el-checkbox>
+              </div>
+              <el-input v-model="emojiRulesText" type="textarea" :rows="2" class="emoji-rules" placeholder="自定义映射（可选），每行一个：关键字=国旗，例如 香港=🇭🇰" />
+            </el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="脚本操作（仅管理员）"><el-input v-model="pipeline.script" type="textarea" :rows="4" placeholder="function operator(proxies) { return proxies.filter(p => p.name.indexOf('香港') >= 0); }" /></el-form-item></el-col>
           </el-row>
           <div class="pipeline-footer"><el-checkbox v-model="pipeline.dedupe">按节点链接去重</el-checkbox><el-button :loading="pipelineLoading" @click="runPipelinePreview">预览处理结果</el-button></div>
             <el-alert v-if="pipelinePreview" type="success" :closable="false" show-icon><template #title>处理前 {{ pipelinePreview.before }} 个 → 处理后 {{ pipelinePreview.after }} 个</template><template #default><span v-for="(count, reason) in pipelinePreview.rejected" :key="reason" class="reject-stat">{{ reason }} {{ count }}</span></template></el-alert>
@@ -905,6 +967,10 @@ html.dark .order-badge { background: var(--el-color-primary-light-3); color: #ff
 .pipeline-card { padding:14px; border:1px solid var(--el-border-color-lighter); border-radius:12px; background:var(--el-bg-color); box-shadow:0 1px 2px rgba(0,0,0,.02); }
 .pipeline-card .el-form-item { margin-bottom:12px; }
 .pipeline-footer { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-top:2px; }
+.flag-row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+.flag-label { color:var(--el-text-color-secondary); font-size:12px; }
+.flag-select { width:110px; }
+.emoji-rules { margin-top:8px; }
 .reject-stat { margin-right:12px; font-size:12px; }
 @media (max-width: 720px) {
   .subs-page { padding: 6px; }

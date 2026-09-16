@@ -10,8 +10,18 @@ import (
 )
 
 func EncodeSurge(urls []string, sqlconfig SqlConfig) (string, error) {
+	return EncodeSurgeWithFlags(urls, nil, sqlconfig)
+}
+
+// EncodeSurgeWithFlags 与 EncodeSurge 相同，但允许按节点覆盖 udp/skip-cert-verify。
+func EncodeSurgeWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig SqlConfig) (string, error) {
 	var proxys, groups []string
 	for _, link := range urls {
+		udp := sqlconfig.Udp
+		cert := sqlconfig.Cert
+		if f, ok := flags[link]; ok {
+			udp, cert = f.UDP, f.SkipCertVerify
+		}
 		Scheme := strings.Split(link, "://")[0]
 		switch {
 		case Scheme == "ss":
@@ -26,7 +36,7 @@ func EncodeSurge(urls []string, sqlconfig SqlConfig) (string, error) {
 				"port":     ss.Port,
 				"cipher":   ss.Param.Cipher,
 				"password": ss.Param.Password,
-				"udp":      sqlconfig.Udp,
+				"udp":      udp,
 			}
 			ssproxy := fmt.Sprintf("%s = ss, %s, %d, encrypt-method=%s, password=%s, udp-relay=%t",
 				proxy["name"], proxy["server"], proxy["port"], proxy["cipher"], proxy["password"], proxy["udp"])
@@ -52,8 +62,8 @@ func EncodeSurge(urls []string, sqlconfig SqlConfig) (string, error) {
 				"network":          vmess.Net,
 				"ws-path":          vmess.Path,
 				"ws-host":          vmess.Host,
-				"udp":              sqlconfig.Udp,
-				"skip-cert-verify": sqlconfig.Cert,
+				"udp":              udp,
+				"skip-cert-verify": cert,
 			}
 			vmessproxy := fmt.Sprintf("%s = vmess, %s, %d, username=%s , tls=%t, vmess-aead=true,  udp-relay=%t , skip-cert-verify=%t",
 				proxy["name"], proxy["server"], proxy["port"], proxy["uuid"], proxy["tls"], proxy["udp"], proxy["skip-cert-verify"])
@@ -79,8 +89,8 @@ func EncodeSurge(urls []string, sqlconfig SqlConfig) (string, error) {
 				"server":           trojan.Hostname,
 				"port":             trojan.Port,
 				"password":         trojan.Password,
-				"udp":              sqlconfig.Udp,
-				"skip-cert-verify": sqlconfig.Cert,
+				"udp":              udp,
+				"skip-cert-verify": cert,
 			}
 			trojanproxy := fmt.Sprintf("%s = trojan, %s, %d, password=%s, udp-relay=%t, skip-cert-verify=%t",
 				proxy["name"], proxy["server"], proxy["port"], proxy["password"], proxy["udp"], proxy["skip-cert-verify"])
@@ -101,8 +111,8 @@ func EncodeSurge(urls []string, sqlconfig SqlConfig) (string, error) {
 				"server":           hy2.Host,
 				"port":             hy2.Port,
 				"password":         hy2.Password,
-				"udp":              sqlconfig.Udp,
-				"skip-cert-verify": sqlconfig.Cert,
+				"udp":              udp,
+				"skip-cert-verify": cert,
 			}
 			hy2proxy := fmt.Sprintf("%s = hysteria2, %s, %d, password=%s, udp-relay=%t, skip-cert-verify=%t",
 				proxy["name"], proxy["server"], proxy["port"], proxy["password"], proxy["udp"], proxy["skip-cert-verify"])
@@ -123,8 +133,8 @@ func EncodeSurge(urls []string, sqlconfig SqlConfig) (string, error) {
 				"server":           tuic.Host,
 				"port":             tuic.Port,
 				"password":         tuic.Password,
-				"udp":              sqlconfig.Udp,
-				"skip-cert-verify": sqlconfig.Cert,
+				"udp":              udp,
+				"skip-cert-verify": cert,
 			}
 			tuicproxy := fmt.Sprintf("%s = tuic, %s, %d, token=%s, udp-relay=%t, skip-cert-verify=%t",
 				proxy["name"], proxy["server"], proxy["port"], proxy["password"], proxy["udp"], proxy["skip-cert-verify"])

@@ -83,6 +83,26 @@ func fetchAndExpandRemote(rawURL string) []string {
 	return out
 }
 
+// collectNodeInputs 展开订阅节点的链接，并带上每个节点的构建覆盖属性。
+func collectNodeInputs(nodes []models.Node) ([]string, map[string]node.NodeFlags) {
+	urls := []string{}
+	flags := map[string]node.NodeFlags{}
+	for _, v := range nodes {
+		links := expandNodeLink(v.Link)
+		if len(links) == 0 {
+			continue
+		}
+		urls = append(urls, links...)
+		f := decodeNodeFlags(v.Flags)
+		if !f.Empty() {
+			for _, l := range links {
+				flags[l] = f
+			}
+		}
+	}
+	return urls, flags
+}
+
 // mergeGroupNodes 将订阅引用的分组节点合并进 sub.Nodes（去重，分组节点在后）
 // 分组引用按 ID 关联，机场重同步后分组节点更新，订阅拉取时自动跟进
 func mergeGroupNodes(sub *models.Subcription) error {
@@ -291,21 +311,8 @@ func GetClash(c *gin.Context) {
 		log.Println("合并分组节点失败:", err)
 	}
 
-	urls := []string{}
-
+	urls, flags := collectNodeInputs(sub.Nodes)
 	log.Printf("[Subscription] 构建 Clash 订阅: %s，节点数: %d\n", sub.Name, len(sub.Nodes))
-	for _, v := range sub.Nodes {
-		switch {
-		// 如果包含多条节点
-		case strings.Contains(v.Link, ","):
-			links := strings.Split(v.Link, ",")
-			urls = append(urls, links...)
-			continue
-		//如果是订阅转换
-		default:
-			urls = append(urls, expandNodeLink(v.Link)...)
-		}
-	}
 	log.Printf("[Subscription] Clash 转换输入节点数: %d\n", len(urls))
 	var configs node.SqlConfig
 	err = json.Unmarshal([]byte(sub.Config), &configs)
@@ -313,7 +320,7 @@ func GetClash(c *gin.Context) {
 		c.Writer.WriteString("配置读取错误")
 		return
 	}
-	DecodeClash, err := node.EncodeClash(urls, configs)
+	DecodeClash, err := node.EncodeClashWithFlags(urls, flags, configs)
 	if err != nil {
 		c.Writer.WriteString(err.Error())
 		return
@@ -339,19 +346,7 @@ func GetSurge(c *gin.Context) {
 	if err := mergeGroupNodes(&sub); err != nil {
 		log.Println("合并分组节点失败:", err)
 	}
-	urls := []string{}
-	for _, v := range sub.Nodes {
-		switch {
-		// 如果包含多条节点
-		case strings.Contains(v.Link, ","):
-			links := strings.Split(v.Link, ",")
-			urls = append(urls, links...)
-			continue
-		//如果是订阅转换
-		default:
-			urls = append(urls, expandNodeLink(v.Link)...)
-		}
-	}
+	urls, flags := collectNodeInputs(sub.Nodes)
 
 	var configs node.SqlConfig
 	err = json.Unmarshal([]byte(sub.Config), &configs)
@@ -360,7 +355,7 @@ func GetSurge(c *gin.Context) {
 		return
 	}
 	// log.Println("surge路径:", configs)
-	DecodeClash, err := node.EncodeSurge(urls, configs)
+	DecodeClash, err := node.EncodeSurgeWithFlags(urls, flags, configs)
 	if err != nil {
 		c.Writer.WriteString(err.Error())
 		return
@@ -396,19 +391,7 @@ func GetLoon(c *gin.Context) {
 		log.Println("合并分组节点失败:", err)
 	}
 
-	urls := []string{}
-	for _, v := range sub.Nodes {
-		switch {
-		// 如果包含多条节点
-		case strings.Contains(v.Link, ","):
-			links := strings.Split(v.Link, ",")
-			urls = append(urls, links...)
-			continue
-		// 如果是订阅转换
-		default:
-			urls = append(urls, expandNodeLink(v.Link)...)
-		}
-	}
+	urls, flags := collectNodeInputs(sub.Nodes)
 
 	var configs node.SqlConfig
 	err = json.Unmarshal([]byte(sub.Config), &configs)
@@ -416,7 +399,7 @@ func GetLoon(c *gin.Context) {
 		c.Writer.WriteString("配置读取错误")
 		return
 	}
-	loonText, err := node.EncodeLoon(urls, configs)
+	loonText, err := node.EncodeLoonWithFlags(urls, flags, configs)
 	if err != nil {
 		c.Writer.WriteString(err.Error())
 		return

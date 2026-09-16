@@ -203,6 +203,10 @@ func SubAdd(c *gin.Context) {
 	airportUrl := c.PostForm("airport_url")
 	groups := c.PostForm("groups")
 	pipeline := c.PostForm("pipeline")
+	if err := ensureScriptAllowed(c, pipeline); err != nil {
+		c.JSON(403, gin.H{"code": 403, "msg": err.Error()})
+		return
+	}
 
 	if name == "" {
 		c.JSON(400, gin.H{
@@ -322,6 +326,10 @@ func SubUpdate(c *gin.Context) {
 	airportUrl := c.PostForm("airport_url")
 	groups := c.PostForm("groups")
 	pipeline := c.PostForm("pipeline")
+	if err := ensureScriptAllowed(c, pipeline); err != nil {
+		c.JSON(403, gin.H{"code": 403, "msg": err.Error()})
+		return
+	}
 
 	if NewName == "" {
 		c.JSON(400, gin.H{

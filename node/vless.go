@@ -88,7 +88,7 @@ func EncodeVLESSURL(v VLESS) string {
 	}
 	u.RawQuery = q.Encode()
 	// 如果没有name则用服务器加端口
-	if v.Name != "" {
+	if v.Name == "" {
 		u.Fragment = v.Server + ":" + strconv.Itoa(v.Port)
 	}
 	return u.String()

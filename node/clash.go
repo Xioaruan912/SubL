@@ -86,11 +86,23 @@ func convertToInt(value interface{}) (int, error) {
 
 // EncodeClash 用于生成 Clash 配置文件
 func EncodeClash(urls []string, sqlconfig SqlConfig) ([]byte, error) {
+	return EncodeClashWithFlags(urls, nil, sqlconfig)
+}
+
+// EncodeClashWithFlags 与 EncodeClash 相同，但允许按节点覆盖 udp/tfo/skip-cert-verify。
+func EncodeClashWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig SqlConfig) ([]byte, error) {
 	// 传入urls，解析urls，生成proxys
 	// yamlfile 为模板文件
 	var proxys []Proxy
 
 	for _, link := range urls {
+		udp := sqlconfig.Udp
+		cert := sqlconfig.Cert
+		tfo := false
+		if f, ok := flags[link]; ok {
+			udp, cert, tfo = f.UDP, f.SkipCertVerify, f.TFO
+		}
+		before := len(proxys)
 		Scheme := strings.Split(link, "://")[0]
 		switch {
 		case Scheme == "ss":
@@ -110,8 +122,8 @@ func EncodeClash(urls []string, sqlconfig SqlConfig) ([]byte, error) {
 				Port:             ss.Port,
 				Cipher:           ss.Param.Cipher,
 				Password:         ss.Param.Password,
-				Udp:              sqlconfig.Udp,
-				Skip_cert_verify: sqlconfig.Cert,
+				Udp:              udp,
+				Skip_cert_verify: cert,
 			}
 			proxys = append(proxys, ssproxy)
 		case Scheme == "ssr":
@@ -133,8 +145,8 @@ func EncodeClash(urls []string, sqlconfig SqlConfig) ([]byte, error) {
 				Obfs:             ssr.Obfs,
 				Obfs_password:    ssr.Qurey.Obfsparam,
 				Protocol:         ssr.Protocol,
-				Udp:              sqlconfig.Udp,
-				Skip_cert_verify: sqlconfig.Cert,
+				Udp:              udp,
+				Skip_cert_verify: cert,
 			}
 			proxys = append(proxys, ssrproxy)
 		case Scheme == "trojan":
@@ -166,8 +178,8 @@ func EncodeClash(urls []string, sqlconfig SqlConfig) ([]byte, error) {
 				Flow:               trojan.Query.Flow,
 				Alpn:               trojan.Query.Alpn,
 				Ws_opts:            ws_opts,
-				Udp:                sqlconfig.Udp,
-				Skip_cert_verify:   sqlconfig.Cert,
+				Udp:                udp,
+				Skip_cert_verify:   cert,
 			}
 			proxys = append(proxys, trojanproxy)
 		case Scheme == "vmess":
@@ -204,8 +216,8 @@ func EncodeClash(urls []string, sqlconfig SqlConfig) ([]byte, error) {
 				Network:          vmess.Net,
 				Tls:              tls,
 				Ws_opts:          ws_opts,
-				Udp:              sqlconfig.Udp,
-				Skip_cert_verify: sqlconfig.Cert,
+				Udp:              udp,
+				Skip_cert_verify: cert,
 			}
 			proxys = append(proxys, vmessproxy)
 		case Scheme == "vless":
@@ -259,8 +271,8 @@ func EncodeClash(urls []string, sqlconfig SqlConfig) ([]byte, error) {
 				Ws_opts:            ws_opts,
 				Reality_opts:       reality_opts,
 				Grpc_opts:          grpc_opts,
-				Udp:                sqlconfig.Udp,
-				Skip_cert_verify:   sqlconfig.Cert,
+				Udp:                udp,
+				Skip_cert_verify:   cert,
 				Tls:                tls,
 			}
 			proxys = append(proxys, vlessproxy)
@@ -284,8 +296,8 @@ func EncodeClash(urls []string, sqlconfig SqlConfig) ([]byte, error) {
 				Down:             hy.DownMbps,
 				Alpn:             hy.ALPN,
 				Peer:             hy.Peer,
-				Udp:              sqlconfig.Udp,
-				Skip_cert_verify: sqlconfig.Cert,
+				Udp:              udp,
+				Skip_cert_verify: cert,
 			}
 			proxys = append(proxys, hyproxy)
 		case Scheme == "hy2" || Scheme == "hysteria2":
@@ -309,8 +321,8 @@ func EncodeClash(urls []string, sqlconfig SqlConfig) ([]byte, error) {
 				Obfs:             hy2.Obfs,
 				Password:         hy2.Password,
 				Obfs_password:    hy2.ObfsPassword,
-				Udp:              sqlconfig.Udp,
-				Skip_cert_verify: sqlconfig.Cert,
+				Udp:              udp,
+				Skip_cert_verify: cert,
 			}
 			proxys = append(proxys, hyproxy2)
 		case Scheme == "tuic":
@@ -339,10 +351,13 @@ func EncodeClash(urls []string, sqlconfig SqlConfig) ([]byte, error) {
 				Udp_relay_mode:     tuic.Udp_relay_mode,
 				Disable_sni:        disable_sni,
 				Sni:                tuic.Sni,
-				Udp:                sqlconfig.Udp,
-				Skip_cert_verify:   sqlconfig.Cert,
+				Udp:                udp,
+				Skip_cert_verify:   cert,
 			}
 			proxys = append(proxys, tuicproxy)
+		}
+		if tfo && len(proxys) > before {
+			proxys[len(proxys)-1].Tfo = true
 		}
 	}
 	// 生成Clash配置文件

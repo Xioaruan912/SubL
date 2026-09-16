@@ -12,12 +12,22 @@ import (
 // EncodeLoon 将节点链接列表转为 Loon 配置文本（填充 [Proxy] 段）。
 // 策略组靠模板内的 [Remote Filter] NameRegex 自动筛选，不做组填充。
 func EncodeLoon(urls []string, sqlconfig SqlConfig) (string, error) {
+	return EncodeLoonWithFlags(urls, nil, sqlconfig)
+}
+
+// EncodeLoonWithFlags 与 EncodeLoon 相同，但允许按节点覆盖 udp/skip-cert-verify。
+func EncodeLoonWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig SqlConfig) (string, error) {
 	// 未配置 Loon 模板时使用默认本地模板
 	if sqlconfig.Loon == "" {
 		sqlconfig.Loon = "./template/loon.conf"
 	}
 	var proxys []string
 	for _, link := range urls {
+		udp := sqlconfig.Udp
+		cert := sqlconfig.Cert
+		if f, ok := flags[link]; ok {
+			udp, cert = f.UDP, f.SkipCertVerify
+		}
 		scheme := strings.Split(link, "://")[0]
 		switch {
 		case scheme == "ss":
@@ -27,7 +37,7 @@ func EncodeLoon(urls []string, sqlconfig SqlConfig) (string, error) {
 				continue
 			}
 			p := fmt.Sprintf("%s = Shadowsocks,%s,%d,%s,\"%s\",fast-open=false,udp=%t",
-				ss.Name, ss.Server, ss.Port, ss.Param.Cipher, ss.Param.Password, sqlconfig.Udp)
+				ss.Name, ss.Server, ss.Port, ss.Param.Cipher, ss.Param.Password, udp)
 			proxys = append(proxys, p)
 		case scheme == "vmess":
 			v, err := DecodeVMESSURL(link)
@@ -42,7 +52,7 @@ func EncodeLoon(urls []string, sqlconfig SqlConfig) (string, error) {
 				cipher = "auto"
 			}
 			p := fmt.Sprintf("%s = vmess,%s,%d,%s,\"%s\",transport=%s,alterId=0,over-tls=%t,udp=%t",
-				v.Ps, v.Add, port, cipher, v.Id, v.Net, tls, sqlconfig.Udp)
+				v.Ps, v.Add, port, cipher, v.Id, v.Net, tls, udp)
 			if v.Net == "ws" {
 				p += fmt.Sprintf(",path=%s", v.Path)
 				if v.Host != "" && v.Host != "none" {
@@ -52,7 +62,7 @@ func EncodeLoon(urls []string, sqlconfig SqlConfig) (string, error) {
 			if tls && v.Sni != "" {
 				p += fmt.Sprintf(",sni=%s", v.Sni)
 			}
-			if sqlconfig.Cert {
+			if cert {
 				p += ",skip-cert-verify=true"
 			}
 			proxys = append(proxys, p)
@@ -68,7 +78,7 @@ func EncodeLoon(urls []string, sqlconfig SqlConfig) (string, error) {
 			}
 			tls := v.Query.Security != "" && v.Query.Security != "none"
 			p := fmt.Sprintf("%s = VLESS,%s,%d,\"%s\",transport=%s,over-tls=%t,udp=%t",
-				v.Name, v.Server, v.Port, v.Uuid, transport, tls, sqlconfig.Udp)
+				v.Name, v.Server, v.Port, v.Uuid, transport, tls, udp)
 			// Reality / XTLS Vision
 			if v.Query.Flow != "" {
 				p += fmt.Sprintf(",flow=%s", v.Query.Flow)
@@ -88,7 +98,7 @@ func EncodeLoon(urls []string, sqlconfig SqlConfig) (string, error) {
 			if v.Query.Sni != "" {
 				p += fmt.Sprintf(",sni=%s", v.Query.Sni)
 			}
-			if sqlconfig.Cert {
+			if cert {
 				p += ",skip-cert-verify=true"
 			}
 			proxys = append(proxys, p)
@@ -99,7 +109,7 @@ func EncodeLoon(urls []string, sqlconfig SqlConfig) (string, error) {
 				continue
 			}
 			p := fmt.Sprintf("%s = trojan,%s,%d,\"%s\",udp=%t",
-				t.Name, t.Hostname, t.Port, t.Password, sqlconfig.Udp)
+				t.Name, t.Hostname, t.Port, t.Password, udp)
 			if t.Query.Type != "" && t.Query.Type != "tcp" {
 				p += fmt.Sprintf(",transport=%s", t.Query.Type)
 				if t.Query.Path != "" {
@@ -112,7 +122,7 @@ func EncodeLoon(urls []string, sqlconfig SqlConfig) (string, error) {
 			if t.Query.Sni != "" {
 				p += fmt.Sprintf(",sni=%s", t.Query.Sni)
 			}
-			if sqlconfig.Cert {
+			if cert {
 				p += ",skip-cert-verify=true"
 			}
 			proxys = append(proxys, p)
@@ -123,14 +133,14 @@ func EncodeLoon(urls []string, sqlconfig SqlConfig) (string, error) {
 				continue
 			}
 			p := fmt.Sprintf("%s = Hysteria2,%s,%d,\"%s\",udp=%t",
-				h.Name, h.Host, h.Port, h.Password, sqlconfig.Udp)
+				h.Name, h.Host, h.Port, h.Password, udp)
 			if h.Sni != "" {
 				p += fmt.Sprintf(",sni=%s", h.Sni)
 			}
 			if h.Obfs != "" {
 				p += fmt.Sprintf(",salamander-password=\"%s\"", h.ObfsPassword)
 			}
-			if sqlconfig.Cert {
+			if cert {
 				p += ",skip-cert-verify=true"
 			}
 			proxys = append(proxys, p)

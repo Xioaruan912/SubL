@@ -23,6 +23,7 @@ type Node struct {
 	ID         int
 	Name       string
 	Link       string
+	Flags      string      `gorm:"type:text" json:"flags,omitempty"` // 每节点构建覆盖(udp/tfo/skip-cert-verify) JSON
 	Hidden     bool        `gorm:"not null;default:false;index" json:"Hidden"`
 	GroupNodes []GroupNode `gorm:"many2many:group_node_nodes"` // 反向关联字段
 }
