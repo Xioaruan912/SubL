@@ -67,6 +67,15 @@ func StartCronTasks() {
 		return
 	}
 
+	_, err = c.AddFunc("0 0 9 * * *", func() {
+		defer utils.RecoverPanic("cron-sub-alerts")
+		api.CheckSubscriptionAlerts()
+	})
+	if err != nil {
+		log.Println("[Cron] 添加订阅告警任务失败:", err)
+		return
+	}
+
 	c.Start()
 	api.EnsureInitialQualityMatrixSample()
 	go func() {

@@ -25,6 +25,7 @@ type Subcription struct {
 	LastSyncError    string      `gorm:"type:text" json:"lastSyncError"`
 	Token            string      `gorm:"type:text"` // 订阅链接身份令牌（随机生成，可重置）
 	ExpiresAt        *time.Time  // 过期时间，nil 表示永不过期
+	LastRemindedAt   *time.Time  `json:"lastRemindedAt"` // 上次到期/流量提醒时间（每天最多一次）
 	Nodes            []Node      `gorm:"many2many:subcription_nodes;"`
 	GroupRefs        []GroupNode `gorm:"many2many:subcription_groups;"` // 引用的分组（机场同步后节点自动跟进）
 	SubLogs          []SubLogs   `gorm:"foreignKey:SubcriptionID;"`

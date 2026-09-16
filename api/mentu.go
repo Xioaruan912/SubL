@@ -87,6 +87,18 @@ func GetMenus(c *gin.Context) {
 					},
 				},
 				{
+					Path:      "collections",
+					Component: "subcription/collections",
+					Name:      "Collections",
+					Meta: Meta{
+						Title:     "多订阅合集",
+						Icon:      "table",
+						Hidden:    false,
+						Roles:     []string{"ADMIN"},
+						KeepAlive: true,
+					},
+				},
+				{
 					Path:      "nodes",
 					Component: "subcription/nodes",
 					Name:      "Nodes",

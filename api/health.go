@@ -117,6 +117,14 @@ func UpdateAlertSetting(c *gin.Context) {
 	if n, err := strconv.Atoi(c.PostForm("failureThreshold")); err == nil && n >= 1 && n <= 20 {
 		setting.FailureThreshold = n
 	}
+	if n, err := strconv.Atoi(c.PostForm("expiryReminderDays")); err == nil && n >= 0 && n <= 90 {
+		setting.ExpiryReminderDays = n
+	}
+	setting.AutoDisableExpired = c.PostForm("autoDisableExpired") == "true"
+	if n, err := strconv.Atoi(c.PostForm("accessLimit")); err == nil && n >= 0 {
+		setting.AccessLimit = n
+	}
+	setting.AutoDisableOverLimit = c.PostForm("autoDisableOverLimit") == "true"
 	if err := models.DB.Save(&setting).Error; err != nil {
 		c.JSON(500, gin.H{"msg": "保存告警设置失败"})
 		return

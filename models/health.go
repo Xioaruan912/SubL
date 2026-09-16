@@ -12,12 +12,16 @@ type NodeHealthEvent struct {
 }
 
 type AlertSetting struct {
-	ID               uint   `gorm:"primaryKey" json:"id"`
-	Enabled          bool   `json:"enabled"`
-	WebhookURL       string `gorm:"type:text" json:"webhookUrl"`
-	FailureThreshold int    `gorm:"not null;default:3" json:"failureThreshold"`
-	MaintenanceStart string `gorm:"size:5" json:"maintenanceStart"`
-	MaintenanceEnd   string `gorm:"size:5" json:"maintenanceEnd"`
+	ID                   uint   `gorm:"primaryKey" json:"id"`
+	Enabled              bool   `json:"enabled"`
+	WebhookURL           string `gorm:"type:text" json:"webhookUrl"`
+	FailureThreshold     int    `gorm:"not null;default:3" json:"failureThreshold"`
+	MaintenanceStart     string `gorm:"size:5" json:"maintenanceStart"`
+	MaintenanceEnd       string `gorm:"size:5" json:"maintenanceEnd"`
+	ExpiryReminderDays   int    `gorm:"not null;default:3" json:"expiryReminderDays"`
+	AutoDisableExpired   bool   `json:"autoDisableExpired"`
+	AccessLimit          int    `gorm:"not null;default:0" json:"accessLimit"`
+	AutoDisableOverLimit bool   `json:"autoDisableOverLimit"`
 }
 
 type UnlockObservation struct {
