@@ -153,7 +153,7 @@ func GetMenus(c *gin.Context) {
 					Path:      "tasks",
 					Component: "task/index",
 					Name:      "TaskCenter",
-					Meta:      Meta{Title: "任务中心", Icon: "timer", Hidden: false, Roles: []string{"ADMIN"}, KeepAlive: true},
+					Meta:      Meta{Title: "任务中心", Icon: "todolist", Hidden: false, Roles: []string{"ADMIN"}, KeepAlive: true},
 				},
 				{
 					Path:      "egress",
